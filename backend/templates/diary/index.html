@@ -1,0 +1,51 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
+<meta name="theme-color" content="#1f6feb" />
+<title>Hatırlaf — Sesli Günlük</title>
+<link rel="stylesheet" href="{% static 'css/app.css' %}" />
+</head>
+<body>
+<div id="app" class="app-shell">
+  <header class="app-header">
+    <button class="app-back" data-action="back" aria-label="Geri" hidden>←</button>
+    <h1 id="screen-title">Hatırlaf</h1>
+    <span class="app-online" id="online-dot" title="Çevrimiçi">●</span>
+  </header>
+
+  <main id="screen-root" class="screen-root" aria-live="polite"></main>
+
+  <nav class="app-tabbar" aria-label="Ekranlar">
+    <button class="tab" data-route="#/home">
+      <span class="tab-icon">🏠</span><span class="tab-label">Ana</span>
+    </button>
+    <button class="tab" data-route="#/record">
+      <span class="tab-icon">●</span><span class="tab-label">Kaydet</span>
+    </button>
+    <button class="tab" data-route="#/timeline">
+      <span class="tab-icon">📅</span><span class="tab-label">Takvim</span>
+    </button>
+    <button class="tab" data-route="#/nodes">
+      <span class="tab-icon">◆</span><span class="tab-label">Düğümler</span>
+    </button>
+  </nav>
+
+  <div id="toast-root" class="toast-root" aria-live="polite"></div>
+</div>
+
+<template id="tpl-pending-chip">
+  <div class="pending-chip" role="status">
+    <span class="pending-dot"></span>
+    <span class="pending-text"></span>
+  </div>
+</template>
+
+<script>
+  window.HATIRLAF_API_BASE = "/api";
+</script>
+<script type="module" src="{% static 'js/app.js' %}"></script>
+</body>
+</html>
