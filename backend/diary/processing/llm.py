@@ -149,43 +149,89 @@ def _hints_prompt(extraction: ExtractionResult) -> str:
 
 
 PASS_1_SYSTEM = (
-    "Sen Contextual Voice Diary için çalışan bir analist LLM'sin. "
-    "Sana kullanıcının serbest metni ve bu metin üzerinde çalışmış kural tabanlı "
-    "bir NLP motorunun çıkardığı CÜMLE BAZLI KESİN ipuçları verilecek.\n\n"
-    "GÖREVİN: Metni yeniden yorumlama. İpuçlarındaki tarih, zaman dilimi, kişi ve "
-    "lokasyon bilgilerini OLDUĞU GİBİ kullan. Yalnızca hangi cümlelerin aynı olayı "
-    "anlattığını birleştir, kişi ve yerleri doğru olayla eşleştir.\n\n"
-    "Kurallar:\n"
-    "- İpuçlarında 'tarih=YYYY-MM-DD' varsa o tarihi kesin kullan.\n"
-    "- İpuçlarında zaman dilimi varsa onu kullan (Geçmiş/Şu An/Gelecek).\n"
-    "- Söyleyen kişiyi 'Ben' olarak ekle.\n"
-    "- Metinde geçmeyen yer veya kişi uydurma, 'Bilinmeyen Lokasyon' / 'Bilinmeyen Kişi' yaz.\n"
-    "- Her olay için: zaman_dilimi, tarih, saat (varsa), lokasyon, olay açıklaması, kisiler listesi.\n"
+    "Sen Hatırlaf için çalışan bir Türkçe günlük analistisin. "
+    "Kullanıcının serbest metnini ve kural tabanlı NLP motorunun cümle bazlı "
+    "KESİN ipuçlarını okuyup, metindeki olayları yapılandırılmış bir listeye "
+    "dökmek senin görevin.\n\n"
+    "TEMEL İLKE: İpuçları SENDEN ÖNCE çözülmüş gerçeklerdir. Onları yeniden "
+    "yorumlama, doğrula ve kullan. Sen yalnızca hangi cümlelerin aynı olayı "
+    "anlattığını birleştir, kişi ve yerleri doğru olaya bağla.\n\n"
+    "KATI KURALLAR:\n"
+    "1) İpuçlarında 'tarih=YYYY-MM-DD' geçiyorsa o tarihi aynen kullan. Kendi "
+    "kafandan tarih üretme.\n"
+    "2) İpuçlarındaki 'zaman=Geçmiş/Şu An/Gelecek' değerini koru. Eğer ipucu "
+    "yoksa tarih ile kayıt anını karşılaştırarak belirle.\n"
+    "3) Kişiler yalnızca 'kisiler=' listesinden veya metinde açıkça geçen "
+    "özel adlardan gelmelidir. 'emre', 'ayşe' gibi küçük harf yazılmış adları "
+    "büyük harfle düzelt (Emre, Ayşe).\n"
+    "4) Söyleyen kullanıcı her olaya 'Ben' olarak eklenir.\n"
+    "5) Metinde geçmeyen yer/kişi asla üretme. Bilinmiyorsa 'Bilinmeyen "
+    "Lokasyon' / 'Bilinmeyen Kişi' yaz.\n"
+    "6) Bir cümle başka bir olayın devamını anlatıyorsa ('orada vardı', 'sonra "
+    "birlikte gittik') ayrı olay açma, önceki olayı zenginleştir.\n"
+    "7) Bir olayda: zaman_dilimi, tarih, saat (varsa), lokasyon, kısa olay "
+    "açıklaması ve kisiler listesi bulunur.\n\n"
+    "ÇIKIŞ BİÇİMİ: Numaralı liste halinde, her olay için ayrı bir satır grubu.\n"
+    "Olay 1:\n"
+    "  - zaman_dilimi: ...\n"
+    "  - tarih: YYYY-MM-DD\n"
+    "  - saat: HH:MM veya (yok)\n"
+    "  - lokasyon: ...\n"
+    "  - olay: kısa Türkçe cümle\n"
+    "  - kisiler: [Ben, Ad1, Ad2]\n"
+)
+
+
+PASS_CRITIQUE_SYSTEM = (
+    "Sen bir denetim LLM'isin. Sana bir günlük analistinin çıkardığı olay "
+    "listesi, aynı metin üzerinde çalışan NLP motorunun kesin ipuçları ve "
+    "kullanıcının orijinal metni verilecek.\n\n"
+    "GÖREVİN: Olay listesindeki tutarsızlıkları bulmak ve DÜZELTİLMİŞ bir "
+    "liste üretmek. Metni yeniden yorumlama; yalnızca aşağıdaki hataları ara:\n"
+    "- Tarih ipucuyla çelişiyor mu? (örn. ipucu 2026-04-24 ama olay 2026-04-23)\n"
+    "- zaman_dilimi tarih ile tutarlı mı? (tarih bugünse Şu An, gelecekse "
+    "Gelecek, geçmişse Geçmiş)\n"
+    "- Uydurulmuş kişi veya yer var mı? Metinde veya NLP ipuçlarında "
+    "geçmiyorsa silmelisin.\n"
+    "- Küçük harfle yazılmış özel ad düzeltilmiş mi? (emre → Emre)\n"
+    "- Aynı olay iki kere listelenmiş mi? Birleştir.\n"
+    "- Bir cümle önceki olayın devamıysa ayrı olay olarak kalmış mı? Birleştir.\n\n"
+    "Düzeltilmiş listeyi aynı biçimde tekrar yaz. Hiçbir hata yoksa listeyi "
+    "değiştirmeden kopyala ve sonunda '(Kontrol edildi, sorun yok)' yaz."
 )
 
 
 PASS_2_SYSTEM = (
-    "Sen bir JSON dönüştürücüsüsün. Sana verilen olay listesini kesin bir JSON "
-    "şemasına dönüştür. Başka açıklama yazma. Tarih değerleri YYYY-MM-DD, "
-    "saat değerleri HH:MM biçiminde olmalıdır. Eksik alan için boş string kullan."
+    "Sen katı bir JSON dönüştürücüsüsün. Verilen olay listesini kesin bir JSON "
+    "şemasına dönüştür. Kurallar:\n"
+    "- Yalnızca JSON ver, başka metin yazma.\n"
+    "- tarih: YYYY-MM-DD biçiminde.\n"
+    "- saat: HH:MM biçiminde veya boş string.\n"
+    "- zaman_dilimi: 'Geçmiş', 'Şu An' veya 'Gelecek'.\n"
+    "- kisiler: metindeki/ipuçlarındaki adların listesi. 'Ben' her zaman dahil.\n"
+    "- Eksik alanlar için boş string kullan, null kullanma.\n"
 )
 
 
 def run(extraction: ExtractionResult) -> dict:
     """Return a canonical ``{"olay_loglari": [...]}``.
 
-    Uses the llama.cpp model when available, otherwise synthesizes the
-    same structure from the deterministic NLP hints.
+    Uses the llama.cpp model when available (three-pass: analyse, self-critique,
+    JSON format), otherwise synthesizes the same structure from the
+    deterministic NLP hints. The NLP fallback always runs first so we have a
+    known-good baseline to merge with whatever the LLM produces.
     """
+    baseline = _fallback_from_hints(extraction)
+
     llm = _load_llm()
     if llm is None:
-        return _fallback_from_hints(extraction)
+        return baseline
 
     try:
         hints = _hints_prompt(extraction)
         paragraph = extraction.paragraph
 
-        # Pass 1 — free-form reasoning.
+        # Pass 1 — free-form analysis of events.
         pass_1 = llm.create_chat_completion(
             messages=[
                 {"role": "system", "content": PASS_1_SYSTEM},
@@ -196,13 +242,30 @@ def run(extraction: ExtractionResult) -> dict:
             ],
             temperature=0.1,
         )
-        structured_text = pass_1["choices"][0]["message"]["content"]
+        draft = pass_1["choices"][0]["message"]["content"]
 
-        # Pass 2 — strict JSON.
+        # Pass 2 — self-critique + repair.
+        pass_critique = llm.create_chat_completion(
+            messages=[
+                {"role": "system", "content": PASS_CRITIQUE_SYSTEM},
+                {
+                    "role": "user",
+                    "content": (
+                        f"### Orijinal metin\n{paragraph}\n\n"
+                        f"{hints}\n\n"
+                        f"### Analist Çıktısı\n{draft}"
+                    ),
+                },
+            ],
+            temperature=0.0,
+        )
+        verified = pass_critique["choices"][0]["message"]["content"]
+
+        # Pass 3 — strict JSON.
         pass_2 = llm.create_chat_completion(
             messages=[
                 {"role": "system", "content": PASS_2_SYSTEM},
-                {"role": "user", "content": structured_text},
+                {"role": "user", "content": verified},
             ],
             response_format={"type": "json_object", "schema": OLAY_LOG_SCHEMA},
             temperature=0.0,
@@ -210,13 +273,20 @@ def run(extraction: ExtractionResult) -> dict:
         raw = pass_2["choices"][0]["message"]["content"]
         parsed = json.loads(raw)
         events = parsed.get("olay_loglari") or []
-        return {
-            "olay_loglari": [_normalize(e, extraction) for e in events],
-            "backend": "llama.cpp",
-        }
+        normalised = [_normalize(e, extraction) for e in events]
+
+        # Guardrail: if the model returned nothing coherent, fall back to the
+        # deterministic baseline. Otherwise post-process to keep fields sane.
+        cleaned = [ev for ev in normalised if ev.get("olay")]
+        if not cleaned:
+            logger.warning("LLM produced no usable events; using NLP fallback.")
+            return baseline
+
+        cleaned = [_sanitize_event(ev, extraction) for ev in cleaned]
+        return {"olay_loglari": cleaned, "backend": "llama.cpp"}
     except Exception as exc:
         logger.exception("LLM inference failed, using NLP-only fallback: %s", exc)
-        return _fallback_from_hints(extraction)
+        return baseline
 
 
 def _normalize(event: dict, extraction: ExtractionResult) -> dict:
@@ -230,9 +300,91 @@ def _normalize(event: dict, extraction: ExtractionResult) -> dict:
         "olay": unmask(event.get("olay", "") or "", mask),
         "kisiler": [unmask(p, mask) for p in event.get("kisiler", []) if p],
     }
-    # Clean trailing punctuation / whitespace from the event text.
     out["olay"] = (out["olay"] or "").strip()
     return out
+
+
+_ALLOWED_BUCKETS = {"Geçmiş", "Şu An", "Gelecek"}
+_TIME_RE = __import__("re").compile(r"^(\d{1,2}):(\d{2})$")
+
+
+def _sanitize_event(event: dict, extraction: ExtractionResult) -> dict:
+    """Final guardrails on LLM output. Keeps tarih/zaman_dilimi consistent,
+    normalises time format, ensures 'Ben' appears, and drops any made-up
+    persons that don't appear in the NLP hints.
+    """
+    tarih = (event.get("tarih") or "").strip()
+    try:
+        if tarih:
+            dt.date.fromisoformat(tarih)
+    except ValueError:
+        tarih = ""
+    if not tarih:
+        tarih = (
+            extraction.recorded_at.date().isoformat()
+            if extraction.recorded_at
+            else dt.date.today().isoformat()
+        )
+
+    # zaman_dilimi must match tarih vs recorded_at.
+    inferred_bucket = _default_bucket(tarih, extraction.recorded_at)
+    bucket = (event.get("zaman_dilimi") or "").strip()
+    if bucket not in _ALLOWED_BUCKETS:
+        bucket = inferred_bucket or "Geçmiş"
+    elif inferred_bucket and bucket != inferred_bucket:
+        bucket = inferred_bucket
+
+    saat = (event.get("saat") or "").strip()
+    if saat:
+        m = _TIME_RE.match(saat)
+        if m:
+            h = int(m.group(1))
+            mnt = int(m.group(2))
+            if 0 <= h <= 23 and 0 <= mnt <= 59:
+                saat = f"{h:02d}:{mnt:02d}"
+            else:
+                saat = ""
+        else:
+            saat = ""
+
+    # Restrict kisiler to names the NLP hints actually saw (+ "Ben").
+    known_people = {p.lower(): p for p in extraction.persons}
+    kisiler_in = event.get("kisiler") or []
+    cleaned_people: list[str] = []
+    seen: set[str] = set()
+    for raw in kisiler_in:
+        p = (raw or "").strip()
+        if not p:
+            continue
+        key = p.lower()
+        if key == "ben":
+            display = "Ben"
+        elif key in known_people:
+            display = known_people[key]
+        elif any(p in extraction.paragraph for p in [p]):
+            display = p
+        else:
+            # Unknown name that the LLM hallucinated — drop it.
+            continue
+        if display.lower() not in seen:
+            seen.add(display.lower())
+            cleaned_people.append(display)
+    if "ben" not in seen:
+        cleaned_people.insert(0, "Ben")
+
+    lokasyon = (event.get("lokasyon") or "").strip()
+    if lokasyon and lokasyon.lower() not in extraction.paragraph.lower() and lokasyon not in extraction.locations and lokasyon not in extraction.orgs:
+        # Location wasn't in the paragraph or hints — probably hallucinated.
+        lokasyon = ""
+
+    return {
+        "zaman_dilimi": bucket,
+        "tarih": tarih,
+        "saat": saat,
+        "lokasyon": lokasyon,
+        "olay": (event.get("olay") or "").strip(),
+        "kisiler": cleaned_people,
+    }
 
 
 def _fallback_from_hints(extraction: ExtractionResult) -> dict:

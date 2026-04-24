@@ -31,9 +31,9 @@ export async function render(root) {
   );
   const grid = el("div", { class: "cal-grid" });
   const legend = el("div", { class: "cal-legend" }, [
-    el("span", { class: "cal-legend-item past" }, ["● Geçmiş"]),
-    el("span", { class: "cal-legend-item now" }, ["● Bugün"]),
-    el("span", { class: "cal-legend-item future" }, ["● Gelecek"]),
+    el("span", { class: "cal-legend-item past" }, [legendDot("past"), "Geçmiş"]),
+    el("span", { class: "cal-legend-item now" }, [legendDot("now"), "Bugün"]),
+    el("span", { class: "cal-legend-item future" }, [legendDot("future"), "Gelecek"]),
   ]);
 
   wrap.appendChild(header);
@@ -173,7 +173,6 @@ export async function render(root) {
     if (events.length === 0) {
       content.appendChild(
         el("div", { class: "cal-empty" }, [
-          el("div", { class: "cal-empty-icon" }, ["🗒"]),
           el("p", { class: "muted" }, ["Bu güne ait kayıt yok."]),
         ])
       );
@@ -193,9 +192,15 @@ function renderEventCard(ev) {
   ]);
 
   const metaBits = [];
-  if (ev.saat) metaBits.push(el("span", { class: "cal-meta-bit" }, [`🕒 ${ev.saat}`]));
+  if (ev.saat) metaBits.push(el("span", { class: "cal-meta-bit" }, [
+    el("span", { class: "cal-meta-label" }, ["Saat"]),
+    el("span", {}, [ev.saat]),
+  ]));
   if (ev.lokasyon && !/bilinmeyen/i.test(ev.lokasyon)) {
-    metaBits.push(el("span", { class: "cal-meta-bit" }, [`📍 ${ev.lokasyon}`]));
+    metaBits.push(el("span", { class: "cal-meta-bit" }, [
+      el("span", { class: "cal-meta-label" }, ["Yer"]),
+      el("span", {}, [ev.lokasyon]),
+    ]));
   }
 
   const people = (ev.kisiler || []).filter(Boolean);
@@ -211,9 +216,13 @@ function renderEventCard(ev) {
     metaBits.length ? el("div", { class: "cal-event-meta" }, metaBits) : null,
     peopleRow,
     ev.session_id
-      ? el("button", { class: "cta ghost", style: "margin-top:4px;", onclick: () => (location.hash = `#/review/${ev.session_id}`) }, ["Kayda git →"])
+      ? el("button", { class: "cta ghost", style: "margin-top:4px;", onclick: () => (location.hash = `#/review/${ev.session_id}`) }, ["Kayda git"])
       : null,
   ]);
+}
+
+function legendDot(bucket) {
+  return el("span", { class: `legend-dot ${bucket}`, "aria-hidden": "true" });
 }
 
 function eventSummary(ev) {

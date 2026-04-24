@@ -29,8 +29,8 @@ export async function render(root, ctx) {
   } catch (err) {
     loading.remove();
     root.appendChild(el("div", { class: "empty-state" }, [
-      el("div", { class: "big-icon" }, ["⚠️"]),
-      el("p", {}, ["Kayıt yüklenemedi: " + err.message]),
+      el("div", { class: "empty-title" }, ["Kayıt yüklenemedi"]),
+      el("p", { class: "muted" }, [err.message]),
     ]));
     return;
   }
@@ -175,8 +175,7 @@ function mentionsSection(session) {
   const list = el("div", { class: "mentions-list" });
   if (conflicts.length === 0) {
     list.appendChild(el("div", { class: "empty-state", style: "padding:20px;" }, [
-      el("div", { class: "big-icon" }, ["✓"]),
-      el("p", {}, ["Bekleyen çatışma yok. Her şey bağlandı."]),
+      el("p", { class: "muted" }, ["Bekleyen çatışma yok. Her şey bağlandı."]),
     ]));
   } else {
     conflicts.forEach((m) => list.appendChild(mentionCard(session, m, false)));
@@ -236,7 +235,7 @@ function mentionCard(session, m, isResolved) {
         el("button", {
           class: "ghost",
           onclick: () => playRange(m.audio_start, m.audio_end),
-        }, ["▶ Dinle"])
+        }, ["Dinle"])
       );
     }
     card.appendChild(actions);
@@ -314,7 +313,7 @@ async function openResolveModal(session, mention) {
 async function resolve(_session, mention, payload) {
   try {
     await api.resolveMention(mention.id, payload);
-    toast("Güncellendi ✓");
+    toast("Güncellendi");
     emit("mention-resolved", mention.id);
     const updated = await api.getSession(mention.session);
     const root = document.getElementById("screen-root");

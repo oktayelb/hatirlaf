@@ -4,44 +4,29 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
-<meta name="theme-color" content="#1f6feb" />
+<meta name="theme-color" content="#0b1220" />
 <title>Hatırlaf — Sesli Günlük</title>
 <link rel="stylesheet" href="{% static 'css/app.css' %}" />
 </head>
 <body>
 <div id="app" class="app-shell">
   <header class="app-header">
-    <button class="app-back" data-action="back" aria-label="Geri" hidden>←</button>
-    <h1 id="screen-title">Hatırlaf</h1>
-    <span class="app-online" id="online-dot" title="Çevrimiçi">●</span>
+    <div class="app-header-row">
+      <button class="app-back" data-action="back" aria-label="Geri" hidden>&#8592;</button>
+      <h1 id="screen-title" class="app-brand">Hatırlaf</h1>
+      <span class="app-online" id="online-dot" title="Çevrimiçi">&bull;</span>
+    </div>
+    <nav class="app-nav" aria-label="Ana gezinti">
+      <button class="app-nav-btn" data-route="#/home">Ana</button>
+      <button class="app-nav-btn" data-route="#/record">Kaydet</button>
+      <button class="app-nav-btn" data-route="#/timeline">Takvim</button>
+    </nav>
   </header>
 
   <main id="screen-root" class="screen-root" aria-live="polite"></main>
 
-  <nav class="app-tabbar" aria-label="Ekranlar">
-    <button class="tab" data-route="#/home">
-      <span class="tab-icon">🏠</span><span class="tab-label">Ana</span>
-    </button>
-    <button class="tab" data-route="#/record">
-      <span class="tab-icon">●</span><span class="tab-label">Kaydet</span>
-    </button>
-    <button class="tab" data-route="#/timeline">
-      <span class="tab-icon">📅</span><span class="tab-label">Takvim</span>
-    </button>
-    <button class="tab" data-route="#/nodes">
-      <span class="tab-icon">◆</span><span class="tab-label">Düğümler</span>
-    </button>
-  </nav>
-
   <div id="toast-root" class="toast-root" aria-live="polite"></div>
 </div>
-
-<template id="tpl-pending-chip">
-  <div class="pending-chip" role="status">
-    <span class="pending-dot"></span>
-    <span class="pending-text"></span>
-  </div>
-</template>
 
 <script>
   window.HATIRLAF_API_BASE = "/api";
