@@ -141,7 +141,6 @@ class SessionSerializer(serializers.ModelSerializer):
             "status",
             "status_display",
             "status_detail",
-            "transcript",
             "processed_text",
             "word_timings",
             "structured_events",

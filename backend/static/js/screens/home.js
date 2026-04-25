@@ -1,4 +1,3 @@
-import { api } from "../api.js";
 import { Recorder, fileExtFor, fmtDuration } from "../audio.js";
 import { uuid } from "../db.js";
 import { enqueue } from "../sync.js";
@@ -7,26 +6,8 @@ import { el } from "./utils.js";
 
 export async function render(root) {
   root.innerHTML = "";
-
-  const stats = await loadStats();
-
   root.appendChild(heroRecorder());
-  root.appendChild(statsCard(stats));
-  root.appendChild(quickActions());
-}
-
-async function loadStats() {
-  try {
-    const sessions = await api.listSessions();
-    const list = Array.isArray(sessions) ? sessions : sessions.results || [];
-    const totalConflicts = list.reduce((n, s) => n + (s.conflict_count || 0), 0);
-    return {
-      sessionCount: list.length,
-      conflictCount: totalConflicts,
-    };
-  } catch (_err) {
-    return { sessionCount: 0, conflictCount: 0 };
-  }
+  root.appendChild(textComposer());
 }
 
 function heroRecorder() {
@@ -90,10 +71,10 @@ function heroRecorder() {
     if (!state.lastBlob) return;
     finishBtn.setAttribute("disabled", "");
     finishBtn.textContent = "Gönderiliyor…";
-    await persist(state.lastBlob);
+    await persistAudio(state.lastBlob);
     state.lastBlob = null;
     resetUI(ui);
-    setTimeout(() => (location.hash = "#/timeline"), 400);
+    setTimeout(() => (location.hash = "#/record"), 400);
   });
 
   discardBtn.addEventListener("click", () => {
@@ -116,7 +97,7 @@ async function startRecording(state, ui) {
     await state.recorder.start();
   } catch (err) {
     console.error(err);
-    toast("Mikrofona erişilemedi. Kaydet sekmesinden yazarak ekleyebilirsin.");
+    toast("Mikrofona erişilemedi. Aşağıdan yazarak ekleyebilirsin.");
     return;
   }
   state.recording = true;
@@ -154,7 +135,7 @@ async function stopRecording(state, ui) {
   ui.discardBtn.style.display = "block";
 }
 
-async function persist({ blob, duration, mime }) {
+async function persistAudio({ blob, duration, mime }) {
   const clientUuid = uuid();
   await enqueue({
     clientUuid,
@@ -176,52 +157,69 @@ function resetUI(ui) {
   ui.finishBtn.textContent = "Günlüğe Ekle";
 }
 
-function statsCard(stats) {
-  const conflictColor = stats.conflictCount ? "var(--warn)" : "var(--ok)";
-  return el("div", { class: "stats-card" }, [
-    stat(stats.sessionCount, "Kayıt"),
-    stat(stats.conflictCount, "Çatışma", conflictColor),
-  ]);
-}
+function textComposer() {
+  const today = new Date().toLocaleDateString("tr-TR", {
+    weekday: "long", day: "numeric", month: "long",
+  });
 
-function stat(value, label, color) {
-  return el("div", { class: "stat" }, [
-    el(
-      "div",
-      { class: "stat-value", style: color ? `color:${color};` : "" },
-      [String(value)]
-    ),
-    el("div", { class: "stat-label" }, [label]),
-  ]);
-}
+  const textarea = el("textarea", {
+    class: "composer-field",
+    placeholder:
+      "Bugün neler yaptın? Kimlerle görüştün, nereye gittin?\n\nÖrn: Sabah Ayşe ile Bağdat Caddesinde yürüdük. Yarın Ahmet ile üniversitede buluşacağız.",
+    rows: "8",
+  });
 
-function quickActions() {
-  return el("div", { class: "quick-actions" }, [
-    el(
-      "button",
-      {
-        class: "quick-action",
-        onclick: () => (location.hash = "#/timeline"),
-      },
-      [
-        el("div", { class: "quick-action-title" }, ["Takvimi aç"]),
-        el("div", { class: "quick-action-sub" }, [
-          "Aylık görünüme geç ve günlere göz at.",
-        ]),
-      ]
-    ),
-    el(
-      "button",
-      {
-        class: "quick-action",
-        onclick: () => (location.hash = "#/record"),
-      },
-      [
-        el("div", { class: "quick-action-title" }, ["Metin olarak yaz"]),
-        el("div", { class: "quick-action-sub" }, [
-          "Mikrofonsuz mu? Kaydet sekmesinde yaz, sistem geri kalanı çözsün.",
-        ]),
-      ]
-    ),
+  const submit = el(
+    "button",
+    { class: "cta", disabled: "" },
+    ["Günlüğe Ekle"]
+  );
+  const counter = el("div", { class: "composer-counter" }, ["0 karakter"]);
+
+  textarea.addEventListener("input", () => {
+    const len = textarea.value.trim().length;
+    counter.textContent = `${len} karakter`;
+    if (len > 0) submit.removeAttribute("disabled");
+    else submit.setAttribute("disabled", "");
+  });
+
+  submit.addEventListener("click", async () => {
+    const text = textarea.value.trim();
+    if (!text) {
+      toast("Önce metni yaz");
+      return;
+    }
+    submit.setAttribute("disabled", "");
+    submit.textContent = "Gönderiliyor…";
+    try {
+      await enqueue({
+        clientUuid: uuid(),
+        recordedAt: new Date().toISOString(),
+        durationSeconds: 0,
+        language: "tr",
+        transcript: text,
+      });
+      textarea.value = "";
+      counter.textContent = "0 karakter";
+      toast("Giriş eklendi");
+      setTimeout(() => (location.hash = "#/record"), 350);
+    } catch (err) {
+      console.error(err);
+      toast("Hata: " + err.message);
+      submit.removeAttribute("disabled");
+      submit.textContent = "Günlüğe Ekle";
+    }
+  });
+
+  return el("section", { class: "composer" }, [
+    el("div", { class: "composer-header" }, [
+      el("div", { class: "composer-eyebrow" }, ["Yazarak Ekle"]),
+      el("div", { class: "composer-date" }, [today]),
+    ]),
+    el("p", { class: "composer-hint" }, [
+      "Mikrofon yerine yazmak istersen buradan ekle. Tarih, zaman, kişi ve yerleri sistem kendisi çıkarır.",
+    ]),
+    textarea,
+    el("div", { class: "composer-footer" }, [counter, submit]),
   ]);
 }

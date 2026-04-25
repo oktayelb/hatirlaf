@@ -97,6 +97,33 @@ class SessionViewSet(viewsets.ModelViewSet):
             raise Http404("Ses dosyası bulunamadı.")
         return FileResponse(session.audio_file.open("rb"), filename=session.audio_file.name)
 
+    def destroy(self, request, *args, **kwargs):
+        """Delete a session and everything that hangs off it.
+
+        Mentions and Edges are removed automatically by the FK cascade.
+        Structured events live on the Session row itself, so the calendar
+        endpoint stops returning them as soon as the row is gone. The audio
+        file is **not** deleted by Django's default storage, so we wipe it
+        from disk explicitly.
+        """
+        session = self.get_object()
+        audio = session.audio_file
+        audio_storage = audio.storage if audio else None
+        audio_name = audio.name if audio else ""
+
+        response = super().destroy(request, *args, **kwargs)
+
+        if audio_storage and audio_name:
+            try:
+                audio_storage.delete(audio_name)
+            except Exception:
+                logger.warning(
+                    "Could not delete audio file %s for session %s",
+                    audio_name,
+                    session.pk,
+                )
+        return response
+
 
 class MentionViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = MentionSerializer

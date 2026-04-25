@@ -118,6 +118,22 @@ def is_available() -> bool:
     return _load_llm() is not None
 
 
+def preload() -> None:
+    """Best-effort warm-load of the LLM weights.
+
+    Called from ``DiaryConfig.ready`` in a background thread so the server
+    starts answering health checks immediately while the multi-GB model
+    streams into memory. Idempotent — safe to call repeatedly.
+    """
+    try:
+        if _load_llm() is not None:
+            logger.info("LLM preload complete (path=%s).", _cached_path)
+        else:
+            logger.info("LLM preload skipped — model unavailable.")
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.warning("LLM preload failed: %s", exc)
+
+
 def _hints_prompt(extraction: ExtractionResult) -> str:
     lines = ["### Önişleme Verisi (NLP'den gelen kesin ipuçları)"]
     anchor = extraction.recorded_at.isoformat() if extraction.recorded_at else "bilinmiyor"

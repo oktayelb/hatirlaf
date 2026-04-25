@@ -9,7 +9,7 @@ import * as timeline from "./screens/timeline.js";
 
 const TITLES = {
   home: "Hatırlaf",
-  record: "Yeni Giriş",
+  record: "Girişler",
   review: "İnceleme",
   timeline: "Takvim",
 };

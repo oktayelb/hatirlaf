@@ -27,6 +27,10 @@ export const api = {
   listSessions: () => request("/sessions/"),
   getSession: (id) => request(`/sessions/${id}/`),
   uploadSession: (form) => request("/sessions/", { method: "POST", body: form }),
+  updateSession: (id, data) =>
+    request(`/sessions/${id}/`, { method: "PATCH", body: data }),
+  deleteSession: (id) =>
+    request(`/sessions/${id}/`, { method: "DELETE" }),
   reprocess: (id) => request(`/sessions/${id}/process/`, { method: "POST" }),
   audioUrl: (id) => `${BASE}/sessions/${id}/audio/`,
   listNodes: (params = {}) => {
