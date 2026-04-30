@@ -486,7 +486,9 @@ def graph_view(request):
 
 @api_view(["GET"])
 def health_view(request):
-    return Response({"ok": True})
+    from ..processing import startup
+
+    return Response({"ok": True, "startup": startup.snapshot()})
 
 
 # --- helpers ----------------------------------------------------------------

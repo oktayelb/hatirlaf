@@ -9,7 +9,7 @@ import { el, escapeHtml, MENTION_LABELS, modal } from "./utils.js";
 let pollHandle = null;
 
 export async function render(root, ctx) {
-  if (pollHandle) clearInterval(pollHandle);
+  cleanup();
   root.innerHTML = "";
   const id = ctx.params.id;
   if (!id) {
@@ -38,19 +38,7 @@ export async function render(root, ctx) {
 
   paint(root, session);
 
-  // Poll until processed, so the UI updates as the background thread finishes.
-  if (["queued", "transcribing", "parsing"].includes(session.status)) {
-    pollHandle = setInterval(async () => {
-      try {
-        const updated = await api.getSession(id);
-        if (!["queued", "transcribing", "parsing"].includes(updated.status)) {
-          clearInterval(pollHandle);
-          pollHandle = null;
-        }
-        paint(root, updated);
-      } catch (_) {}
-    }, 1500);
-  }
+  if (isProcessing(session)) startPolling(root, id);
 }
 
 export function cleanup() {
@@ -84,6 +72,7 @@ function paint(root, session) {
       onclick: async () => {
         await api.reprocess(session.id);
         toast("Yeniden ayrıştırılıyor…");
+        startPolling(root, session.id);
       },
     }, ["Yeniden İşle"]),
     el("button", {
@@ -106,6 +95,10 @@ function headerCard(session) {
     failed: "err",
     review: "warn",
   }[session.status] || "";
+  const progress = Math.max(0, Math.min(100, Number(session.processing_progress) || 0));
+  const failed = session.status === "failed" || session.eventification_status === "failed";
+  const complete = !failed && progress >= 100;
+  const processingClass = `review-processing ${isProcessing(session) ? "active" : ""} ${complete ? "complete" : ""} ${failed ? "failed" : ""}`;
 
   return el("div", { class: "card" }, [
     el("div", { style: "display:flex; justify-content:space-between; align-items:flex-start; gap:10px;" }, [
@@ -119,10 +112,42 @@ function headerCard(session) {
         session.status_display || session.status,
       ]),
     ]),
-    session.status_detail
-      ? el("div", { class: "muted", style: "font-size:12px; margin-top:8px;" }, [session.status_detail])
-      : null,
+    el("div", { class: processingClass }, [
+      el("div", { class: "entry-processing-head" }, [
+        el("span", { class: `status-badge ${eventStatusClass(session.eventification_status)}` }, [
+          eventStatusLabel(session),
+        ]),
+        el("span", { class: "entry-processing-percent" }, [`${progress}%`]),
+      ]),
+      el("div", {
+        class: "entry-processing-bar",
+        role: "progressbar",
+        "aria-valuemin": "0",
+        "aria-valuemax": "100",
+        "aria-valuenow": String(progress),
+      }, [
+        el("span", { style: { width: `${progress}%` } }),
+      ]),
+      (session.processing_detail || session.status_detail)
+        ? el("div", { class: "entry-processing-detail muted" }, [
+          session.processing_detail || session.status_detail,
+        ])
+        : null,
+    ]),
   ]);
+}
+
+function startPolling(root, id) {
+  cleanup();
+  pollHandle = setInterval(async () => {
+    try {
+      const updated = await api.getSession(id);
+      paint(root, updated);
+      if (!isProcessing(updated)) cleanup();
+    } catch (err) {
+      console.debug("review processing poll failed", err);
+    }
+  }, 1500);
 }
 
 function transcriptView(session) {
@@ -321,6 +346,39 @@ async function resolve(_session, mention, payload) {
   } catch (err) {
     toast("Hata: " + err.message);
   }
+}
+
+function isProcessing(session) {
+  return (
+    ["queued", "transcribing", "parsing"].includes(session.status) ||
+    ["queued", "running"].includes(session.eventification_status)
+  );
+}
+
+function eventStatusLabel(session) {
+  switch (session.eventification_status) {
+    case "completed":
+      return "Takvim hazır";
+    case "running":
+      return "LLM çalışıyor";
+    case "queued":
+      return "LLM sırada";
+    case "failed":
+      return "LLM hatası";
+    default:
+      return "Olay bekliyor";
+  }
+}
+
+function eventStatusClass(status) {
+  return (
+    {
+      completed: "ok",
+      failed: "err",
+      queued: "warn",
+      running: "warn",
+    }[status] || ""
+  );
 }
 
 function focusMention(session, m) {

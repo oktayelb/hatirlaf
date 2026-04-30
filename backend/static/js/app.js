@@ -27,6 +27,11 @@ const titleEl = document.getElementById("screen-title");
 const backBtn = document.querySelector(".app-back");
 const onlineDot = document.getElementById("online-dot");
 const navBtns = Array.from(document.querySelectorAll(".app-nav .app-nav-btn"));
+const startupScreen = document.getElementById("startup-screen");
+const startupDetail = document.getElementById("startup-detail");
+const startupFill = document.getElementById("startup-progress-fill");
+const startupPercent = document.getElementById("startup-percent");
+const startupComponents = document.getElementById("startup-components");
 
 backBtn.addEventListener("click", () => history.back());
 
@@ -47,7 +52,9 @@ function updateOnline(isOnline) {
 
 async function route() {
   const hash = location.hash || "#/home";
-  if (typeof review.cleanup === "function") review.cleanup();
+  for (const mod of [home, record, review, timeline]) {
+    if (typeof mod.cleanup === "function") mod.cleanup();
+  }
   let matched = null;
   let params = {};
   for (const r of routes) {
@@ -91,13 +98,92 @@ function escapeHTML(s) {
 }
 
 window.addEventListener("hashchange", route);
-window.addEventListener("DOMContentLoaded", () => {
+window.addEventListener("DOMContentLoaded", async () => {
   if (!location.hash) location.hash = "#/home";
   updateOnline(navigator.onLine);
+  await waitForStartup();
   route();
   flush();
   startEventificationWatcher();
 });
+
+async function waitForStartup() {
+  if (!startupScreen) return;
+  let lastProgress = 0;
+  while (true) {
+    if (!navigator.onLine) {
+      renderStartup({
+        ready: true,
+        progress: 100,
+        components: [],
+        current: { detail: "Çevrimdışı modda açılıyor." },
+      });
+      break;
+    }
+    try {
+      const health = await api.health();
+      const startup = health.startup || { ready: true, progress: 100, components: [] };
+      lastProgress = Math.max(lastProgress, Number(startup.progress) || 0);
+      renderStartup({ ...startup, progress: lastProgress });
+      if (startup.ready) break;
+    } catch (err) {
+      console.debug("startup health poll failed", err);
+      renderStartup({
+        ready: false,
+        progress: Math.max(lastProgress, 5),
+        components: [],
+        current: { detail: "Backend yanıtı bekleniyor." },
+      });
+    }
+    await sleep(700);
+  }
+  await sleep(180);
+  startupScreen.classList.add("is-done");
+  document.body.classList.remove("startup-active");
+  setTimeout(() => {
+    startupScreen.hidden = true;
+  }, 240);
+}
+
+function renderStartup(startup) {
+  const progress = Math.max(0, Math.min(100, Math.round(startup.progress || 0)));
+  const current = startup.current;
+  startupDetail.textContent = current?.detail || (startup.ready ? "Hazır." : "Modeller yükleniyor.");
+  startupFill.style.width = `${progress}%`;
+  startupFill.parentElement?.setAttribute("aria-valuenow", String(progress));
+  startupPercent.textContent = `${progress}%`;
+  startupComponents.innerHTML = "";
+  for (const component of startup.components || []) {
+    const row = document.createElement("div");
+    row.className = `startup-component ${component.status || "pending"}`;
+    const label = document.createElement("span");
+    label.className = "startup-component-label";
+    label.textContent = component.label || component.key;
+    const status = document.createElement("span");
+    status.className = "startup-component-status";
+    status.textContent = startupStatusText(component.status);
+    const meter = document.createElement("span");
+    meter.className = "startup-component-meter";
+    const meterFill = document.createElement("span");
+    meterFill.style.width = `${Math.max(0, Math.min(100, component.progress || 0))}%`;
+    meter.appendChild(meterFill);
+    row.title = component.detail || "";
+    row.append(label, meter, status);
+    startupComponents.appendChild(row);
+  }
+}
+
+function startupStatusText(status) {
+  if (status === "ready") return "Hazır";
+  if (status === "loading") return "Yükleniyor";
+  if (status === "skipped") return "Kapalı";
+  if (status === "failed") return "Yedek";
+  return "Bekliyor";
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 let eventPollStarted = false;
 let eventStatusSnapshot = null;

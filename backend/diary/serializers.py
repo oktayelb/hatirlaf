@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from rest_framework import serializers
 
-from .models import Edge, Mention, Node, Session
+from .models import Edge, EventificationStatus, Mention, Node, Session, SessionStatus
 
 
 class NodeSerializer(serializers.ModelSerializer):
@@ -114,6 +114,8 @@ class SessionSerializer(serializers.ModelSerializer):
     audio_url = serializers.SerializerMethodField()
     conflict_count = serializers.SerializerMethodField()
     mention_count = serializers.SerializerMethodField()
+    processing_progress = serializers.SerializerMethodField()
+    processing_detail = serializers.SerializerMethodField()
 
     class Meta:
         model = Session
@@ -133,6 +135,8 @@ class SessionSerializer(serializers.ModelSerializer):
             "structured_events",
             "eventification_status",
             "eventification_detail",
+            "processing_progress",
+            "processing_detail",
             "conflict_count",
             "mention_count",
             "created_at",
@@ -148,6 +152,8 @@ class SessionSerializer(serializers.ModelSerializer):
             "structured_events",
             "eventification_status",
             "eventification_detail",
+            "processing_progress",
+            "processing_detail",
             "conflict_count",
             "mention_count",
             "audio_url",
@@ -167,6 +173,43 @@ class SessionSerializer(serializers.ModelSerializer):
 
     def get_mention_count(self, obj):
         return obj.mentions.count()
+
+    def get_processing_progress(self, obj):
+        if obj.status == SessionStatus.FAILED or obj.eventification_status == EventificationStatus.FAILED:
+            return 100
+        if obj.status == SessionStatus.QUEUED:
+            return 8
+        if obj.status == SessionStatus.TRANSCRIBING:
+            return 30
+        if obj.status == SessionStatus.PARSING:
+            return 55
+        if obj.status in {SessionStatus.COMPLETED, SessionStatus.REVIEW}:
+            if obj.eventification_status == EventificationStatus.QUEUED:
+                return 68
+            if obj.eventification_status == EventificationStatus.RUNNING:
+                return 86
+            if obj.eventification_status == EventificationStatus.COMPLETED:
+                return 100
+            return 62
+        return 0
+
+    def get_processing_detail(self, obj):
+        if obj.status == SessionStatus.FAILED:
+            return obj.status_detail or obj.get_status_display()
+        if obj.status in {
+            SessionStatus.QUEUED,
+            SessionStatus.TRANSCRIBING,
+            SessionStatus.PARSING,
+        }:
+            return obj.status_detail or obj.get_status_display()
+        if obj.eventification_status in {
+            EventificationStatus.QUEUED,
+            EventificationStatus.RUNNING,
+            EventificationStatus.FAILED,
+            EventificationStatus.COMPLETED,
+        }:
+            return obj.eventification_detail or obj.get_eventification_status_display()
+        return obj.status_detail or obj.get_status_display()
 
 
 class SessionDetailSerializer(SessionSerializer):

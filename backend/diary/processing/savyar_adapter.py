@@ -75,6 +75,21 @@ def enabled() -> bool:
     return bool(getattr(settings, "HATIRLAF_USE_SAVYAR", False))
 
 
+def preload() -> bool:
+    """Best-effort warm-up for the optional SAVYAR bridge.
+
+    SAVYAR runs through a subprocess bridge rather than a resident in-process
+    model. This call validates the bridge and warms Hatirlaf's sentence cache
+    for the probe input when SAVYAR is enabled.
+    """
+    if not enabled():
+        return False
+    if not _model_path().exists():
+        logger.warning("SAVYAR model not found at %s", _model_path())
+        return False
+    return bool(analyze_sentence("geldim", timeout_seconds=60.0))
+
+
 def _python_executable() -> str:
     configured = getattr(settings, "HATIRLAF_SAVYAR_PYTHON", "")
     if configured:

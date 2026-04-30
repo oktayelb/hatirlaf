@@ -6,7 +6,10 @@ import { api } from "../api.js";
 import { toast } from "../events.js";
 import { el, fmtRelative } from "./utils.js";
 
+let pollHandle = null;
+
 export async function render(root) {
+  cleanup();
   root.innerHTML = "";
 
   const header = el("div", { class: "entries-header" }, [
@@ -40,15 +43,40 @@ export async function render(root) {
     return;
   }
 
+  paintList(listWrap, sessions);
+  if (sessions.some(isProcessing)) startPolling(listWrap);
+}
+
+export function cleanup() {
+  if (pollHandle) {
+    clearInterval(pollHandle);
+    pollHandle = null;
+  }
+}
+
+function paintList(listWrap, sessions) {
   listWrap.innerHTML = "";
   if (sessions.length === 0) {
     listWrap.appendChild(emptyState());
     return;
   }
-
   for (const s of sessions) {
     listWrap.appendChild(entryCard(s));
   }
+}
+
+function startPolling(listWrap) {
+  cleanup();
+  pollHandle = setInterval(async () => {
+    try {
+      const resp = await api.listSessions();
+      const sessions = Array.isArray(resp) ? resp : resp.results || [];
+      paintList(listWrap, sessions);
+      if (!sessions.some(isProcessing)) cleanup();
+    } catch (err) {
+      console.debug("entry processing poll failed", err);
+    }
+  }, 1500);
 }
 
 function emptyState() {
@@ -96,6 +124,7 @@ function entryCard(session) {
   ]);
 
   const card = el("article", { class: "entry-card" }, [meta]);
+  card.appendChild(processingPanel(session));
 
   if (hasAudio) {
     card.appendChild(
@@ -108,10 +137,10 @@ function entryCard(session) {
     );
   }
 
-  const isProcessing = ["queued", "transcribing", "parsing"].includes(session.status);
+  const transcriptPending = ["queued", "transcribing", "parsing"].includes(session.status);
   const transcript = session.transcript || "";
   const placeholder = hasAudio
-    ? (isProcessing ? "Yazıya çevriliyor…" : "Henüz transkript yok")
+    ? (transcriptPending ? "Yazıya çevriliyor…" : "Henüz transkript yok")
     : "Metin boş";
 
   const textarea = el("textarea", {
@@ -169,6 +198,7 @@ function entryCard(session) {
     try {
       await api.reprocess(session.id);
       toast("Yeniden işleniyor…");
+      if (card.parentElement) startPolling(card.parentElement);
     } catch (err) {
       toast("Hata: " + err.message);
     } finally {
@@ -204,6 +234,42 @@ function entryCard(session) {
   );
 
   return card;
+}
+
+function processingPanel(session) {
+  const progress = Math.max(0, Math.min(100, Number(session.processing_progress) || 0));
+  const active = isProcessing(session);
+  const failed = session.status === "failed" || session.eventification_status === "failed";
+  const complete = !failed && progress >= 100;
+  const title = failed ? "İşleme tamamlanamadı" : complete ? "İşleme tamamlandı" : processingTitle(session);
+  const detail = session.processing_detail || session.status_detail || session.eventification_detail || "";
+
+  return el("div", { class: `entry-processing ${active ? "active" : ""} ${complete ? "complete" : ""} ${failed ? "failed" : ""}` }, [
+    el("div", { class: "entry-processing-head" }, [
+      el("span", { class: "entry-processing-title" }, [title]),
+      el("span", { class: "entry-processing-percent" }, [`${progress}%`]),
+    ]),
+    el("div", { class: "entry-processing-bar", role: "progressbar", "aria-valuemin": "0", "aria-valuemax": "100", "aria-valuenow": String(progress) }, [
+      el("span", { style: { width: `${progress}%` } }),
+    ]),
+    detail ? el("div", { class: "entry-processing-detail muted" }, [detail]) : null,
+  ]);
+}
+
+function isProcessing(session) {
+  return (
+    ["queued", "transcribing", "parsing"].includes(session.status) ||
+    ["queued", "running"].includes(session.eventification_status)
+  );
+}
+
+function processingTitle(session) {
+  if (session.status === "queued") return "Sırada";
+  if (session.status === "transcribing") return "Ses yazıya çevriliyor";
+  if (session.status === "parsing") return "NLP analizi çalışıyor";
+  if (session.eventification_status === "queued") return "LLM sırada";
+  if (session.eventification_status === "running") return "LLM olayları çıkarıyor";
+  return "İşleniyor";
 }
 
 function statusClass(status) {
