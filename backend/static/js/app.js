@@ -34,10 +34,8 @@ const backBtn = document.querySelector(".app-back");
 const onlineDot = document.getElementById("online-dot");
 const navBtns = Array.from(document.querySelectorAll(".app-nav .app-nav-btn"));
 const startupScreen = document.getElementById("startup-screen");
-const startupDetail = document.getElementById("startup-detail");
 const startupFill = document.getElementById("startup-progress-fill");
 const startupPercent = document.getElementById("startup-percent");
-const startupComponents = document.getElementById("startup-components");
 let currentScreen = "";
 let touchStartX = 0;
 let touchStartY = 0;
@@ -188,6 +186,7 @@ function animateRoute(previous, next) {
 
 async function waitForStartup() {
   if (!startupScreen) return;
+  const minVisibleUntil = performance.now() + 1000;
   let lastProgress = 0;
   while (true) {
     if (!navigator.onLine) {
@@ -210,12 +209,12 @@ async function waitForStartup() {
       renderStartup({
         ready: false,
         progress: Math.max(lastProgress, 5),
-        components: [],
-        current: { detail: "Backend yanıtı bekleniyor." },
       });
     }
     await sleep(700);
   }
+  const remaining = minVisibleUntil - performance.now();
+  if (remaining > 0) await sleep(remaining);
   await sleep(180);
   startupScreen.classList.add("is-done");
   document.body.classList.remove("startup-active");
@@ -226,54 +225,9 @@ async function waitForStartup() {
 
 function renderStartup(startup) {
   const progress = Math.max(0, Math.min(100, Math.round(startup.progress || 0)));
-  const current = startup.current;
-  startupDetail.textContent = current?.detail || (startup.ready ? "Hazır." : "Modeller yükleniyor.");
   startupFill.style.width = `${progress}%`;
   startupFill.parentElement?.setAttribute("aria-valuenow", String(progress));
   startupPercent.textContent = `${progress}%`;
-  const seen = new Set();
-  for (const component of startup.components || []) {
-    const key = component.key || component.label || "";
-    seen.add(key);
-    let row = startupComponents.querySelector(`[data-startup-component="${CSS.escape(key)}"]`);
-    if (!row) {
-      row = document.createElement("div");
-      row.dataset.startupComponent = key;
-
-      const label = document.createElement("span");
-      label.className = "startup-component-label";
-
-      const meter = document.createElement("span");
-      meter.className = "startup-component-meter";
-      const meterFill = document.createElement("span");
-      meter.appendChild(meterFill);
-
-      const status = document.createElement("span");
-      status.className = "startup-component-status";
-
-      row.append(label, meter, status);
-      startupComponents.appendChild(row);
-    }
-    const label = row.querySelector(".startup-component-label");
-    const status = row.querySelector(".startup-component-status");
-    const meterFill = row.querySelector(".startup-component-meter span");
-    row.className = `startup-component ${component.status || "pending"}`;
-    label.textContent = component.label || component.key;
-    status.textContent = startupStatusText(component.status);
-    meterFill.style.width = `${Math.max(0, Math.min(100, component.progress || 0))}%`;
-    row.title = component.detail || "";
-  }
-  for (const row of Array.from(startupComponents.children)) {
-    if (!seen.has(row.dataset.startupComponent || "")) row.remove();
-  }
-}
-
-function startupStatusText(status) {
-  if (status === "ready") return "Hazır";
-  if (status === "loading") return "Yükleniyor";
-  if (status === "skipped") return "Kapalı";
-  if (status === "failed") return "Yedek";
-  return "Bekliyor";
 }
 
 function sleep(ms) {

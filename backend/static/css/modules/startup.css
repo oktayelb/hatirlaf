@@ -46,17 +46,10 @@
   margin-bottom: 8px;
 }
 .startup-title {
-  margin: 0 0 10px;
+  margin: 0 0 30px;
   font-size: 30px;
   line-height: 1.12;
   font-weight: 750;
-}
-.startup-detail {
-  min-height: 44px;
-  margin: 0 0 30px;
-  color: var(--fg-muted);
-  font-size: 15px;
-  line-height: 1.5;
 }
 .startup-progress-row {
   display: grid;
@@ -84,52 +77,3 @@
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
-.startup-components {
-  display: grid;
-  gap: 12px;
-  margin-top: 34px;
-}
-.startup-component {
-  display: grid;
-  grid-template-columns: 78px 1fr 74px;
-  align-items: center;
-  gap: 12px;
-  min-height: 32px;
-  transform: none;
-  animation: none;
-}
-.startup-component-label {
-  color: var(--fg);
-  font-weight: 650;
-  transform: none;
-  animation: none;
-  white-space: nowrap;
-}
-.startup-component-meter {
-  height: 4px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
-}
-.startup-component-meter span {
-  display: block;
-  width: 0;
-  height: 100%;
-  border-radius: inherit;
-  background: var(--accent-2);
-  transition: width 420ms ease;
-}
-.startup-component-status {
-  color: var(--fg-muted);
-  font-size: 12px;
-  text-align: right;
-  transform: none;
-  animation: none;
-  white-space: nowrap;
-}
-.startup-component.ready .startup-component-status { color: var(--ok); }
-.startup-component.loading .startup-component-status { color: var(--accent-2); }
-.startup-component.skipped .startup-component-status { color: var(--fg-dim); }
-.startup-component.failed .startup-component-status { color: var(--warn); }
-.startup-component.ready .startup-component-meter span { background: var(--ok); }
-.startup-component.failed .startup-component-meter span { background: var(--warn); }
