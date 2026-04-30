@@ -157,6 +157,18 @@ HATIRLAF_SYNC_PROCESSING = os.environ.get("HATIRLAF_SYNC_PROCESSING", "0") == "1
 # Enable Hugging Face BERTurk NER. Defaults off (large download).
 HATIRLAF_USE_BERTURK = os.environ.get("HATIRLAF_USE_BERTURK", "0") == "1"
 
+# Enable the local SAVYAR sentence-level ML morphology helper. Defaults off
+# because SAVYAR is still experimental and Hatirlaf must fail open without it.
+HATIRLAF_USE_SAVYAR = os.environ.get("HATIRLAF_USE_SAVYAR", "0") == "1"
+HATIRLAF_SAVYAR_MODEL_PATH = os.environ.get(
+    "HATIRLAF_SAVYAR_MODEL_PATH",
+    str(BASE_DIR.parent / "savyar" / "ml" / "current_best.pt"),
+)
+HATIRLAF_SAVYAR_PYTHON = os.environ.get(
+    "HATIRLAF_SAVYAR_PYTHON",
+    str(BASE_DIR.parent / "savyar" / ".venv" / "bin" / "python"),
+)
+
 # Local llama.cpp model used for structured event extraction. Leave the
 # path at a non-existent file to run NLP-only (the pipeline degrades
 # gracefully and still produces a calendar of events).

@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import datetime as dt
+from unittest.mock import patch
 
 from django.test import SimpleTestCase, override_settings
 
-from diary.processing import extractor, nlp
+from diary.processing import extractor, nlp, savyar_adapter
 from diary.processing import llm as llm_mod
 
 
@@ -96,3 +97,75 @@ class TurkishNlpPrepassTests(SimpleTestCase):
         self.assertEqual(result.clauses[3].subject_person, "2sg")
         self.assertEqual(result.clauses[3].subject_pronoun, "Sen")
         self.assertEqual(result.clauses[3].subject_tense, "necessitative")
+
+
+@override_settings(HATIRLAF_USE_BERTURK=False, HATIRLAF_USE_SAVYAR=True)
+class SavyarIntegrationTests(SimpleTestCase):
+    def test_savyar_handles_compound_subject_and_tense(self):
+        anchor = dt.datetime(2026, 4, 30, 9, 15)
+
+        result = extractor.extract("Dün işteydim. Yarın okula gidecektim.", anchor)
+
+        self.assertEqual(result.clauses[0].subject_person, "1sg")
+        self.assertEqual(result.clauses[0].subject_pronoun, "Ben")
+        self.assertEqual(result.clauses[0].subject_verb, "işteydim")
+        self.assertEqual(result.clauses[0].zaman_dilimi, "Geçmiş")
+        self.assertEqual(result.clauses[1].subject_person, "1sg")
+        self.assertEqual(result.clauses[1].subject_pronoun, "Ben")
+        self.assertEqual(result.clauses[1].subject_verb, "gidecektim")
+        self.assertEqual(result.clauses[1].subject_tense, "future_past")
+        self.assertEqual(result.clauses[1].zaman_dilimi, "Geçmiş")
+
+    def test_savyar_fallback_lemma_handles_consonant_mutation(self):
+        old_analyzer = nlp._cached_analyzer
+        old_backend = nlp._cached_backend
+        try:
+            nlp._cached_analyzer = None
+            nlp._cached_backend = "rules"
+            parsed = nlp.analyze("Kitaba baktım.")
+        finally:
+            nlp._cached_analyzer = old_analyzer
+            nlp._cached_backend = old_backend
+
+        lemmas = {token.surface: token.lemma for token in parsed.tokens}
+        self.assertEqual(lemmas["Kitaba"], "kitap")
+
+    def test_savyar_closed_class_context_skips_demonstrative_determiner(self):
+        parsed = nlp.analyze("O araba geldi. O geldi.")
+        pronoun_surfaces = [m.surface for m in parsed.mentions if m.mention_type == "PRONOUN"]
+
+        self.assertEqual(pronoun_surfaces.count("O"), 1)
+
+    def test_savyar_recovers_unpunctuated_known_location_case(self):
+        parsed = nlp.analyze("Dün ankaradan döndüm.")
+        locations = [m.surface.lower() for m in parsed.mentions if m.mention_type == "LOCATION"]
+
+        self.assertIn("ankara", locations)
+
+    def test_savyar_candidate_order_uses_ml_scores_when_available(self):
+        ranked = (
+            (
+                savyar_adapter.MorphCandidate(
+                    word="o",
+                    root="o",
+                    pos="cc_determiner",
+                    suffixes=("cc_determiner",),
+                    final_pos="cc_determiner",
+                    ml_score=10.0,
+                ),
+                savyar_adapter.MorphCandidate(
+                    word="o",
+                    root="o",
+                    pos="cc_pronoun",
+                    suffixes=("cc_pronoun",),
+                    final_pos="cc_pronoun",
+                    ml_score=1.0,
+                ),
+            ),
+        )
+        with patch.object(savyar_adapter, "analyze_sentence", return_value=ranked):
+            candidates = savyar_adapter.analyze_word("o")
+
+        self.assertGreaterEqual(len(candidates), 2)
+        self.assertEqual(candidates[0].ml_score, 10.0)
+        self.assertEqual(candidates[0].suffixes, ("cc_determiner",))

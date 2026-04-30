@@ -22,6 +22,8 @@ dateparser>=1.2
 llama-cpp-python>=0.3
 # transformers + torch for BERTurk NER (optional, large download):
 #   pip install transformers torch
+# SAVYAR ML ranking runs through HATIRLAF_SAVYAR_PYTHON so it can use SAVYAR's
+# own torch-capable Python environment without forcing torch into Hatırlaf.
 
 # Production server (optional)
 gunicorn>=22.0

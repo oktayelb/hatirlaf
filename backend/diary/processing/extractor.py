@@ -36,6 +36,7 @@ import dateparser
 from dateparser.search import search_dates
 
 from . import nlp as nlp_mod
+from . import savyar_adapter
 from .name_gazetteer import TR_GIVEN_NAMES
 
 logger = logging.getLogger(__name__)
@@ -447,6 +448,10 @@ _SUBJECT_SUFFIX_RULES: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
 
 
 def _classify_tense(text: str) -> str:
+    savyar_hint = savyar_adapter.infer_subject_tense(text)
+    if savyar_hint.zaman_dilimi:
+        return savyar_hint.zaman_dilimi
+
     low = text.lower()
     # Future markers first (they contain 'acak' which can look past-ish).
     if any(_ending(low, suf) for suf in _FUTURE_SUFFIXES):
@@ -465,6 +470,15 @@ def _infer_subject_from_conjugation(text: str) -> tuple[str, str, str, str]:
     suffix-based and deterministic; it does not try to prove that every
     matching word is a verb, so 3sg zero-person forms are kept conservative.
     """
+    savyar_hint = savyar_adapter.infer_subject_tense(text)
+    if savyar_hint.person:
+        return (
+            savyar_hint.person,
+            savyar_hint.pronoun,
+            savyar_hint.verb,
+            savyar_hint.tense_key,
+        )
+
     best: tuple[str, str, str, str] = ("", "", "", "")
     for m in nlp_mod._TOKEN_RE.finditer(text):
         surface = m.group(0).strip("'’")

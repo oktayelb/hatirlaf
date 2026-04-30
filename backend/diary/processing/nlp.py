@@ -24,6 +24,8 @@ from typing import Iterable
 
 from django.conf import settings
 
+from . import savyar_adapter
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -190,6 +192,10 @@ _FALLBACK_SUFFIXES = sorted(
 
 
 def fallback_lemma(word: str) -> str:
+    savyar_lemma = savyar_adapter.best_lemma(word)
+    if savyar_lemma:
+        return savyar_lemma
+
     low = word.lower()
     for suf in _FALLBACK_SUFFIXES:
         if low.endswith(suf) and len(low) > len(suf) + 1:
@@ -431,6 +437,23 @@ def _rule_entities(text: str, tokens: list[Token]) -> list[EntityMention]:
                     source="rules",
                 )
             )
+        else:
+            recovered = savyar_adapter.recover_known_proper_case(
+                bare,
+                set(TR_CITIES) | set(TR_COUNTRIES),
+            )
+            if recovered is not None:
+                out.append(
+                    EntityMention(
+                        surface=recovered.label,
+                        lemma=recovered.label.lower(),
+                        char_start=t.char_start,
+                        char_end=t.char_start + len(recovered.label),
+                        mention_type="LOCATION",
+                        source="rules",
+                        hint=f"STT biçiminden ayrıştırıldı: {recovered.suffix}",
+                    )
+                )
         i += 1
     return out
 
@@ -463,12 +486,21 @@ def _has_apostrophe_location_case(text: str) -> bool:
 
 def _find_pronouns(text: str) -> list[EntityMention]:
     out: list[EntityMention] = []
-    for m in _TOKEN_RE.finditer(text):
-        if m.group(0).lower() in AMBIGUOUS_PRONOUNS:
+    tokens = list(_TOKEN_RE.finditer(text))
+    for idx, m in enumerate(tokens):
+        surface = m.group(0)
+        low = surface.lower()
+        if savyar_adapter.enabled():
+            categories = savyar_adapter.closed_class_categories(low)
+            if "pronoun" not in categories and low not in AMBIGUOUS_PRONOUNS:
+                continue
+            if _looks_like_savyar_determiner(tokens, idx, categories):
+                continue
+        if low in AMBIGUOUS_PRONOUNS or "pronoun" in savyar_adapter.closed_class_categories(low):
             out.append(
                 EntityMention(
-                    surface=m.group(0),
-                    lemma=m.group(0).lower(),
+                    surface=surface,
+                    lemma=low,
                     char_start=m.start(),
                     char_end=m.end(),
                     mention_type="PRONOUN",
@@ -477,6 +509,20 @@ def _find_pronouns(text: str) -> list[EntityMention]:
                 )
             )
     return out
+
+
+def _looks_like_savyar_determiner(tokens, idx: int, categories: set[str]) -> bool:
+    """Skip demonstrative determiners in simple noun phrases like ``o araba``."""
+    if "determiner" not in categories or idx + 1 >= len(tokens):
+        return False
+    low = tokens[idx].group(0).lower()
+    if low not in {"o", "bu", "şu"}:
+        return False
+    next_surface = tokens[idx + 1].group(0)
+    next_hint = savyar_adapter.infer_subject_tense(next_surface)
+    if next_hint.person or next_hint.zaman_dilimi:
+        return False
+    return True
 
 
 def _find_relative_times(text: str) -> list[EntityMention]:

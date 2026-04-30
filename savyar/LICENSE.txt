@@ -1,0 +1,17 @@
+/* Custom Proprietary License for [turkish-word-decomposer]
+
+Copyright (c) [2025] [Oktay Elibüyük]. All rights reserved.
+
+This repository and its contents are provided under the following terms:
+
+Usage: You may clone, view, and use this repository for personal or internal development purposes only.
+
+Contributions: Any contributions, suggestions, or modifications ("Contributions") must be submitted to the owner via pull request. All Contributions are subject to approval by the owner.
+
+Distribution: You may NOT distribute, sell, publish, or publicly share this repository or derivative works without explicit written permission from the owner.
+
+Ownership: The repository and all original content remain the exclusive property of the owner.
+
+No Warranty: This repository is provided "as is". The owner makes no warranties regarding functionality, performance, or suitability for any purpose.
+
+By using or contributing to this repository, you agree to abide by these terms. */
