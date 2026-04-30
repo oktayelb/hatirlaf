@@ -23,17 +23,32 @@ export function el(tag, attrs = {}, children = []) {
 
 export function modal(content, { onClose } = {}) {
   const backdrop = el("div", { class: "modal-backdrop" });
+  let closed = false;
   const close = () => {
+    if (closed) return;
+    closed = true;
+    document.removeEventListener("keydown", onKeyDown);
     backdrop.remove();
     if (onClose) onClose();
+  };
+  const onKeyDown = (e) => {
+    if (e.key === "Escape") close();
   };
   backdrop.addEventListener("click", (e) => {
     if (e.target === backdrop) close();
   });
   const panel = el("div", { class: "modal" });
+  const closeBtn = el("button", {
+    class: "modal-close",
+    type: "button",
+    "aria-label": "Kapat",
+    onclick: close,
+  }, ["×"]);
+  panel.appendChild(closeBtn);
   panel.appendChild(content);
   backdrop.appendChild(panel);
   document.body.appendChild(backdrop);
+  document.addEventListener("keydown", onKeyDown);
   return { close, panel };
 }
 

@@ -65,6 +65,7 @@
   letter-spacing: 0.2px;
   cursor: pointer;
   transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+  touch-action: manipulation;
 }
 .app-nav-btn:hover { color: var(--fg); border-color: var(--border-strong); }
 .app-nav-btn.active {
@@ -81,6 +82,17 @@
   padding: 18px 16px 34px;
   overflow-y: auto;
   scroll-behavior: smooth;
+  touch-action: pan-y;
+  will-change: transform, opacity;
+}
+.screen-root.route-enter {
+  animation: routeIn 150ms ease-out both;
+}
+.screen-root.route-enter.route-forward {
+  --route-x: 18px;
+}
+.screen-root.route-enter.route-back {
+  --route-x: -18px;
 }
 
 /* ---------- Cards / CTAs ---------- */
@@ -112,6 +124,7 @@
   min-height: var(--tap);
   letter-spacing: 0.2px;
   transition: transform 100ms ease, box-shadow 100ms ease, background 120ms ease, border-color 120ms ease;
+  touch-action: manipulation;
 }
 .cta:hover:not([disabled]) { background: #249891; }
 .cta:active:not([disabled]) { transform: translateY(1px); }
@@ -121,3 +134,13 @@
 .cta.ghost:hover:not([disabled]) { background: var(--accent-soft); }
 .cta.danger { background: rgba(255, 90, 99, 0.12); color: var(--danger); border: 1px solid rgba(255,90,99,0.35); }
 
+@keyframes routeIn {
+  from {
+    opacity: 0.72;
+    transform: translate3d(var(--route-x, 12px), 0, 0);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}

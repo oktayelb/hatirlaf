@@ -4,7 +4,7 @@
 
 import { api } from "../api.js";
 import { toast } from "../events.js";
-import { el, fmtRelative } from "./utils.js";
+import { el, fmtRelative, modal } from "./utils.js";
 
 let pollHandle = null;
 
@@ -218,27 +218,8 @@ function entryCard(session, draft = null) {
     }
   });
 
-  deleteBtn.addEventListener("click", async () => {
-    const ok = window.confirm(
-      "Bu girişi silmek istediğine emin misin? Ses dosyası, transkript ve takvim olayları kalıcı olarak silinir."
-    );
-    if (!ok) return;
-    deleteBtn.setAttribute("disabled", "");
-    deleteBtn.textContent = "Siliniyor…";
-    try {
-      await api.deleteSession(session.id);
-      const list = card.parentElement;
-      card.remove();
-      if (list && list.children.length === 0) {
-        list.appendChild(emptyState());
-      }
-      toast("Giriş silindi");
-    } catch (err) {
-      console.error(err);
-      deleteBtn.removeAttribute("disabled");
-      deleteBtn.textContent = "Sil";
-      toast("Silme başarısız: " + err.message);
-    }
+  deleteBtn.addEventListener("click", () => {
+    openDeleteModal({ session, card, deleteBtn });
   });
 
   card.appendChild(
@@ -246,6 +227,45 @@ function entryCard(session, draft = null) {
   );
 
   return card;
+}
+
+function openDeleteModal({ session, card, deleteBtn }) {
+  const content = el("div", { class: "confirm-dialog" }, [
+    el("h3", {}, ["Girişi sil"]),
+    el("p", { class: "muted" }, [
+      "Bu giriş kalıcı olarak silinecek. Ses dosyası, transkript ve takvim olayları geri alınamaz.",
+    ]),
+    el("div", { class: "confirm-dialog-actions" }, [
+      el("button", { class: "cta ghost", onclick: () => dialog.close() }, ["Vazgeç"]),
+      el("button", {
+        class: "cta danger",
+        onclick: async () => {
+          await deleteSession({ session, card, deleteBtn, dialog });
+        },
+      }, ["Sil"]),
+    ]),
+  ]);
+  const dialog = modal(content);
+}
+
+async function deleteSession({ session, card, deleteBtn, dialog }) {
+  deleteBtn.setAttribute("disabled", "");
+  deleteBtn.textContent = "Siliniyor…";
+  try {
+    await api.deleteSession(session.id);
+    const list = card.parentElement;
+    dialog.close();
+    card.remove();
+    if (list && list.children.length === 0) {
+      list.appendChild(emptyState());
+    }
+    toast("Giriş silindi");
+  } catch (err) {
+    console.error(err);
+    deleteBtn.removeAttribute("disabled");
+    deleteBtn.textContent = "Sil";
+    toast("Silme başarısız: " + err.message);
+  }
 }
 
 function captureDrafts(listWrap) {

@@ -5,6 +5,44 @@
   .hero-title { font-size: 22px; }
 }
 
+@media (max-width: 519px) {
+  .app-header {
+    padding-bottom: 10px;
+  }
+  .app-nav {
+    position: fixed;
+    left: 50%;
+    right: auto;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 10px);
+    z-index: 45;
+    width: min(calc(100% - 22px), 498px);
+    margin: 0;
+    transform: translateX(-50%);
+    box-shadow: 0 12px 34px rgba(0,0,0,0.38);
+  }
+  .app-nav-btn {
+    min-height: 44px;
+    padding: 10px 8px;
+  }
+  .screen-root {
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 86px);
+  }
+  .entry-actions .cta,
+  .mention-actions button {
+    flex: 1 1 calc(50% - 6px);
+  }
+  .composer-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .composer-footer .cta {
+    width: 100%;
+  }
+  .modal {
+    max-height: 88dvh;
+  }
+}
+
 @media (min-width: 520px) {
   body { padding: 18px 0; }
   .app-shell { border-radius: 12px; overflow: hidden; min-height: calc(100dvh - 36px); }
