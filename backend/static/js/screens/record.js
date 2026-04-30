@@ -55,13 +55,14 @@ export function cleanup() {
 }
 
 function paintList(listWrap, sessions) {
+  const drafts = captureDrafts(listWrap);
   listWrap.innerHTML = "";
   if (sessions.length === 0) {
     listWrap.appendChild(emptyState());
     return;
   }
   for (const s of sessions) {
-    listWrap.appendChild(entryCard(s));
+    listWrap.appendChild(entryCard(s, drafts.get(String(s.id))));
   }
 }
 
@@ -88,7 +89,7 @@ function emptyState() {
   ]);
 }
 
-function entryCard(session) {
+function entryCard(session, draft = null) {
   const hasAudio = Boolean(session.audio_url);
   const recordedAt = new Date(session.recorded_at);
   const dateStr = recordedAt.toLocaleString("tr-TR", {
@@ -123,7 +124,7 @@ function entryCard(session) {
     el("div", { class: "entry-date muted" }, [dateStr]),
   ]);
 
-  const card = el("article", { class: "entry-card" }, [meta]);
+  const card = el("article", { class: "entry-card", "data-session-id": session.id }, [meta]);
   card.appendChild(processingPanel(session));
 
   if (hasAudio) {
@@ -148,7 +149,14 @@ function entryCard(session) {
     rows: "5",
     placeholder,
   });
-  textarea.value = transcript;
+  textarea.value = draft ? draft.value : transcript;
+  textarea.defaultValue = transcript;
+  if (draft?.focused) {
+    setTimeout(() => {
+      textarea.focus();
+      textarea.setSelectionRange(draft.selectionStart || 0, draft.selectionEnd || 0);
+    }, 0);
+  }
   card.appendChild(textarea);
 
   const status = el("span", { class: "muted entry-status" }, [""]);
@@ -234,6 +242,25 @@ function entryCard(session) {
   );
 
   return card;
+}
+
+function captureDrafts(listWrap) {
+  const drafts = new Map();
+  const active = document.activeElement;
+  for (const card of listWrap.querySelectorAll(".entry-card[data-session-id]")) {
+    const textarea = card.querySelector(".entry-transcript");
+    if (!textarea) continue;
+    const isFocused = textarea === active;
+    const changed = textarea.value !== textarea.defaultValue;
+    if (!isFocused && !changed) continue;
+    drafts.set(card.dataset.sessionId, {
+      value: textarea.value,
+      focused: isFocused,
+      selectionStart: textarea.selectionStart,
+      selectionEnd: textarea.selectionEnd,
+    });
+  }
+  return drafts;
 }
 
 function processingPanel(session) {

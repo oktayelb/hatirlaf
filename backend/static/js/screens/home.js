@@ -90,8 +90,9 @@ async function startRecording(state, ui) {
   try {
     state.recorder = new Recorder({
       onLevel: (lvl) => {
-        ui.levelEl.style.transform = `scale(${1 + Math.min(0.35, lvl * 0.7)})`;
-        ui.levelEl.style.opacity = String(Math.min(0.85, 0.3 + lvl));
+        // Adjust formula for the softer glow effect
+        ui.levelEl.style.transform = `scale(${1 + Math.min(0.6, lvl * 1.5)})`;
+        ui.levelEl.style.opacity = String(Math.min(0.5, 0.15 + lvl));
       },
     });
     await state.recorder.start();
@@ -122,8 +123,11 @@ async function stopRecording(state, ui) {
   state.recording = false;
   ui.micBtn.classList.remove("is-recording");
   ui.micBtn.setAttribute("aria-label", "Kaydı başlat");
+  
+  // Hide glow entirely when stopped
   ui.levelEl.style.transform = "scale(1)";
-  ui.levelEl.style.opacity = "0.3";
+  ui.levelEl.style.opacity = "0"; 
+  
   if (!result || !result.blob || result.blob.size === 0) {
     ui.hintEl.textContent = "Kayıt boş göründü.";
     return;
