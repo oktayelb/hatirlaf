@@ -144,6 +144,11 @@ def _hints_prompt(extraction: ExtractionResult) -> str:
         lines.append(f"- Yer adayları: {', '.join(extraction.locations)}")
     if extraction.orgs:
         lines.append(f"- Kurum adayları: {', '.join(extraction.orgs)}")
+    if extraction.references:
+        lines.append(
+            "- Belirsiz gönderge/zaman adayları: "
+            f"{', '.join(extraction.references)}"
+        )
 
     lines.append("\n### Cümle bazlı ipuçları (tarih ve zaman dilimi çoktan çözüldü)")
     for c in extraction.clauses:
@@ -160,34 +165,73 @@ def _hints_prompt(extraction: ExtractionResult) -> str:
             parts.append(f"lokasyon={','.join(c.locations)}")
         if c.time_phrases:
             parts.append(f"ifade={'/'.join(c.time_phrases)}")
+        if c.references:
+            parts.append(f"gondergeler={','.join(c.references)}")
+        if c.subject_person:
+            parts.append(
+                "ozne="
+                f"{c.subject_person}/{c.subject_pronoun}"
+                f"({c.subject_verb}:{c.subject_tense})"
+            )
         lines.append(" | ".join(parts))
     return "\n".join(lines)
 
 
+def _baseline_prompt(baseline: dict) -> str:
+    return (
+        "### Deterministik NLP taslağı\n"
+        "Bu JSON, modelden önce üretilen güvenli taslaktır. Eksik olabilir ama "
+        "tarih/saat/özne/kişi/yer alanları için ana referanstır. Model bunu "
+        "iyileştirebilir; açık kanıt yoksa taslakla çelişmemelidir.\n"
+        f"{json.dumps(baseline.get('olay_loglari', []), ensure_ascii=False, indent=2)}"
+    )
+
+
 PASS_1_SYSTEM = (
-    "Sen Hatırlaf için çalışan bir Türkçe günlük analistisin. "
-    "Kullanıcının serbest metnini ve kural tabanlı NLP motorunun cümle bazlı "
-    "KESİN ipuçlarını okuyup, metindeki olayları yapılandırılmış bir listeye "
-    "dökmek senin görevin.\n\n"
-    "TEMEL İLKE: İpuçları SENDEN ÖNCE çözülmüş gerçeklerdir. Onları yeniden "
-    "yorumlama, doğrula ve kullan. Sen yalnızca hangi cümlelerin aynı olayı "
-    "anlattığını birleştir, kişi ve yerleri doğru olaya bağla.\n\n"
-    "KATI KURALLAR:\n"
-    "1) İpuçlarında 'tarih=YYYY-MM-DD' geçiyorsa o tarihi aynen kullan. Kendi "
-    "kafandan tarih üretme.\n"
-    "2) İpuçlarındaki 'zaman=Geçmiş/Şu An/Gelecek' değerini koru. Eğer ipucu "
-    "yoksa tarih ile kayıt anını karşılaştırarak belirle.\n"
-    "3) Kişiler yalnızca 'kisiler=' listesinden veya metinde açıkça geçen "
-    "özel adlardan gelmelidir. 'emre', 'ayşe' gibi küçük harf yazılmış adları "
-    "büyük harfle düzelt (Emre, Ayşe).\n"
-    "4) Söyleyen kullanıcı her olaya 'Ben' olarak eklenir.\n"
-    "5) Metinde geçmeyen yer/kişi asla üretme. Bilinmiyorsa 'Bilinmeyen "
-    "Lokasyon' / 'Bilinmeyen Kişi' yaz.\n"
-    "6) Bir cümle başka bir olayın devamını anlatıyorsa ('orada vardı', 'sonra "
-    "birlikte gittik') ayrı olay açma, önceki olayı zenginleştir.\n"
-    "7) Bir olayda: zaman_dilimi, tarih, saat (varsa), lokasyon, kısa olay "
-    "açıklaması ve kisiler listesi bulunur.\n\n"
-    "ÇIKIŞ BİÇİMİ: Numaralı liste halinde, her olay için ayrı bir satır grubu.\n"
+    "Sen Hatırlaf'ın Türkçe olay çıkarım motorusun. Görevin, kullanıcının "
+    "serbest konuşma/metin günlüğünü takvimde gösterilecek olay kayıtlarına "
+    "dönüştürmektir. Model yaratıcılığı değil, kanıta dayalı yapılandırma "
+    "isteniyor.\n\n"
+    "GİRDİ SÖZLEŞMESİ:\n"
+    "- 'Önişleme Verisi' kural tabanlı NLP katmanından gelir ve en güvenilir "
+    "kaynak kabul edilir.\n"
+    "- 'Deterministik NLP taslağı' güvenli başlangıç çıktısıdır. Onu yalnızca "
+    "orijinal metin ve ipuçları açıkça daha iyi bir birleşim gerektiriyorsa "
+    "değiştir.\n"
+    "- Orijinal metin yalnızca kanıt kontrolü ve olayları birleştirme için "
+    "kullanılır; metinde/ipucunda olmayan kişi, yer, tarih veya saat üretme.\n\n"
+    "ALAN KURALLARI:\n"
+    "1) tarih: 'tarih=YYYY-MM-DD' ipucu varsa aynen kullan. Yoksa kayıt anına "
+    "göre çıkar; emin değilsen kayıt gününü kullan.\n"
+    "2) saat: yalnız açık saat ifadesi varsa HH:MM yaz. Yoksa boş bırak.\n"
+    "3) zaman_dilimi: tarih kayıt gününden önceyse Geçmiş, aynı günse Şu An, "
+    "sonraysa Gelecek. Bu sınıflandırmayı metin hissine göre bozma.\n"
+    "4) kisiler: açık kişi adlarını, 'Ben'i ve 'ozne=' ipucundan gelen düşmüş "
+    "özneyi kullan. 'ozne=1sg/Ben' -> Ben, '1pl/Biz' -> Biz, '2sg/Sen' -> Sen, "
+    "'2pl/Siz' -> Siz, '3pl/Onlar' -> Onlar. '3sg/O' tek başına kişi kanıtı "
+    "değildir; yalnız açık 'o/o da' kişi göndergesi veya yakın kişi adayı varsa "
+    "kişiye bağla.\n"
+    "5) lokasyon: yalnız açık yer/kurum adaylarından seç. 'orada/burada/"
+    "oradaki/buradaki' gibi göndergeleri açık yakın yerle eşleştiremiyorsan "
+    "lokasyonu boş bırak veya Bilinmeyen Lokasyon yaz.\n"
+    "6) olay: kısa, doğal Türkçe cümle yaz. Belirsiz gönderge çözülmediyse "
+    "bunu olay metninde koru: 'oradaki konuşma', 'bu plan' gibi.\n\n"
+    "BELİRSİZ GÖNDERGE ÇÖZME:\n"
+    "- Önce aynı cümledeki açık kişi/yer/olaya bak.\n"
+    "- Sonra bir önceki cümledeki en yakın uyumlu adaya bak.\n"
+    "- 'o/onun' kişi veya olay olabilir; açık kanıt yoksa kişi adı üretme.\n"
+    "- 'bu/şu/bunun/şunun' çoğunlukla önceki olay/konu/planı gösterir; kişi "
+    "olarak yorumlama.\n"
+    "- 'orada/oradaki' en yakın önceki lokasyona bağlanabilir; yoksa "
+    "Bilinmeyen Lokasyon.\n"
+    "- 'dünkü/bugünkü/yarınki' tarih ipucudur; kişi/yer değildir.\n\n"
+    "OLAY BİRLEŞTİRME:\n"
+    "- Aynı tarih, aynı zaman bağlamı ve devam cümleleri tek olay olmalı.\n"
+    "- 'sonra', 'orada', 'bunun üzerine', 'o da' gibi devam ifadeleri genelde "
+    "önceki olayı zenginleştirir.\n"
+    "- Farklı tarih, farklı ana fiil ve farklı katılımcı/yer varsa ayrı olay "
+    "aç.\n\n"
+    "ÇIKIŞ BİÇİMİ: Numaralı liste halinde, her olay için ayrı satır grubu.\n"
     "Olay 1:\n"
     "  - zaman_dilimi: ...\n"
     "  - tarih: YYYY-MM-DD\n"
@@ -199,14 +243,16 @@ PASS_1_SYSTEM = (
 
 
 PASS_CRITIQUE_SYSTEM = (
-    "Sen bir denetim LLM'isin. Sana bir günlük analistinin çıkardığı olay "
-    "listesi, aynı metin üzerinde çalışan NLP motorunun kesin ipuçları ve "
-    "kullanıcının orijinal metni verilecek.\n\n"
-    "GÖREVİN: Olay listesindeki tutarsızlıkları bulmak ve DÜZELTİLMİŞ bir "
-    "liste üretmek. Metni yeniden yorumlama; yalnızca aşağıdaki hataları ara:\n"
+    "Sen Hatırlaf'ın olay çıkarımı denetçisisin. Sana orijinal metin, NLP "
+    "ipuçları, deterministik taslak ve analist çıktısı verilecek.\n\n"
+    "GÖREVİN: Analist çıktısını güvenilirlik açısından düzeltmek. Yeni bilgi "
+    "icat etme; yalnızca aşağıdaki hataları ara ve onar:\n"
     "- Tarih ipucuyla çelişiyor mu? (örn. ipucu 2026-04-24 ama olay 2026-04-23)\n"
     "- zaman_dilimi tarih ile tutarlı mı? (tarih bugünse Şu An, gelecekse "
     "Gelecek, geçmişse Geçmiş)\n"
+    "- 'ozne=' ipucundan gelen düşmüş özne kişi listesinde kaybolmuş mu?\n"
+    "- 'gondergeler=' alanındaki belirsiz ifade kişi/yer uydurularak yanlış "
+    "çözülmüş mü?\n"
     "- Uydurulmuş kişi veya yer var mı? Metinde veya NLP ipuçlarında "
     "geçmiyorsa silmelisin.\n"
     "- Küçük harfle yazılmış özel ad düzeltilmiş mi? (emre → Emre)\n"
@@ -224,7 +270,9 @@ PASS_2_SYSTEM = (
     "- tarih: YYYY-MM-DD biçiminde.\n"
     "- saat: HH:MM biçiminde veya boş string.\n"
     "- zaman_dilimi: 'Geçmiş', 'Şu An' veya 'Gelecek'.\n"
-    "- kisiler: metindeki/ipuçlarındaki adların listesi. 'Ben' her zaman dahil.\n"
+    "- kisiler: metindeki/ipuçlarındaki adlar ve çekimden gelen zamirler. "
+    "'Ben' her zaman dahil.\n"
+    "- lokasyon bilinmiyorsa boş string veya 'Bilinmeyen Lokasyon'.\n"
     "- Eksik alanlar için boş string kullan, null kullanma.\n"
 )
 
@@ -245,6 +293,7 @@ def run(extraction: ExtractionResult) -> dict:
 
     try:
         hints = _hints_prompt(extraction)
+        baseline_text = _baseline_prompt(baseline)
         paragraph = extraction.paragraph
 
         # Pass 1 — free-form analysis of events.
@@ -253,7 +302,11 @@ def run(extraction: ExtractionResult) -> dict:
                 {"role": "system", "content": PASS_1_SYSTEM},
                 {
                     "role": "user",
-                    "content": f"{hints}\n\n### Orijinal metin\n{paragraph}",
+                    "content": (
+                        f"{hints}\n\n"
+                        f"{baseline_text}\n\n"
+                        f"### Orijinal metin\n{paragraph}"
+                    ),
                 },
             ],
             temperature=0.1,
@@ -269,6 +322,7 @@ def run(extraction: ExtractionResult) -> dict:
                     "content": (
                         f"### Orijinal metin\n{paragraph}\n\n"
                         f"{hints}\n\n"
+                        f"{baseline_text}\n\n"
                         f"### Analist Çıktısı\n{draft}"
                     ),
                 },
@@ -363,8 +417,13 @@ def _sanitize_event(event: dict, extraction: ExtractionResult) -> dict:
         else:
             saat = ""
 
-    # Restrict kisiler to names the NLP hints actually saw (+ "Ben").
+    # Restrict kisiler to names the NLP hints actually saw, plus grammatical
+    # pronouns recovered from dropped Turkish subjects.
     known_people = {p.lower(): p for p in extraction.persons}
+    grammatical_people = {"ben": "Ben"}
+    for c in extraction.clauses:
+        if c.subject_pronoun and c.subject_person != "3sg":
+            grammatical_people[c.subject_pronoun.lower()] = c.subject_pronoun
     kisiler_in = event.get("kisiler") or []
     cleaned_people: list[str] = []
     seen: set[str] = set()
@@ -373,8 +432,8 @@ def _sanitize_event(event: dict, extraction: ExtractionResult) -> dict:
         if not p:
             continue
         key = p.lower()
-        if key == "ben":
-            display = "Ben"
+        if key in grammatical_people:
+            display = grammatical_people[key]
         elif key in known_people:
             display = known_people[key]
         elif any(p in extraction.paragraph for p in [p]):
@@ -389,7 +448,13 @@ def _sanitize_event(event: dict, extraction: ExtractionResult) -> dict:
         cleaned_people.insert(0, "Ben")
 
     lokasyon = (event.get("lokasyon") or "").strip()
-    if lokasyon and lokasyon.lower() not in extraction.paragraph.lower() and lokasyon not in extraction.locations and lokasyon not in extraction.orgs:
+    if (
+        lokasyon
+        and lokasyon != "Bilinmeyen Lokasyon"
+        and lokasyon.lower() not in extraction.paragraph.lower()
+        and lokasyon not in extraction.locations
+        and lokasyon not in extraction.orgs
+    ):
         # Location wasn't in the paragraph or hints — probably hallucinated.
         lokasyon = ""
 
@@ -419,7 +484,7 @@ def _fallback_from_hints(extraction: ExtractionResult) -> dict:
         # describe the same situation.
         if events and _should_merge(events[-1], c, extraction):
             prev = events[-1]
-            prev["kisiler"] = _unique_merge(prev["kisiler"], c.persons)
+            prev["kisiler"] = _unique_merge(prev["kisiler"], _clause_people(c))
             if c.locations and (prev["lokasyon"] in ("", "Bilinmeyen Lokasyon")):
                 prev["lokasyon"] = c.locations[0]
             if c.time_hm and not prev["saat"]:
@@ -435,7 +500,7 @@ def _fallback_from_hints(extraction: ExtractionResult) -> dict:
                 "saat": c.time_hm,
                 "lokasyon": (c.locations[0] if c.locations else (c.orgs[0] if c.orgs else "")),
                 "olay": c.event_phrase or c.text[:120],
-                "kisiler": _unique_merge(c.persons, ["Ben"]),
+                "kisiler": _clause_people(c),
             }
         )
 
@@ -456,6 +521,17 @@ def _fallback_from_hints(extraction: ExtractionResult) -> dict:
             }
         )
     return {"olay_loglari": events, "backend": "nlp-only"}
+
+
+def _clause_people(clause) -> list[str]:
+    people = list(clause.persons or [])
+    if (
+        clause.subject_pronoun
+        and clause.subject_person != "3sg"
+        and clause.subject_pronoun not in people
+    ):
+        people.append(clause.subject_pronoun)
+    return _unique_merge(people, ["Ben"])
 
 
 def _recorded_iso(extraction: ExtractionResult) -> str:

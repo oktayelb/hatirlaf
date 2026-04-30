@@ -79,11 +79,17 @@ function entryCard(session) {
     { class: `status-badge ${statusClass(session.status)}` },
     [session.status_display || session.status]
   );
+  const eventBadge = el(
+    "span",
+    { class: `status-badge ${eventStatusClass(session.eventification_status)}` },
+    [eventStatusLabel(session)]
+  );
 
   const meta = el("div", { class: "entry-meta" }, [
     el("div", { class: "entry-meta-row" }, [
       kindBadge,
       statusBadge,
+      eventBadge,
       el("span", { class: "muted entry-time" }, [fmtRelative(session.recorded_at)]),
     ]),
     el("div", { class: "entry-date muted" }, [dateStr]),
@@ -206,6 +212,32 @@ function statusClass(status) {
       completed: "ok",
       failed: "err",
       review: "warn",
+    }[status] || ""
+  );
+}
+
+function eventStatusLabel(session) {
+  switch (session.eventification_status) {
+    case "completed":
+      return "Takvim hazır";
+    case "running":
+      return "Olaylaştırılıyor";
+    case "queued":
+      return "Olay sırada";
+    case "failed":
+      return "Olay hatası";
+    default:
+      return "Olay bekliyor";
+  }
+}
+
+function eventStatusClass(status) {
+  return (
+    {
+      completed: "ok",
+      failed: "err",
+      queued: "warn",
+      running: "warn",
     }[status] || ""
   );
 }

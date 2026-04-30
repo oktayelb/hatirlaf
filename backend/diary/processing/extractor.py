@@ -67,6 +67,15 @@ class ClauseHint:
     persons: list[str] = field(default_factory=list)
     locations: list[str] = field(default_factory=list)
     orgs: list[str] = field(default_factory=list)
+    # Ambiguous local references ("o", "bu", "oradaki", "dünkü") that the
+    # LLM should preserve as unresolved unless nearby context makes them clear.
+    references: list[str] = field(default_factory=list)
+    # Subject inferred from Turkish verb conjugation when the explicit subject
+    # is dropped ("gittim" -> Ben, "konuştuk" -> Biz).
+    subject_person: str = ""
+    subject_pronoun: str = ""
+    subject_verb: str = ""
+    subject_tense: str = ""
     # Best-guess event phrase (verb + nearby noun group).
     event_phrase: str = ""
 
@@ -83,6 +92,7 @@ class ExtractionResult:
     persons: list[str] = field(default_factory=list)
     locations: list[str] = field(default_factory=list)
     orgs: list[str] = field(default_factory=list)
+    references: list[str] = field(default_factory=list)
     # mask_token -> real value, so cloud-LLM output can be de-masked.
     mask_map: dict[str, str] = field(default_factory=dict)
     masked_paragraph: str = ""
@@ -96,6 +106,7 @@ class ExtractionResult:
             "persons": self.persons,
             "locations": self.locations,
             "orgs": self.orgs,
+            "references": self.references,
             "mask_map": self.mask_map,
             "masked_paragraph": self.masked_paragraph,
         }
@@ -239,7 +250,25 @@ def _ground_clause_date(
         except ValueError:
             pass
 
-    # 3. Relative expressions via dateparser, anchored on recorded_at.
+    # 3. Fast-path relative adjectives that dateparser's Turkish search can
+    # miss in noun phrases ("dünkü toplantı", "yarınki randevu").
+    lowered = clause_text.lower()
+    relative_day_map = {
+        "dün": -1,
+        "dünkü": -1,
+        "bugün": 0,
+        "bugünkü": 0,
+        "yarın": 1,
+        "yarınki": 1,
+    }
+    explicit_rel: dt.date | None = None
+    for word, offset in relative_day_map.items():
+        if re.search(rf"\b{re.escape(word)}\w*\b", lowered):
+            explicit_rel = (paragraph_anchor_date or anchor.date()) + dt.timedelta(days=offset)
+            phrases.append(word)
+            break
+
+    # 4. Relative expressions via dateparser, anchored on recorded_at.
     rel_anchor = anchor
     if paragraph_anchor_date is not None:
         rel_anchor = dt.datetime.combine(paragraph_anchor_date, anchor.time())
@@ -256,7 +285,7 @@ def _ground_clause_date(
         if best_rel is None and parsed is not None:
             best_rel = parsed.date()
 
-    final = abs_d or best_rel
+    final = abs_d or explicit_rel or best_rel
     # Dedup phrases.
     seen = set()
     ph = []
@@ -300,6 +329,122 @@ _PRESENT_SUFFIXES = (
     "makta", "mekte", "maktayım", "mekteyim",
 )
 
+# Hardcoded Turkish finite verb endings. The order matters: longer, more
+# specific suffixes must be checked before shorter zero-person forms.
+_SUBJECT_SUFFIX_RULES: tuple[tuple[str, str, str, tuple[str, ...]], ...] = (
+    (
+        "future",
+        "1sg",
+        "Ben",
+        ("acağım", "eceğim", "acagim", "ecegim"),
+    ),
+    ("future", "2pl", "Siz", ("acaksınız", "eceksiniz", "acaksiniz", "eceksiniz")),
+    ("future", "1pl", "Biz", ("acağız", "eceğiz", "acagiz", "ecegiz")),
+    ("future", "2sg", "Sen", ("acaksın", "eceksin", "acaksin", "eceksin")),
+    ("future", "3pl", "Onlar", ("acaklar", "ecekler")),
+    ("future", "3sg", "O", ("acak", "ecek")),
+    (
+        "present_continuous",
+        "2pl",
+        "Siz",
+        ("yorsunuz",),
+    ),
+    ("present_continuous", "1sg", "Ben", ("yorum",)),
+    ("present_continuous", "2sg", "Sen", ("yorsun",)),
+    ("present_continuous", "1pl", "Biz", ("yoruz",)),
+    ("present_continuous", "3pl", "Onlar", ("yorlar",)),
+    ("present_continuous", "3sg", "O", ("yor",)),
+    (
+        "reported_past",
+        "2pl",
+        "Siz",
+        (
+            "mışsınız", "mişsiniz", "muşsunuz", "müşsünüz",
+            "missiniz", "mussunuz",
+        ),
+    ),
+    ("reported_past", "1sg", "Ben", ("mışım", "mişim", "muşum", "müşüm", "misim", "musum")),
+    ("reported_past", "2sg", "Sen", ("mışsın", "mişsin", "muşsun", "müşsün", "missin", "mussun")),
+    ("reported_past", "1pl", "Biz", ("mışız", "mişiz", "muşuz", "müşüz", "misiz", "musuz")),
+    ("reported_past", "3pl", "Onlar", ("mışlar", "mişler", "muşlar", "müşler", "misler", "muslar")),
+    ("reported_past", "3sg", "O", ("mış", "miş", "muş", "müş", "mis", "mus")),
+    (
+        "definite_past",
+        "2pl",
+        "Siz",
+        (
+            "dınız", "diniz", "dunuz", "dünüz",
+            "tınız", "tiniz", "tunuz", "tünüz",
+        ),
+    ),
+    (
+        "definite_past",
+        "1sg",
+        "Ben",
+        ("dım", "dim", "dum", "düm", "tım", "tim", "tum", "tüm"),
+    ),
+    (
+        "definite_past",
+        "2sg",
+        "Sen",
+        ("dın", "din", "dun", "dün", "tın", "tin", "tun", "tün"),
+    ),
+    (
+        "definite_past",
+        "1pl",
+        "Biz",
+        ("dık", "dik", "duk", "dük", "tık", "tik", "tuk", "tük"),
+    ),
+    (
+        "definite_past",
+        "3pl",
+        "Onlar",
+        ("dılar", "diler", "dular", "düler", "tılar", "tiler", "tular", "tüler"),
+    ),
+    ("definite_past", "3sg", "O", ("dı", "di", "du", "dü", "tı", "ti", "tu", "tü")),
+    ("necessitative", "2pl", "Siz", ("malısınız", "melisiniz", "malisiniz")),
+    ("necessitative", "1sg", "Ben", ("malıyım", "meliyim", "maliyim")),
+    ("necessitative", "2sg", "Sen", ("malısın", "melisin", "malisin")),
+    ("necessitative", "1pl", "Biz", ("malıyız", "meliyiz", "maliyiz")),
+    ("necessitative", "3pl", "Onlar", ("malılar", "meliler", "maliler")),
+    ("necessitative", "3sg", "O", ("malı", "meli", "mali")),
+    ("conditional", "2pl", "Siz", ("sanız", "seniz", "saniz")),
+    ("conditional", "1sg", "Ben", ("sam", "sem")),
+    ("conditional", "2sg", "Sen", ("san", "sen")),
+    ("conditional", "1pl", "Biz", ("sak", "sek")),
+    ("conditional", "3pl", "Onlar", ("salar", "seler")),
+    ("conditional", "3sg", "O", ("sa", "se")),
+    (
+        "aorist",
+        "2pl",
+        "Siz",
+        (
+            "arsınız", "ersiniz", "ırsınız", "irsiniz", "ursunuz", "ürsünüz",
+            "rsınız", "rsiniz", "rsunuz", "rsünüz",
+        ),
+    ),
+    (
+        "aorist",
+        "1sg",
+        "Ben",
+        ("arım", "erim", "ırım", "irim", "urum", "ürüm", "rım", "rim", "rum", "rüm"),
+    ),
+    (
+        "aorist",
+        "2sg",
+        "Sen",
+        ("arsın", "ersin", "ırsın", "irsin", "ursun", "ürsün", "rsın", "rsin", "rsun", "rsün"),
+    ),
+    (
+        "aorist",
+        "1pl",
+        "Biz",
+        ("arız", "eriz", "ırız", "iriz", "uruz", "ürüz", "rız", "riz", "ruz", "rüz"),
+    ),
+    ("aorist", "3pl", "Onlar", ("arlar", "erler", "ırlar", "irler", "urlar", "ürler", "rlar", "rler")),
+    ("aorist", "3sg", "O", ("ar", "er", "ır", "ir", "ur", "ür", "r")),
+)
+
 
 def _classify_tense(text: str) -> str:
     low = text.lower()
@@ -311,6 +456,42 @@ def _classify_tense(text: str) -> str:
     if any(_ending(low, suf) for suf in _PAST_SUFFIXES):
         return "Geçmiş"
     return ""
+
+
+def _infer_subject_from_conjugation(text: str) -> tuple[str, str, str, str]:
+    """Infer dropped Turkish subject from finite verb morphology.
+
+    Returns ``(person, pronoun, verb_surface, tense_key)``. This is deliberately
+    suffix-based and deterministic; it does not try to prove that every
+    matching word is a verb, so 3sg zero-person forms are kept conservative.
+    """
+    best: tuple[str, str, str, str] = ("", "", "", "")
+    for m in nlp_mod._TOKEN_RE.finditer(text):
+        surface = m.group(0).strip("'’")
+        low = surface.lower()
+        if len(low) < 3 or low in _STOPWORD_TOKENS or low in _CALENDAR_WORDS:
+            continue
+        for tense, person, pronoun, suffixes in _SUBJECT_SUFFIX_RULES:
+            suffix = next((s for s in suffixes if low.endswith(s)), "")
+            if not suffix or len(low) <= len(suffix):
+                continue
+            if person == "3sg" and not _looks_like_strong_3sg_verb(low, suffix, tense):
+                continue
+            candidate = (person, pronoun, surface, tense)
+            # Later verbs usually carry the main predicate of the clause.
+            best = candidate
+            break
+    return best
+
+
+def _looks_like_strong_3sg_verb(token: str, suffix: str, tense: str) -> bool:
+    if tense in {"future", "present_continuous", "reported_past", "necessitative"}:
+        return True
+    if tense == "definite_past":
+        return len(token) >= len(suffix) + 2
+    # Aorist and conditional 3sg endings are short and collide with nouns and
+    # adjectives, so only trust them when the stem is long enough.
+    return len(token) >= len(suffix) + 4
 
 
 def _ending(text: str, suffix: str) -> bool:
@@ -383,11 +564,23 @@ def _augment_mentions(
        stopword-heavy fragments ("Nisan 2026, Ve").
     2. Add lowercase Turkish given names from the gazetteer.
     3. Detect organisations via compound suffixes ("X derneği").
-    4. Drop relative location words ("orada") — they're not real places.
+    4. Keep relative location words as references, not concrete places.
     """
     out: list[nlp_mod.EntityMention] = []
     for m in parse.mentions:
         if m.mention_type == "LOCATION" and m.surface.lower() in nlp_mod.RELATIVE_LOCATION_WORDS:
+            out.append(
+                nlp_mod.EntityMention(
+                    surface=m.surface,
+                    lemma=m.lemma,
+                    char_start=m.char_start,
+                    char_end=m.char_end,
+                    mention_type="PRONOUN",
+                    source="pronoun",
+                    score=m.score,
+                    hint=m.hint or "Belirsiz yer göndergesi — neresi kastediliyor?",
+                )
+            )
             continue
         if m.mention_type in ("PERSON", "LOCATION", "ORG"):
             cleaned = _clean_entity_token(m.surface)
@@ -541,11 +734,21 @@ def extract(
                     tense = "Şu An"
                 else:
                     tense = "Gelecek"
+        subject_person, subject_pronoun, subject_verb, subject_tense = _infer_subject_from_conjugation(text)
 
         clause_mentions = _mentions_in_span(parse.mentions, cs, ce)
         persons = _dedup([_clean_label(m.surface) for m in clause_mentions if m.mention_type == "PERSON"])
         locations = _dedup([_clean_label(m.surface) for m in clause_mentions if m.mention_type == "LOCATION"])
         orgs = _dedup([_clean_label(m.surface) for m in clause_mentions if m.mention_type == "ORG"])
+        references = _dedup([
+            m.surface
+            for m in clause_mentions
+            if (
+                m.mention_type == "PRONOUN"
+                or m.surface.lower() in nlp_mod.RELATIVE_TIME_WORDS
+                or m.surface.lower() in nlp_mod.RELATIVE_LOCATION_WORDS
+            )
+        ])
 
         clauses.append(
             ClauseHint(
@@ -560,6 +763,11 @@ def extract(
                 persons=persons,
                 locations=locations,
                 orgs=orgs,
+                references=references,
+                subject_person=subject_person,
+                subject_pronoun=subject_pronoun,
+                subject_verb=subject_verb,
+                subject_tense=subject_tense,
                 event_phrase=_event_phrase(text),
             )
         )
@@ -568,6 +776,7 @@ def extract(
     all_persons = _dedup([p for c in clauses for p in c.persons])
     all_locations = _dedup([p for c in clauses for p in c.locations])
     all_orgs = _dedup([p for c in clauses for p in c.orgs])
+    all_references = _dedup([p for c in clauses for p in c.references])
 
     masked, mask_map = _build_mask(paragraph, parse.mentions)
 
@@ -578,6 +787,7 @@ def extract(
         persons=all_persons,
         locations=all_locations,
         orgs=all_orgs,
+        references=all_references,
         mask_map=mask_map,
         masked_paragraph=masked,
         parse=parse,

@@ -29,7 +29,7 @@ from rest_framework.decorators import action, api_view
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
 
-from ..models import Edge, Mention, Node, NodeKind, Session, SessionStatus
+from ..models import Edge, EventificationStatus, Mention, Node, NodeKind, Session, SessionStatus
 from ..processing.pipeline import kickoff
 from ..serializers import (
     EdgeSerializer,
@@ -84,7 +84,19 @@ class SessionViewSet(viewsets.ModelViewSet):
         session = self.get_object()
         session.status = SessionStatus.QUEUED
         session.status_detail = ""
-        session.save(update_fields=["status", "status_detail", "updated_at"])
+        session.structured_events = []
+        session.eventification_status = EventificationStatus.QUEUED
+        session.eventification_detail = "Yeniden olaylaştırma sıraya alındı."
+        session.save(
+            update_fields=[
+                "status",
+                "status_detail",
+                "structured_events",
+                "eventification_status",
+                "eventification_detail",
+                "updated_at",
+            ]
+        )
         kickoff(session.id)
         return Response(
             SessionDetailSerializer(session, context={"request": request}).data
@@ -291,7 +303,9 @@ def calendar_view(request):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-    qs = Session.objects.exclude(status=SessionStatus.FAILED)
+    qs = Session.objects.exclude(status=SessionStatus.FAILED).filter(
+        eventification_status=EventificationStatus.COMPLETED
+    )
     days: dict[str, list[dict]] = defaultdict(list)
 
     for s in qs.only("id", "recorded_at", "structured_events", "transcript"):

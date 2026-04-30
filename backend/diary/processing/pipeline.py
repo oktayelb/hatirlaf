@@ -15,7 +15,16 @@ from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
-from ..models import ConflictReason, Mention, MentionType, Node, NodeKind, Session, SessionStatus
+from ..models import (
+    ConflictReason,
+    EventificationStatus,
+    Mention,
+    MentionType,
+    Node,
+    NodeKind,
+    Session,
+    SessionStatus,
+)
 from . import extractor as extractor_mod
 from . import llm as llm_mod
 from . import nlp as nlp_mod
@@ -31,6 +40,17 @@ def kickoff(session_id: int) -> None:
         run(session_id)
         return
     t = threading.Thread(target=run, args=(session_id,), daemon=True, name=f"hatirlaf-{session_id}")
+    t.start()
+
+
+def kickoff_eventification(session_id: int) -> None:
+    """Start the LLM/event-calendar stage independently of transcript parsing."""
+    t = threading.Thread(
+        target=run_eventification,
+        args=(session_id,),
+        daemon=True,
+        name=f"hatirlaf-eventify-{session_id}",
+    )
     t.start()
 
 
@@ -101,15 +121,10 @@ def _parse_and_store(session: Session) -> None:
     extraction = extractor_mod.extract(session.transcript, session.recorded_at)
     parsed = extraction.parse or nlp_mod.analyze(session.transcript)
     flagged = detect_conflicts(parsed.mentions, session.transcript, session.recorded_at)
-
-    # LLM (or NLP-only fallback) produces the calendar-ready event log.
-    try:
-        llm_result = llm_mod.run(extraction)
-    except Exception as exc:  # pragma: no cover — defensive, pipeline must survive
-        logger.exception("LLM stage failed, using pure NLP fallback: %s", exc)
-        llm_result = llm_mod._fallback_from_hints(extraction)
-    session.structured_events = llm_result.get("olay_loglari", [])
     session.nlp_hints = extraction.to_json()
+    session.structured_events = []
+    session.eventification_status = EventificationStatus.QUEUED
+    session.eventification_detail = "Olaylaştırma sıraya alındı."
 
     with transaction.atomic():
         # Replace prior mentions on re-run.
@@ -142,8 +157,7 @@ def _parse_and_store(session: Session) -> None:
         session.status = SessionStatus.COMPLETED
         session.status_detail = (
             f"NLP: {parsed.nlp_backend}; NER: {parsed.ner_backend}; "
-            f"LLM: {llm_result.get('backend', 'nlp-only')}; "
-            f"{len(session.structured_events)} olay, "
+            f"olaylaştırma: sırada; "
             f"{sum(1 for fm in flagged if fm.is_conflict)} çatışma."
         )
         session.save(
@@ -152,9 +166,59 @@ def _parse_and_store(session: Session) -> None:
                 "status",
                 "status_detail",
                 "structured_events",
+                "eventification_status",
+                "eventification_detail",
                 "nlp_hints",
                 "updated_at",
             ]
+        )
+
+    kickoff_eventification(session.id)
+
+
+def run_eventification(session_id: int) -> None:
+    try:
+        session = Session.objects.get(pk=session_id)
+    except Session.DoesNotExist:
+        logger.error("Session %s vanished before eventification", session_id)
+        return
+
+    if not session.transcript.strip():
+        Session.objects.filter(pk=session_id).update(
+            structured_events=[],
+            eventification_status=EventificationStatus.COMPLETED,
+            eventification_detail="Transkript boş; takvim olayı üretilmedi.",
+            updated_at=timezone.now(),
+        )
+        return
+
+    Session.objects.filter(pk=session_id).update(
+        eventification_status=EventificationStatus.RUNNING,
+        eventification_detail="LLM olaylaştırması çalışıyor.",
+        updated_at=timezone.now(),
+    )
+
+    try:
+        extraction = extractor_mod.extract(session.transcript, session.recorded_at)
+        llm_result = llm_mod.run(extraction)
+        events = llm_result.get("olay_loglari", [])
+        Session.objects.filter(pk=session_id).update(
+            structured_events=events,
+            nlp_hints=extraction.to_json(),
+            eventification_status=EventificationStatus.COMPLETED,
+            eventification_detail=(
+                f"{llm_result.get('backend', 'nlp-only')} ile "
+                f"{len(events)} olay üretildi."
+            ),
+            updated_at=timezone.now(),
+        )
+    except Exception as exc:  # pragma: no cover - defensive, stage is isolated
+        logger.exception("Eventification session %s failed: %s", session_id, exc)
+        Session.objects.filter(pk=session_id).update(
+            structured_events=[],
+            eventification_status=EventificationStatus.FAILED,
+            eventification_detail=str(exc)[:2000],
+            updated_at=timezone.now(),
         )
 
 

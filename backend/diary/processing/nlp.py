@@ -77,6 +77,11 @@ AMBIGUOUS_PRONOUNS = {
     "bunlar", "bunları", "bunlara", "bunların",
     "şunlar", "şunları", "şunlara", "şunların",
     "kendisi", "kendileri",
+    # Demonstrative/locative referential adjectives. In speech these often
+    # stand in for a person/place/event established in earlier context.
+    "oradaki", "oradakini", "oradakine", "oradakinin", "oradakiler",
+    "buradaki", "buradakini", "buradakine", "buradakinin", "buradakiler",
+    "şuradaki", "şuradakini", "şuradakine", "şuradakinin", "şuradakiler",
 }
 
 # Surface forms that hint at a relative / vague time expression.
@@ -84,6 +89,9 @@ RELATIVE_TIME_WORDS = {
     "dün", "bugün", "yarın", "geçen", "önceki", "gelecek", "gelecekteki",
     "önce", "sonra", "biraz", "az", "şimdi", "az önce", "biraz önce",
     "demin", "az sonra", "öbür", "evvelki", "ertesi",
+    "dünkü", "dünkünü", "dünküne", "dünkünün", "bugünkü", "bugünkünü",
+    "bugünküne", "bugünkünün", "yarınki", "yarınkini", "yarınkine",
+    "yarınkinin",
     "hafta", "ay", "yıl", "gün", "akşam", "sabah", "gece", "öğle", "öğleden",
 }
 
@@ -92,6 +100,7 @@ RELATIVE_TIME_WORDS = {
 RELATIVE_LOCATION_WORDS = {
     "burası", "orası", "şurası", "burada", "orada", "şurada",
     "buraya", "oraya", "şuraya", "buradan", "oradan", "şuradan",
+    "buradaki", "oradaki", "şuradaki",
 }
 
 # Built-in gazetteer used by the rule-based NER fallback. Extend over time.
@@ -382,6 +391,8 @@ def _rule_entities(text: str, tokens: list[Token]) -> list[EntityMention]:
                 mtype = "LOCATION"
             elif any(p in TR_CITIES or p in TR_COUNTRIES for p in bare_parts):
                 mtype = "LOCATION"
+            elif len(bare_parts) == 1 and _has_apostrophe_location_case(surface):
+                mtype = "LOCATION"
 
             out.append(
                 EntityMention(
@@ -432,6 +443,22 @@ def _strip_apostrophe_suffix(text: str) -> str:
         if idx > 0:
             return text[:idx]
     return text
+
+
+def _has_apostrophe_location_case(text: str) -> bool:
+    """Return True for proper nouns carrying locative/ablative case.
+
+    This catches STT/user text like "Kadıköy'de" or "Okuldan" when the
+    gazetteer is incomplete, without treating dative person mentions
+    ("Ayşe'ye") as places.
+    """
+    low = text.lower()
+    for marker in ("'", "’"):
+        idx = low.find(marker)
+        if idx > 0:
+            suffix = low[idx + 1 :]
+            return suffix.startswith(("da", "de", "ta", "te", "dan", "den", "tan", "ten"))
+    return False
 
 
 def _find_pronouns(text: str) -> list[EntityMention]:

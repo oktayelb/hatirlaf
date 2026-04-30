@@ -1,6 +1,7 @@
 // Root controller: tiny hash-based router + online indicator + sync kickoff.
 
 import { flush } from "./sync.js";
+import { api } from "./api.js";
 import { on, toast } from "./events.js";
 import * as home from "./screens/home.js";
 import * as record from "./screens/record.js";
@@ -36,6 +37,7 @@ for (const btn of navBtns) {
 }
 
 on("online-changed", updateOnline);
+on("session-uploaded", () => pollEventificationStatuses());
 
 function updateOnline(isOnline) {
   if (isOnline === undefined) isOnline = navigator.onLine;
@@ -94,4 +96,53 @@ window.addEventListener("DOMContentLoaded", () => {
   updateOnline(navigator.onLine);
   route();
   flush();
+  startEventificationWatcher();
 });
+
+let eventPollStarted = false;
+let eventStatusSnapshot = null;
+
+function startEventificationWatcher() {
+  if (eventPollStarted) return;
+  eventPollStarted = true;
+  pollEventificationStatuses({ silent: true });
+  setInterval(() => pollEventificationStatuses(), 5000);
+}
+
+async function pollEventificationStatuses(opts = {}) {
+  if (!navigator.onLine) return;
+  let sessions = [];
+  try {
+    const resp = await api.listSessions();
+    sessions = Array.isArray(resp) ? resp : resp.results || [];
+  } catch (err) {
+    console.debug("eventification poll failed", err);
+    return;
+  }
+
+  const next = new Map();
+  for (const s of sessions) {
+    next.set(String(s.id), s.eventification_status || "not_started");
+  }
+
+  if (eventStatusSnapshot && !opts.silent) {
+    for (const s of sessions) {
+      const id = String(s.id);
+      const prev = eventStatusSnapshot.get(id);
+      const cur = s.eventification_status || "not_started";
+      if (prev && prev !== "completed" && cur === "completed") {
+        toast("Olaylaştırma tamamlandı. Takvim güncellendi.", { duration: 3200 });
+        if ((location.hash || "").startsWith("#/timeline")) {
+          route();
+        }
+      }
+      if (prev && prev !== "failed" && cur === "failed") {
+        toast("Olaylaştırma tamamlanamadı: " + (s.eventification_detail || ""), {
+          duration: 4200,
+        });
+      }
+    }
+  }
+
+  eventStatusSnapshot = next;
+}

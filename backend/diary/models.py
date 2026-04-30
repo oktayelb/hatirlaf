@@ -36,6 +36,14 @@ class SessionStatus(models.TextChoices):
     FAILED = "failed", "Hata"
 
 
+class EventificationStatus(models.TextChoices):
+    NOT_STARTED = "not_started", "Olaylaştırma başlamadı"
+    QUEUED = "queued", "Olaylaştırma sırada"
+    RUNNING = "running", "Olaylaştırılıyor"
+    COMPLETED = "completed", "Olaylaştırma tamamlandı"
+    FAILED = "failed", "Olaylaştırma hatası"
+
+
 class ConflictReason(models.TextChoices):
     PRONOUN = "pronoun", "Belirsiz zamir"
     RELATIVE_TIME = "relative_time", "Belirsiz zaman ifadesi"
@@ -129,6 +137,12 @@ class Session(models.Model):
     # LLM + NLP output: list of events with resolved ISO dates, zaman_dilimi,
     # lokasyon, olay, kisiler. Drives the calendar view.
     structured_events = models.JSONField(default=list, blank=True)
+    eventification_status = models.CharField(
+        max_length=20,
+        choices=EventificationStatus.choices,
+        default=EventificationStatus.NOT_STARTED,
+    )
+    eventification_detail = models.TextField(blank=True, default="")
     # Clause-level hints from the deterministic NLP pre-pass. Kept so we
     # can re-run only the LLM step without re-parsing.
     nlp_hints = models.JSONField(default=dict, blank=True)
@@ -141,6 +155,7 @@ class Session(models.Model):
         indexes = [
             models.Index(fields=["-recorded_at"]),
             models.Index(fields=["status"]),
+            models.Index(fields=["eventification_status"]),
         ]
 
     def __str__(self) -> str:
