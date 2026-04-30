@@ -5,6 +5,32 @@ import datetime as dt
 from django.test import SimpleTestCase, override_settings
 
 from diary.processing import extractor, nlp
+from diary.processing import llm as llm_mod
+
+
+class LlmLifecycleTests(SimpleTestCase):
+    def test_close_cached_llm_releases_cached_model(self):
+        class FakeLlama:
+            closed = False
+
+            def close(self):
+                self.closed = True
+
+        fake = FakeLlama()
+        old_llm = llm_mod._cached_llm
+        old_path = llm_mod._cached_path
+        try:
+            llm_mod._cached_llm = fake
+            llm_mod._cached_path = "/tmp/model.gguf"
+
+            llm_mod.close_cached_llm()
+
+            self.assertTrue(fake.closed)
+            self.assertIsNone(llm_mod._cached_llm)
+            self.assertIsNone(llm_mod._cached_path)
+        finally:
+            llm_mod._cached_llm = old_llm
+            llm_mod._cached_path = old_path
 
 
 @override_settings(HATIRLAF_USE_BERTURK=False)

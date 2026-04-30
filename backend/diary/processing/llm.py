@@ -23,6 +23,7 @@ LLM.
 
 from __future__ import annotations
 
+import atexit
 import datetime as dt
 import json
 import logging
@@ -73,6 +74,7 @@ _lock = threading.Lock()
 _cached_llm = None
 _cached_path: str | None = None
 _load_failed = False
+_shutdown_registered = False
 
 
 def _model_path() -> str:
@@ -85,7 +87,7 @@ def _model_path() -> str:
 
 def _load_llm():
     """Return a cached ``llama_cpp.Llama`` or ``None`` on failure."""
-    global _cached_llm, _cached_path, _load_failed
+    global _cached_llm, _cached_path, _load_failed, _shutdown_registered
     if _load_failed:
         return None
     with _lock:
@@ -107,11 +109,37 @@ def _load_llm():
                 verbose=False,
             )
             _cached_path = path
+            if not _shutdown_registered:
+                atexit.register(close_cached_llm)
+                _shutdown_registered = True
         except Exception as exc:
             logger.exception("Failed to load llama.cpp model: %s", exc)
             _load_failed = True
             _cached_llm = None
         return _cached_llm
+
+
+def close_cached_llm() -> None:
+    """Release llama.cpp resources before Python module teardown.
+
+    llama-cpp-python's ``__del__`` can run late during interpreter shutdown,
+    after its C binding module globals have already been set to ``None``.
+    Closing explicitly here avoids that noisy shutdown traceback.
+    """
+    global _cached_llm, _cached_path
+    with _lock:
+        llm = _cached_llm
+        _cached_llm = None
+        _cached_path = None
+    if llm is None:
+        return
+    close = getattr(llm, "close", None)
+    if close is None:
+        return
+    try:
+        close()
+    except Exception as exc:  # pragma: no cover - defensive shutdown path
+        logger.debug("Ignoring LLM close failure during shutdown: %s", exc)
 
 
 def is_available() -> bool:
@@ -489,8 +517,9 @@ def _fallback_from_hints(extraction: ExtractionResult) -> dict:
                 prev["lokasyon"] = c.locations[0]
             if c.time_hm and not prev["saat"]:
                 prev["saat"] = c.time_hm
-            if c.event_phrase and c.event_phrase not in prev["olay"]:
-                prev["olay"] = f"{prev['olay']} {c.event_phrase}".strip()
+            clause_text = c.text.strip()
+            if clause_text and clause_text not in prev["olay"]:
+                prev["olay"] = f"{prev['olay']} {clause_text}".strip()
             continue
 
         events.append(
@@ -499,7 +528,7 @@ def _fallback_from_hints(extraction: ExtractionResult) -> dict:
                 "tarih": c.date_iso or _recorded_iso(extraction),
                 "saat": c.time_hm,
                 "lokasyon": (c.locations[0] if c.locations else (c.orgs[0] if c.orgs else "")),
-                "olay": c.event_phrase or c.text[:120],
+                "olay": c.text.strip() or c.event_phrase,
                 "kisiler": _clause_people(c),
             }
         )

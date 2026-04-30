@@ -20,10 +20,12 @@ Routes (all prefixed with ``/api/``):
 from __future__ import annotations
 
 import logging
+import datetime as dt
 
 from django.db.models import Count, Q
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from rest_framework import generics, status, viewsets
 from rest_framework.decorators import action, api_view
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
@@ -284,7 +286,6 @@ def calendar_view(request):
         }
     """
     from collections import defaultdict
-    import datetime as dt
 
     month = (request.query_params.get("month") or "").strip()
     month_start: dt.date | None = None
@@ -304,24 +305,13 @@ def calendar_view(request):
             )
 
     qs = Session.objects.exclude(status=SessionStatus.FAILED).filter(
-        eventification_status=EventificationStatus.COMPLETED
+        Q(status=SessionStatus.COMPLETED)
+        | Q(eventification_status=EventificationStatus.COMPLETED)
     )
     days: dict[str, list[dict]] = defaultdict(list)
 
-    for s in qs.only("id", "recorded_at", "structured_events", "transcript"):
-        # Fall back to recorded_at when the session has no structured events.
-        events = s.structured_events or []
-        if not events:
-            events = [
-                {
-                    "zaman_dilimi": "Geçmiş",
-                    "tarih": s.recorded_at.date().isoformat() if s.recorded_at else "",
-                    "saat": s.recorded_at.strftime("%H:%M") if s.recorded_at else "",
-                    "lokasyon": "",
-                    "olay": (s.transcript or "").strip()[:140],
-                    "kisiler": [],
-                }
-            ]
+    for s in qs.only("id", "recorded_at", "structured_events", "transcript", "nlp_hints"):
+        events = _calendar_events_for_session(s)
 
         for ev in events:
             iso = (ev.get("tarih") or "").strip()
@@ -350,6 +340,137 @@ def calendar_view(request):
         days[iso].sort(key=lambda e: (e.get("saat") or "99:99"))
 
     return Response({"days": days})
+
+
+def _calendar_events_for_session(session: Session) -> list[dict]:
+    """Return structured events, then NLP hints, then a recording fallback."""
+    events = session.structured_events or []
+    if events:
+        return _expand_structured_event_text(events, session)
+
+    hint_events = _events_from_nlp_hints(session)
+    if hint_events:
+        return hint_events
+
+    recorded_at = timezone.localtime(session.recorded_at) if session.recorded_at else None
+    return [
+        {
+            "zaman_dilimi": "Geçmiş",
+            "tarih": recorded_at.date().isoformat() if recorded_at else "",
+            "saat": recorded_at.strftime("%H:%M") if recorded_at else "",
+            "lokasyon": "",
+            "olay": (session.transcript or "").strip()[:140] or "Kayıt tamamlandı.",
+            "kisiler": [],
+        }
+    ]
+
+
+def _expand_structured_event_text(events: list[dict], session: Session) -> list[dict]:
+    clauses = (session.nlp_hints or {}).get("clauses") or []
+    if not isinstance(clauses, list):
+        return events
+
+    expanded = []
+    for event in events:
+        if not isinstance(event, dict):
+            expanded.append(event)
+            continue
+        full_text = _matching_clause_text(event, clauses)
+        if not full_text:
+            expanded.append(event)
+            continue
+        enriched = dict(event)
+        enriched["olay"] = full_text
+        expanded.append(enriched)
+    return expanded
+
+
+def _matching_clause_text(event: dict, clauses: list) -> str:
+    event_text = (event.get("olay") or "").strip()
+    if not event_text:
+        return ""
+    event_date = (event.get("tarih") or "").strip()
+    for clause in clauses:
+        if not isinstance(clause, dict):
+            continue
+        clause_text = (clause.get("text") or "").strip()
+        if not clause_text or len(clause_text) <= len(event_text):
+            continue
+        clause_date = (clause.get("date_iso") or "").strip()
+        if event_date and clause_date and event_date != clause_date:
+            continue
+        phrase = (clause.get("event_phrase") or "").strip()
+        if event_text in clause_text or event_text == phrase or event_text in phrase:
+            return clause_text
+    return ""
+
+
+def _events_from_nlp_hints(session: Session) -> list[dict]:
+    hints = session.nlp_hints or {}
+    clauses = hints.get("clauses") or []
+    if not isinstance(clauses, list):
+        return []
+
+    events: list[dict] = []
+    for clause in clauses:
+        if not isinstance(clause, dict):
+            continue
+        text = (clause.get("text") or "").strip()
+        date_iso = (clause.get("date_iso") or "").strip()
+        people = _hint_people(clause)
+        locations = clause.get("locations") or []
+        orgs = clause.get("orgs") or []
+        location = ""
+        if isinstance(locations, list) and locations:
+            location = str(locations[0] or "").strip()
+        elif isinstance(orgs, list) and orgs:
+            location = str(orgs[0] or "").strip()
+
+        if not (date_iso or text or people or location):
+            continue
+
+        events.append(
+            {
+                "zaman_dilimi": _bucket_for_date(date_iso, session.recorded_at)
+                or (clause.get("zaman_dilimi") or ""),
+                "tarih": date_iso or _recorded_date_iso(session),
+                "saat": clause.get("time_hm") or "",
+                "lokasyon": location,
+                "olay": text or (clause.get("event_phrase") or "").strip(),
+                "kisiler": people,
+            }
+        )
+    return events
+
+
+def _hint_people(clause: dict) -> list[str]:
+    people = [str(p).strip() for p in (clause.get("persons") or []) if str(p).strip()]
+    subject = (clause.get("subject_pronoun") or "").strip()
+    subject_person = (clause.get("subject_person") or "").strip()
+    if subject and subject_person != "3sg" and subject not in people:
+        people.append(subject)
+    return people
+
+
+def _recorded_date_iso(session: Session) -> str:
+    if not session.recorded_at:
+        return ""
+    return timezone.localtime(session.recorded_at).date().isoformat()
+
+
+def _bucket_for_date(date_iso: str, recorded_at) -> str:
+    if not date_iso or recorded_at is None:
+        return ""
+    try:
+        event_date = dt.date.fromisoformat(date_iso)
+    except ValueError:
+        return ""
+    recorded_date = timezone.localtime(recorded_at).date()
+    if event_date < recorded_date:
+        return "Geçmiş"
+    if event_date > recorded_date:
+        return "Gelecek"
+    return "Şu An"
 
 
 @api_view(["GET"])
