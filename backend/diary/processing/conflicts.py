@@ -44,6 +44,7 @@ def detect_conflicts(
         hint = ""
         suggested_kind = _mention_to_kind(m.mention_type)
         suggested_resolution: dict = {}
+        clean_surface = " ".join(m.surface.lower().split())
 
         if m.mention_type == "PRONOUN":
             reason = "pronoun"
@@ -61,16 +62,19 @@ def detect_conflicts(
                 }
         elif (
             m.mention_type == "LOCATION"
-            and m.surface.lower() in RELATIVE_LOCATION_WORDS
+            and clean_surface in RELATIVE_LOCATION_WORDS
         ):
             reason = "unknown_referent"
             hint = m.hint or "Belirsiz yer — neresi kastediliyor?"
         elif (
             m.mention_type == "TIME"
-            and m.surface.lower() in RELATIVE_TIME_WORDS
             and m.source == "time"
+            and (
+                clean_surface in RELATIVE_TIME_WORDS
+                or any(w in clean_surface.split() for w in RELATIVE_TIME_WORDS)
+            )
         ):
-            absolute = _ground_relative_time(m.surface.lower(), recorded_at)
+            absolute = _ground_relative_time(clean_surface, recorded_at)
             if absolute is None:
                 reason = "relative_time"
                 hint = m.hint or "Göreceli zaman — tam tarih gerekli mi?"
@@ -123,7 +127,7 @@ def _mention_to_kind(mention_type: str) -> str:
 
 
 def _find_antecedent(
-    pronoun: EntityMention, mentions: list[EntityMention]
+        pronoun: EntityMention, mentions: list[EntityMention]
 ) -> EntityMention | None:
     """Walk backwards to the nearest NAMED PERSON/ORG/LOCATION."""
     candidates = [
@@ -138,14 +142,32 @@ def _find_antecedent(
 
 
 def _ground_relative_time(
-    surface: str, recorded_at: dt.datetime | None
+        surface: str, recorded_at: dt.datetime | None
 ) -> dt.date | None:
     if recorded_at is None:
         return None
     today = recorded_at.date()
+
     mapping = {
-        "dün": today - dt.timedelta(days=1),
         "bugün": today,
+        "bugünkü": today,
+        "dün": today - dt.timedelta(days=1),
+        "dünkü": today - dt.timedelta(days=1),
         "yarın": today + dt.timedelta(days=1),
+        "yarınki": today + dt.timedelta(days=1),
+        "evvelsi gün": today - dt.timedelta(days=2),
+        "evvelki gün": today - dt.timedelta(days=2),
+        "dünden önceki gün": today - dt.timedelta(days=2),
+        "yarından sonraki gün": today + dt.timedelta(days=2),
+        "geçen hafta": today - dt.timedelta(days=7),
+        "geçtiğimiz hafta": today - dt.timedelta(days=7),
+        "haftaya": today + dt.timedelta(days=7),
+        "gelecek hafta": today + dt.timedelta(days=7),
+        "önümüzdeki hafta": today + dt.timedelta(days=7),
     }
+    
+    # Note: "geçen gün" is intentionally omitted here as it typically means 
+    # "a few days ago" idiomatically. Returning None ensures it correctly 
+    # flags as a conflict for the user to resolve manually.
+
     return mapping.get(surface)
