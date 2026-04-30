@@ -32,7 +32,11 @@ from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
 
 from ..models import Edge, EventificationStatus, Mention, Node, NodeKind, Session, SessionStatus
-from ..processing.pipeline import kickoff
+from ..processing.pipeline import (
+    is_eventification_active,
+    is_processing_active,
+    kickoff,
+)
 from ..serializers import (
     EdgeSerializer,
     MentionSerializer,
@@ -84,6 +88,21 @@ class SessionViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"], url_path="process")
     def process(self, request, pk=None):
         session = self.get_object()
+        processing_in_flight = session.status in {
+            SessionStatus.QUEUED,
+            SessionStatus.TRANSCRIBING,
+            SessionStatus.PARSING,
+        }
+        eventification_in_flight = session.eventification_status in {
+            EventificationStatus.QUEUED,
+            EventificationStatus.RUNNING,
+        }
+        worker_is_active = is_processing_active(session.id) or is_eventification_active(session.id)
+        if (processing_in_flight or eventification_in_flight) and worker_is_active:
+            return Response(
+                SessionDetailSerializer(session, context={"request": request}).data,
+                status=status.HTTP_202_ACCEPTED,
+            )
         session.status = SessionStatus.QUEUED
         session.status_detail = ""
         session.structured_events = []

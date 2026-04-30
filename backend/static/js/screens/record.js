@@ -204,9 +204,13 @@ function entryCard(session, draft = null) {
   reprocessBtn.addEventListener("click", async () => {
     reprocessBtn.setAttribute("disabled", "");
     try {
-      await api.reprocess(session.id);
-      toast("Yeniden işleniyor…");
-      if (card.parentElement) startPolling(card.parentElement);
+      const updated = await api.reprocess(session.id);
+      const list = card.parentElement;
+      toast(updated.processing_progress === 0 ? "Yeniden işleniyor…" : "İşleme zaten sürüyor…");
+      if (list) {
+        card.replaceWith(entryCard(updated));
+        startPolling(list);
+      }
     } catch (err) {
       toast("Hata: " + err.message);
     } finally {

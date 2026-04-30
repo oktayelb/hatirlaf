@@ -71,6 +71,7 @@ OLAY_LOG_SCHEMA: dict[str, Any] = {
 
 
 _lock = threading.Lock()
+_inference_lock = threading.Lock()
 _cached_llm = None
 _cached_path: str | None = None
 _load_failed = False
@@ -320,71 +321,83 @@ def run(extraction: ExtractionResult) -> dict:
         return baseline
 
     try:
-        hints = _hints_prompt(extraction)
-        baseline_text = _baseline_prompt(baseline)
-        paragraph = extraction.paragraph
-
-        # Pass 1 — free-form analysis of events.
-        pass_1 = llm.create_chat_completion(
-            messages=[
-                {"role": "system", "content": PASS_1_SYSTEM},
-                {
-                    "role": "user",
-                    "content": (
-                        f"{hints}\n\n"
-                        f"{baseline_text}\n\n"
-                        f"### Orijinal metin\n{paragraph}"
-                    ),
-                },
-            ],
-            temperature=0.1,
-        )
-        draft = pass_1["choices"][0]["message"]["content"]
-
-        # Pass 2 — self-critique + repair.
-        pass_critique = llm.create_chat_completion(
-            messages=[
-                {"role": "system", "content": PASS_CRITIQUE_SYSTEM},
-                {
-                    "role": "user",
-                    "content": (
-                        f"### Orijinal metin\n{paragraph}\n\n"
-                        f"{hints}\n\n"
-                        f"{baseline_text}\n\n"
-                        f"### Analist Çıktısı\n{draft}"
-                    ),
-                },
-            ],
-            temperature=0.0,
-        )
-        verified = pass_critique["choices"][0]["message"]["content"]
-
-        # Pass 3 — strict JSON.
-        pass_2 = llm.create_chat_completion(
-            messages=[
-                {"role": "system", "content": PASS_2_SYSTEM},
-                {"role": "user", "content": verified},
-            ],
-            response_format={"type": "json_object", "schema": OLAY_LOG_SCHEMA},
-            temperature=0.0,
-        )
-        raw = pass_2["choices"][0]["message"]["content"]
-        parsed = json.loads(raw)
-        events = parsed.get("olay_loglari") or []
-        normalised = [_normalize(e, extraction) for e in events]
-
-        # Guardrail: if the model returned nothing coherent, fall back to the
-        # deterministic baseline. Otherwise post-process to keep fields sane.
-        cleaned = [ev for ev in normalised if ev.get("olay")]
-        if not cleaned:
-            logger.warning("LLM produced no usable events; using NLP fallback.")
-            return baseline
-
-        cleaned = [_sanitize_event(ev, extraction) for ev in cleaned]
-        return {"olay_loglari": cleaned, "backend": "llama.cpp"}
+        with _inference_lock:
+            return _run_locked(llm, extraction, baseline)
     except Exception as exc:
         logger.exception("LLM inference failed, using NLP-only fallback: %s", exc)
         return baseline
+
+
+def _run_locked(llm, extraction: ExtractionResult, baseline: dict) -> dict:
+    """Run all llama.cpp calls while holding the process-wide inference lock.
+
+    ``llama_cpp.Llama`` owns mutable native context state and is not safe to
+    drive concurrently from multiple Django worker/background threads. Without
+    this guard, repeated reprocessing can overlap calls on the same cached
+    model and abort the whole Python process inside ggml.
+    """
+    hints = _hints_prompt(extraction)
+    baseline_text = _baseline_prompt(baseline)
+    paragraph = extraction.paragraph
+
+    # Pass 1 — free-form analysis of events.
+    pass_1 = llm.create_chat_completion(
+        messages=[
+            {"role": "system", "content": PASS_1_SYSTEM},
+            {
+                "role": "user",
+                "content": (
+                    f"{hints}\n\n"
+                    f"{baseline_text}\n\n"
+                    f"### Orijinal metin\n{paragraph}"
+                ),
+            },
+        ],
+        temperature=0.1,
+    )
+    draft = pass_1["choices"][0]["message"]["content"]
+
+    # Pass 2 — self-critique + repair.
+    pass_critique = llm.create_chat_completion(
+        messages=[
+            {"role": "system", "content": PASS_CRITIQUE_SYSTEM},
+            {
+                "role": "user",
+                "content": (
+                    f"### Orijinal metin\n{paragraph}\n\n"
+                    f"{hints}\n\n"
+                    f"{baseline_text}\n\n"
+                    f"### Analist Çıktısı\n{draft}"
+                ),
+            },
+        ],
+        temperature=0.0,
+    )
+    verified = pass_critique["choices"][0]["message"]["content"]
+
+    # Pass 3 — strict JSON.
+    pass_2 = llm.create_chat_completion(
+        messages=[
+            {"role": "system", "content": PASS_2_SYSTEM},
+            {"role": "user", "content": verified},
+        ],
+        response_format={"type": "json_object", "schema": OLAY_LOG_SCHEMA},
+        temperature=0.0,
+    )
+    raw = pass_2["choices"][0]["message"]["content"]
+    parsed = json.loads(raw)
+    events = parsed.get("olay_loglari") or []
+    normalised = [_normalize(e, extraction) for e in events]
+
+    # Guardrail: if the model returned nothing coherent, fall back to the
+    # deterministic baseline. Otherwise post-process to keep fields sane.
+    cleaned = [ev for ev in normalised if ev.get("olay")]
+    if not cleaned:
+        logger.warning("LLM produced no usable events; using NLP fallback.")
+        return baseline
+
+    cleaned = [_sanitize_event(ev, extraction) for ev in cleaned]
+    return {"olay_loglari": cleaned, "backend": "llama.cpp"}
 
 
 def _normalize(event: dict, extraction: ExtractionResult) -> dict:

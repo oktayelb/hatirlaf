@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from django.utils import timezone
 from rest_framework import serializers
 
 from .models import Edge, EventificationStatus, Mention, Node, Session, SessionStatus
@@ -178,20 +179,25 @@ class SessionSerializer(serializers.ModelSerializer):
         if obj.status == SessionStatus.FAILED or obj.eventification_status == EventificationStatus.FAILED:
             return 100
         if obj.status == SessionStatus.QUEUED:
-            return 8
+            return 0
         if obj.status == SessionStatus.TRANSCRIBING:
-            return 30
+            return self._elapsed_progress(obj, start=12, end=42, seconds=90)
         if obj.status == SessionStatus.PARSING:
-            return 55
+            return self._elapsed_progress(obj, start=45, end=64, seconds=45)
         if obj.status in {SessionStatus.COMPLETED, SessionStatus.REVIEW}:
             if obj.eventification_status == EventificationStatus.QUEUED:
                 return 68
             if obj.eventification_status == EventificationStatus.RUNNING:
-                return 86
+                return self._elapsed_progress(obj, start=72, end=96, seconds=180)
             if obj.eventification_status == EventificationStatus.COMPLETED:
                 return 100
             return 62
         return 0
+
+    def _elapsed_progress(self, obj, *, start: int, end: int, seconds: int) -> int:
+        elapsed = max((timezone.now() - obj.updated_at).total_seconds(), 0)
+        ratio = min(elapsed / max(seconds, 1), 1.0)
+        return round(start + ((end - start) * ratio))
 
     def get_processing_detail(self, obj):
         if obj.status == SessionStatus.FAILED:

@@ -33,6 +33,33 @@ from .conflicts import detect_conflicts
 
 logger = logging.getLogger(__name__)
 
+_active_lock = threading.Lock()
+_active_processing: set[int] = set()
+_active_eventification: set[int] = set()
+
+
+def is_processing_active(session_id: int) -> bool:
+    with _active_lock:
+        return session_id in _active_processing
+
+
+def is_eventification_active(session_id: int) -> bool:
+    with _active_lock:
+        return session_id in _active_eventification
+
+
+def _try_mark_active(active_set: set[int], session_id: int) -> bool:
+    with _active_lock:
+        if session_id in active_set:
+            return False
+        active_set.add(session_id)
+        return True
+
+
+def _clear_active(active_set: set[int], session_id: int) -> None:
+    with _active_lock:
+        active_set.discard(session_id)
+
 
 def kickoff(session_id: int) -> None:
     """Start processing a Session, either synchronously or in a thread."""
@@ -55,21 +82,27 @@ def kickoff_eventification(session_id: int) -> None:
 
 
 def run(session_id: int) -> None:
-    try:
-        session = Session.objects.get(pk=session_id)
-    except Session.DoesNotExist:
-        logger.error("Session %s vanished before processing", session_id)
+    if not _try_mark_active(_active_processing, session_id):
+        logger.info("Session %s processing is already active; skipping duplicate.", session_id)
         return
-
     try:
-        _process(session)
-    except Exception:  # pragma: no cover
-        logger.error("Processing session %s failed: %s", session_id, traceback.format_exc())
-        Session.objects.filter(pk=session_id).update(
-            status=SessionStatus.FAILED,
-            status_detail=traceback.format_exc()[:2000],
-            updated_at=timezone.now(),
-        )
+        try:
+            session = Session.objects.get(pk=session_id)
+        except Session.DoesNotExist:
+            logger.error("Session %s vanished before processing", session_id)
+            return
+
+        try:
+            _process(session)
+        except Exception:  # pragma: no cover
+            logger.error("Processing session %s failed: %s", session_id, traceback.format_exc())
+            Session.objects.filter(pk=session_id).update(
+                status=SessionStatus.FAILED,
+                status_detail=traceback.format_exc()[:2000],
+                updated_at=timezone.now(),
+            )
+    finally:
+        _clear_active(_active_processing, session_id)
 
 
 def _process(session: Session) -> None:
@@ -177,49 +210,55 @@ def _parse_and_store(session: Session) -> None:
 
 
 def run_eventification(session_id: int) -> None:
-    try:
-        session = Session.objects.get(pk=session_id)
-    except Session.DoesNotExist:
-        logger.error("Session %s vanished before eventification", session_id)
+    if not _try_mark_active(_active_eventification, session_id):
+        logger.info("Session %s eventification is already active; skipping duplicate.", session_id)
         return
-
-    if not session.transcript.strip():
-        Session.objects.filter(pk=session_id).update(
-            structured_events=[],
-            eventification_status=EventificationStatus.COMPLETED,
-            eventification_detail="Transkript boş; takvim olayı üretilmedi.",
-            updated_at=timezone.now(),
-        )
-        return
-
-    Session.objects.filter(pk=session_id).update(
-        eventification_status=EventificationStatus.RUNNING,
-        eventification_detail="LLM olaylaştırması çalışıyor.",
-        updated_at=timezone.now(),
-    )
-
     try:
-        extraction = extractor_mod.extract(session.transcript, session.recorded_at)
-        llm_result = llm_mod.run(extraction)
-        events = llm_result.get("olay_loglari", [])
+        try:
+            session = Session.objects.get(pk=session_id)
+        except Session.DoesNotExist:
+            logger.error("Session %s vanished before eventification", session_id)
+            return
+
+        if not session.transcript.strip():
+            Session.objects.filter(pk=session_id).update(
+                structured_events=[],
+                eventification_status=EventificationStatus.COMPLETED,
+                eventification_detail="Transkript boş; takvim olayı üretilmedi.",
+                updated_at=timezone.now(),
+            )
+            return
+
         Session.objects.filter(pk=session_id).update(
-            structured_events=events,
-            nlp_hints=extraction.to_json(),
-            eventification_status=EventificationStatus.COMPLETED,
-            eventification_detail=(
-                f"{llm_result.get('backend', 'nlp-only')} ile "
-                f"{len(events)} olay üretildi."
-            ),
+            eventification_status=EventificationStatus.RUNNING,
+            eventification_detail="LLM olaylaştırması çalışıyor.",
             updated_at=timezone.now(),
         )
-    except Exception as exc:  # pragma: no cover - defensive, stage is isolated
-        logger.exception("Eventification session %s failed: %s", session_id, exc)
-        Session.objects.filter(pk=session_id).update(
-            structured_events=[],
-            eventification_status=EventificationStatus.FAILED,
-            eventification_detail=str(exc)[:2000],
-            updated_at=timezone.now(),
-        )
+
+        try:
+            extraction = extractor_mod.extract(session.transcript, session.recorded_at)
+            llm_result = llm_mod.run(extraction)
+            events = llm_result.get("olay_loglari", [])
+            Session.objects.filter(pk=session_id).update(
+                structured_events=events,
+                nlp_hints=extraction.to_json(),
+                eventification_status=EventificationStatus.COMPLETED,
+                eventification_detail=(
+                    f"{llm_result.get('backend', 'nlp-only')} ile "
+                    f"{len(events)} olay üretildi."
+                ),
+                updated_at=timezone.now(),
+            )
+        except Exception as exc:  # pragma: no cover - defensive, stage is isolated
+            logger.exception("Eventification session %s failed: %s", session_id, exc)
+            Session.objects.filter(pk=session_id).update(
+                structured_events=[],
+                eventification_status=EventificationStatus.FAILED,
+                eventification_detail=str(exc)[:2000],
+                updated_at=timezone.now(),
+            )
+    finally:
+        _clear_active(_active_eventification, session_id)
 
 
 def _auto_resolve(mention: Mention, fm) -> None:
