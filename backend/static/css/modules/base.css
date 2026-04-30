@@ -1,0 +1,55 @@
+/* Hatırlaf — clean dark UI. Mobile-first, scales up to desktop. Single-file,
+   no build step. */
+
+:root {
+  --bg: #101114;
+  --bg-elev: #181a1f;
+  --bg-elev-2: #20242a;
+  --bg-elev-3: #2a2f36;
+  --fg: #f0f2f4;
+  --fg-muted: #a4abb4;
+  --fg-dim: #757d88;
+  --accent: #2fa7a0;
+  --accent-2: #70d0c8;
+  --accent-soft: rgba(47, 167, 160, 0.15);
+  --danger: #ef6568;
+  --warn: #d6a143;
+  --ok: #5fc58b;
+  --border: rgba(255, 255, 255, 0.09);
+  --border-strong: rgba(255, 255, 255, 0.18);
+  --shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
+  --shadow-lg: 0 24px 56px rgba(0, 0, 0, 0.36);
+  --radius: 8px;
+  --radius-sm: 7px;
+  --tap: 44px;
+}
+
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body {
+  margin: 0; padding: 0; height: 100%;
+  background: #0c0d10; color: var(--fg);
+  font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", "SF Pro Text", "Ubuntu", "Roboto", sans-serif;
+  overscroll-behavior-y: none;
+}
+body { min-height: 100dvh; }
+body.startup-active {
+  overflow: hidden;
+}
+body.startup-active .app-shell {
+  opacity: 0;
+  pointer-events: none;
+}
+button { font-family: inherit; }
+
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-height: 100dvh;
+  max-width: 720px;
+  margin: 0 auto;
+  background: var(--bg);
+  position: relative;
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.04), var(--shadow);
+}
+

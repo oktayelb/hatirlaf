@@ -1,0 +1,45 @@
+@media (max-width: 380px) {
+  .cal-cell { min-height: 72px; padding: 5px 4px 6px; }
+  .cal-day-num { font-size: 12px; }
+  .cal-event-chip { font-size: 9px; padding: 1px 4px; }
+  .hero-title { font-size: 22px; }
+}
+
+@media (min-width: 520px) {
+  body { padding: 18px 0; }
+  .app-shell { border-radius: 12px; overflow: hidden; min-height: calc(100dvh - 36px); }
+  .cal-cell { min-height: 98px; }
+}
+
+@media (min-width: 760px) {
+  .app-header {
+    padding-left: 22px;
+    padding-right: 22px;
+  }
+  .screen-root {
+    padding: 24px 22px 42px;
+  }
+  .hero-inner {
+    padding: 20px 20px 18px;
+  }
+  .entries-list {
+    gap: 16px;
+  }
+  .entry-card,
+  .composer,
+  .card {
+    padding: 18px;
+  }
+  .cal-cell {
+    min-height: 110px;
+  }
+  .modal-backdrop {
+    place-items: center;
+    padding: 24px;
+  }
+  .modal {
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    padding-bottom: 18px;
+  }
+}
