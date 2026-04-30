@@ -95,10 +95,15 @@
   align-items: center;
   gap: 12px;
   min-height: 32px;
+  transform: none;
+  animation: none;
 }
 .startup-component-label {
   color: var(--fg);
   font-weight: 650;
+  transform: none;
+  animation: none;
+  white-space: nowrap;
 }
 .startup-component-meter {
   height: 4px;
@@ -118,6 +123,9 @@
   color: var(--fg-muted);
   font-size: 12px;
   text-align: right;
+  transform: none;
+  animation: none;
+  white-space: nowrap;
 }
 .startup-component.ready .startup-component-status { color: var(--ok); }
 .startup-component.loading .startup-component-status { color: var(--accent-2); }
@@ -125,4 +133,3 @@
 .startup-component.failed .startup-component-status { color: var(--warn); }
 .startup-component.ready .startup-component-meter span { background: var(--ok); }
 .startup-component.failed .startup-component-meter span { background: var(--warn); }
-

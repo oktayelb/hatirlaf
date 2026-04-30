@@ -231,24 +231,40 @@ function renderStartup(startup) {
   startupFill.style.width = `${progress}%`;
   startupFill.parentElement?.setAttribute("aria-valuenow", String(progress));
   startupPercent.textContent = `${progress}%`;
-  startupComponents.innerHTML = "";
+  const seen = new Set();
   for (const component of startup.components || []) {
-    const row = document.createElement("div");
+    const key = component.key || component.label || "";
+    seen.add(key);
+    let row = startupComponents.querySelector(`[data-startup-component="${CSS.escape(key)}"]`);
+    if (!row) {
+      row = document.createElement("div");
+      row.dataset.startupComponent = key;
+
+      const label = document.createElement("span");
+      label.className = "startup-component-label";
+
+      const meter = document.createElement("span");
+      meter.className = "startup-component-meter";
+      const meterFill = document.createElement("span");
+      meter.appendChild(meterFill);
+
+      const status = document.createElement("span");
+      status.className = "startup-component-status";
+
+      row.append(label, meter, status);
+      startupComponents.appendChild(row);
+    }
+    const label = row.querySelector(".startup-component-label");
+    const status = row.querySelector(".startup-component-status");
+    const meterFill = row.querySelector(".startup-component-meter span");
     row.className = `startup-component ${component.status || "pending"}`;
-    const label = document.createElement("span");
-    label.className = "startup-component-label";
     label.textContent = component.label || component.key;
-    const status = document.createElement("span");
-    status.className = "startup-component-status";
     status.textContent = startupStatusText(component.status);
-    const meter = document.createElement("span");
-    meter.className = "startup-component-meter";
-    const meterFill = document.createElement("span");
     meterFill.style.width = `${Math.max(0, Math.min(100, component.progress || 0))}%`;
-    meter.appendChild(meterFill);
     row.title = component.detail || "";
-    row.append(label, meter, status);
-    startupComponents.appendChild(row);
+  }
+  for (const row of Array.from(startupComponents.children)) {
+    if (!seen.has(row.dataset.startupComponent || "")) row.remove();
   }
 }
 
