@@ -111,6 +111,27 @@ class Node(models.Model):
         return node
 
 
+class EncounteredEntity(models.Model):
+    """A persistent local registry of bare-root people and places."""
+
+    kind = models.CharField(max_length=16, choices=NodeKind.choices)
+    label = models.CharField(max_length=200)
+    first_seen_at = models.DateTimeField(auto_now_add=True)
+    last_seen_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["kind", "label"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["kind", "label"],
+                name="unique_encountered_entity_kind_label",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"[{self.get_kind_display()}] {self.label}"
+
+
 class Session(models.Model):
     """One recorded diary entry."""
 

@@ -26,6 +26,7 @@ from ..models import (
     SessionStatus,
 )
 from . import extractor as extractor_mod
+from . import entity_registry as entity_registry_mod
 from . import llm as llm_mod
 from . import nlp as nlp_mod
 from . import transcription as tx_mod
@@ -205,6 +206,7 @@ def _parse_and_store(session: Session) -> None:
                 "updated_at",
             ]
         )
+        transaction.on_commit(lambda: entity_registry_mod.record_session(session.id))
 
     kickoff_eventification(session.id)
 

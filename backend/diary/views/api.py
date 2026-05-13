@@ -23,6 +23,7 @@ import logging
 import datetime as dt
 from collections import Counter
 
+from django.db import transaction
 from django.db.models import Count, Q
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404
@@ -47,6 +48,7 @@ from ..processing.pipeline import (
     is_processing_active,
     kickoff,
 )
+from ..processing import entity_registry as entity_registry_mod
 from ..processing import nlp as nlp_mod
 from ..serializers import (
     EdgeSerializer,
@@ -236,6 +238,7 @@ class MentionViewSet(viewsets.ReadOnlyModelViewSet):
         mention.save(update_fields=["node", "resolved", "is_conflict", "resolution_action"])
 
         _rebuild_edges_for_session(mention.session)
+        transaction.on_commit(lambda: entity_registry_mod.record_mention(mention))
 
         return Response(MentionSerializer(mention, context={"request": request}).data)
 
@@ -253,6 +256,14 @@ class NodeViewSet(viewsets.ModelViewSet):
         if q:
             qs = qs.filter(Q(label__icontains=q) | Q(aliases__icontains=q))
         return qs
+
+    def perform_create(self, serializer):
+        node = serializer.save()
+        transaction.on_commit(lambda: entity_registry_mod.record_node(node))
+
+    def perform_update(self, serializer):
+        node = serializer.save()
+        transaction.on_commit(lambda: entity_registry_mod.record_node(node))
 
     @action(detail=False, methods=["get"], url_path="memories")
     def memories(self, request):
