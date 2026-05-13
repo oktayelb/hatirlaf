@@ -275,15 +275,29 @@ Create the virtual environment, install Python dependencies, and run migrations:
 ./scripts/setup.sh
 ```
 
-Install optional ML dependencies:
+By default, `setup.sh` also installs the local ML stack used by the app:
+
+- `faster-whisper`
+- `openai-whisper`
+- `transformers`
+- `torch`
+- `llama-cpp-python`
+
+It also falls back to the main project virtualenv if a dedicated `savyar/.venv`
+is not present, so SAVYAR does not need a separate manual bootstrap step.
+
+If you want a lighter install on a constrained machine, you can skip the ML
+stack:
+
+```bash
+HATIRLAF_SETUP_MINIMAL=1 ./scripts/setup.sh
+```
+
+Optional helper commands are still available if you want to reinstall or swap
+one backend later:
 
 ```bash
 ./scripts/install_whisper.sh faster
-```
-
-Other modes:
-
-```bash
 ./scripts/install_whisper.sh openai
 ./scripts/install_whisper.sh ner
 ./scripts/install_whisper.sh all
@@ -325,6 +339,7 @@ Environment variables:
 | `HATIRLAF_LLM_MODEL_PATH` | repo GGUF path | Local Qwen GGUF file |
 | `HATIRLAF_LLM_N_CTX` | `4096` | LLM context window |
 | `HATIRLAF_LLM_N_GPU_LAYERS` | `-1` | GPU offload layers for llama.cpp |
+| `HATIRLAF_SETUP_MINIMAL` | `0` | Skip ML installs during `scripts/setup.sh` |
 | `HATIRLAF_PRELOAD_MODELS` | `1` | Warm-load STT and LLM at startup |
 | `HATIRLAF_SYNC_PROCESSING` | `0` | Run processing inline, mainly for tests |
 

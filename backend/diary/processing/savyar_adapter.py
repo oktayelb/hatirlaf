@@ -92,8 +92,14 @@ def preload() -> bool:
 
 def _python_executable() -> str:
     configured = getattr(settings, "HATIRLAF_SAVYAR_PYTHON", "")
-    if configured:
+    if configured and Path(configured).exists():
         return configured
+    if configured:
+        logger.warning(
+            "Configured SAVYAR Python %s was not found; falling back to %s",
+            configured,
+            sys.executable,
+        )
     bundled = _SAVYAR_ROOT / ".venv" / "bin" / "python"
     return str(bundled if bundled.exists() else sys.executable)
 

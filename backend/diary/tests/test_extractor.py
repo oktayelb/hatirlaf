@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import datetime as dt
+import sys
+from pathlib import Path
 from unittest.mock import patch
 
 from django.test import SimpleTestCase, override_settings
@@ -244,3 +246,12 @@ class SavyarIntegrationTests(SimpleTestCase):
         self.assertGreaterEqual(len(candidates), 2)
         self.assertEqual(candidates[0].ml_score, 10.0)
         self.assertEqual(candidates[0].suffixes, ("cc_determiner",))
+
+    @override_settings(HATIRLAF_SAVYAR_PYTHON="/tmp/hatirlaf-missing-savyar/.venv/bin/python")
+    def test_savyar_python_falls_back_when_configured_path_is_missing(self):
+        old_root = savyar_adapter._SAVYAR_ROOT
+        try:
+            savyar_adapter._SAVYAR_ROOT = Path("/tmp/hatirlaf-missing-savyar")
+            self.assertEqual(savyar_adapter._python_executable(), sys.executable)
+        finally:
+            savyar_adapter._SAVYAR_ROOT = old_root
