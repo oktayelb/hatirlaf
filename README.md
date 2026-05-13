@@ -180,9 +180,10 @@ Implemented across:
 Tools and techniques:
 
 - **Zeyrek** for Turkish morphology
-- Rule-based named entity and time extraction
+- Hugging Face Turkish NER for person/place/organization extraction when enabled
+- Rule-based named entity and time extraction as the no-download fallback
 - `dateparser` for absolute and relative date grounding
-- Optional **BERTurk** through `transformers` + `torch`
+- Optional `transformers` + `torch` runtime for the Turkish NER model
 
 The extractor creates clause-level hints:
 
@@ -195,6 +196,19 @@ The extractor creates clause-level hints:
 - pronoun/reference candidates
 - inferred subject from Turkish verb conjugation
 - full clause text
+
+Turkish named entities:
+
+- Default model: `savasy/bert-base-turkish-ner-cased`
+- Labels consumed by Hatırlaf: `PER` -> person, `LOC` -> place, `ORG` -> organization
+- Alternative researched model: `akdeniz27/xlm-roberta-base-turkish-ner`
+- Enable with `HATIRLAF_USE_TURKISH_NER=1`
+- Override with `HATIRLAF_TURKISH_NER_MODEL=<huggingface-model-id>`
+
+The LLM prompt now treats NER people, places, and organizations as the
+authoritative entity candidate list. It may use grammatical subjects such as
+`Ben`, but it should not invent person or place names outside the transcript or
+NER hints.
 
 ### Local LLM
 
@@ -271,7 +285,7 @@ Other modes:
 
 ```bash
 ./scripts/install_whisper.sh openai
-./scripts/install_whisper.sh berturk
+./scripts/install_whisper.sh ner
 ./scripts/install_whisper.sh all
 ```
 
@@ -305,7 +319,9 @@ Environment variables:
 | `HATIRLAF_WHISPER_DEVICE` | `cpu` | `cpu` or `cuda` |
 | `HATIRLAF_WHISPER_BEAM_SIZE` | `5` | Beam search width |
 | `HATIRLAF_WHISPER_VAD` | `1` | Enables VAD silence skipping |
-| `HATIRLAF_USE_BERTURK` | `0` | Enables optional BERTurk NER |
+| `HATIRLAF_USE_TURKISH_NER` | `0` | Enables optional Hugging Face Turkish NER |
+| `HATIRLAF_TURKISH_NER_MODEL` | `savasy/bert-base-turkish-ner-cased` | Hugging Face token-classification model id |
+| `HATIRLAF_USE_BERTURK` | `0` | Backwards-compatible alias for `HATIRLAF_USE_TURKISH_NER` |
 | `HATIRLAF_LLM_MODEL_PATH` | repo GGUF path | Local Qwen GGUF file |
 | `HATIRLAF_LLM_N_CTX` | `4096` | LLM context window |
 | `HATIRLAF_LLM_N_GPU_LAYERS` | `-1` | GPU offload layers for llama.cpp |
@@ -625,4 +641,3 @@ Production:
 - backups
 - privacy/export/delete flows
 - mobile packaging and store release process
-

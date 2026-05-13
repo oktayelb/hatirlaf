@@ -3,7 +3,7 @@
 # Usage:
 #   scripts/install_whisper.sh            # installs faster-whisper
 #   scripts/install_whisper.sh openai     # installs openai-whisper instead
-#   scripts/install_whisper.sh berturk    # also installs transformers+torch
+#   scripts/install_whisper.sh ner        # installs Turkish NER deps
 
 set -euo pipefail
 
@@ -19,14 +19,14 @@ case "$mode" in
   openai)
     pip install openai-whisper
     ;;
-  berturk)
+  ner|berturk)
     pip install transformers torch
     ;;
   all)
     pip install faster-whisper transformers torch
     ;;
   *)
-    echo "Unknown mode '$mode'. Use: faster | openai | berturk | all"
+    echo "Unknown mode '$mode'. Use: faster | openai | ner | berturk | all"
     exit 1
     ;;
 esac

@@ -2,12 +2,12 @@
 
 Primary tools (per spec):
   * Zeyrek — pure-Python port of Zemberek for lemmatization / morphology.
-  * BERTurk via Hugging Face transformers — token-level NER.
+  * A Hugging Face Turkish token-classification NER model for PER/LOC/ORG.
 
 Graceful fallbacks:
   * If Zeyrek isn't installed, we use a lightweight suffix-stripper covering
     the most common Turkish cases. Good enough to power conflict detection.
-  * If BERTurk isn't installed (or HATIRLAF_USE_BERTURK=0), we run a
+  * If transformer NER isn't installed (or HATIRLAF_USE_TURKISH_NER=0), we run a
     rule-based NER that relies on capitalization, a built-in Turkish
     location/person gazetteer, and Zeyrek-tagged proper-noun morphotags.
 
@@ -50,7 +50,7 @@ class EntityMention:
     char_start: int
     char_end: int
     mention_type: str  # PERSON | LOCATION | TIME | EVENT | ORG | PRONOUN
-    source: str = ""  # "berturk" | "rules" | "pronoun" | "time"
+    source: str = ""  # "hf_ner" | "rules" | "gazetteer" | "pronoun" | "time"
     score: float = 1.0
     hint: str = ""
 
@@ -204,7 +204,7 @@ def fallback_lemma(word: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# BERTurk / rule-based NER
+# Hugging Face / rule-based NER
 # ---------------------------------------------------------------------------
 
 _ner_lock = threading.Lock()
@@ -217,21 +217,26 @@ def _load_ner():
     with _ner_lock:
         if _cached_ner is not None or _cached_ner_backend == "rules":
             return _cached_ner, _cached_ner_backend
-        if not getattr(settings, "HATIRLAF_USE_BERTURK", False):
+        if not getattr(settings, "HATIRLAF_USE_TURKISH_NER", False):
             _cached_ner_backend = "rules"
             return None, "rules"
         try:
             from transformers import pipeline  # type: ignore
 
-            logger.info("Loading BERTurk NER pipeline (savasy/bert-base-turkish-ner-cased)")
+            model_name = getattr(
+                settings,
+                "HATIRLAF_TURKISH_NER_MODEL",
+                "savasy/bert-base-turkish-ner-cased",
+            )
+            logger.info("Loading Turkish NER pipeline (%s)", model_name)
             _cached_ner = pipeline(
                 "token-classification",
-                model="savasy/bert-base-turkish-ner-cased",
+                model=model_name,
                 aggregation_strategy="simple",
             )
-            _cached_ner_backend = "berturk"
+            _cached_ner_backend = f"hf_ner:{model_name}"
         except Exception as exc:
-            logger.warning("BERTurk NER unavailable (%s). Falling back to rules.", exc)
+            logger.warning("Turkish transformer NER unavailable (%s). Falling back to rules.", exc)
             _cached_ner_backend = "rules"
         return _cached_ner, _cached_ner_backend
 
@@ -319,15 +324,15 @@ def _morph_analyze(text: str, analyzer, backend: str | None) -> list[Token]:
 
 def _extract_entities(text: str, tokens: list[Token]) -> tuple[list[EntityMention], str]:
     ner, backend = _load_ner()
-    if backend == "berturk" and ner is not None:
+    if backend and backend.startswith("hf_ner") and ner is not None:
         try:
-            return _berturk_entities(text, ner), "berturk"
+            return _hf_ner_entities(text, ner), backend
         except Exception as exc:
-            logger.warning("BERTurk inference failed (%s). Using rules.", exc)
+            logger.warning("Turkish transformer NER inference failed (%s). Using rules.", exc)
     return _rule_entities(text, tokens), "rules"
 
 
-def _berturk_entities(text: str, ner) -> list[EntityMention]:
+def _hf_ner_entities(text: str, ner) -> list[EntityMention]:
     out: list[EntityMention] = []
     for ent in ner(text):
         label = (ent.get("entity_group") or ent.get("entity") or "").upper()
@@ -349,7 +354,7 @@ def _berturk_entities(text: str, ner) -> list[EntityMention]:
                 char_start=start,
                 char_end=end,
                 mention_type=mtype,
-                source="berturk",
+                source="hf_ner",
                 score=float(ent.get("score", 1.0)),
             )
         )
@@ -383,6 +388,8 @@ def _rule_entities(text: str, tokens: list[Token]) -> list[EntityMention]:
                 nxt_low = _strip_apostrophe_suffix(tokens[j + 1].surface.lower())
                 if nxt_low in TR_WEEKDAYS or nxt_low in TR_MONTHS:
                     break
+                if _has_bare_location_case(tokens[j + 1].surface):
+                    break
                 j += 1
             start = t.char_start
             end = tokens[j].char_end
@@ -397,8 +404,14 @@ def _rule_entities(text: str, tokens: list[Token]) -> list[EntityMention]:
                 mtype = "LOCATION"
             elif any(p in TR_CITIES or p in TR_COUNTRIES for p in bare_parts):
                 mtype = "LOCATION"
-            elif len(bare_parts) == 1 and _has_apostrophe_location_case(surface):
+            elif len(bare_parts) == 1 and (
+                _has_apostrophe_location_case(surface) or _has_bare_location_case(surface)
+            ):
                 mtype = "LOCATION"
+                clean_surface = _strip_location_case(surface)
+                if clean_surface:
+                    surface = clean_surface
+                    end = start + len(surface)
 
             out.append(
                 EntityMention(
@@ -482,6 +495,33 @@ def _has_apostrophe_location_case(text: str) -> bool:
             suffix = low[idx + 1 :]
             return suffix.startswith(("da", "de", "ta", "te", "dan", "den", "tan", "ten"))
     return False
+
+
+def _has_bare_location_case(text: str) -> bool:
+    """Catch ASR-style proper place forms without apostrophes, e.g. Kadıköyde."""
+    if not text[:1].isupper():
+        return False
+    low = text.lower()
+    suffix = _bare_location_suffix(low)
+    return bool(suffix and len(text) > len(suffix) + 2)
+
+
+def _strip_location_case(text: str) -> str:
+    for marker in ("'", "’"):
+        idx = text.find(marker)
+        if idx > 0:
+            return text[:idx]
+    suffix = _bare_location_suffix(text.lower())
+    if suffix and len(text) > len(suffix) + 2:
+        return text[: -len(suffix)]
+    return text
+
+
+def _bare_location_suffix(low: str) -> str:
+    for suffix in ("dan", "den", "tan", "ten", "da", "de", "ta", "te"):
+        if low.endswith(suffix):
+            return suffix
+    return ""
 
 
 def _find_pronouns(text: str) -> list[EntityMention]:
@@ -594,8 +634,10 @@ def _dedupe_mentions(mentions: Iterable[EntityMention]) -> list[EntityMention]:
     for m in sorted_m:
         # Skip if contained in a previously-kept mention.
         if any(
-            prev.char_start <= m.char_start and m.char_end <= prev.char_end
+            prev.char_start <= m.char_start
+            and m.char_end <= prev.char_end
             and (prev.char_end - prev.char_start) > (m.char_end - m.char_start)
+            and _source_priority(prev.source) >= _source_priority(m.source)
             for prev in out
         ):
             continue
@@ -608,7 +650,18 @@ def _dedupe_mentions(mentions: Iterable[EntityMention]) -> list[EntityMention]:
                 and (m.char_end - m.char_start) > (prev.char_end - prev.char_start)
             )
         ]
-        # Replace exact duplicates, preferring BERTurk over rules.
+        # A precise transformer span beats a wider heuristic span that
+        # accidentally glued adjacent entities together ("Ayşe Kadıköy").
+        out = [
+            prev for prev in out
+            if not (
+                prev.char_start <= m.char_start
+                and m.char_end <= prev.char_end
+                and (prev.char_end - prev.char_start) > (m.char_end - m.char_start)
+                and _source_priority(m.source) > _source_priority(prev.source)
+            )
+        ]
+        # Replace exact duplicates, preferring transformer NER over rules.
         dup = next(
             (
                 i for i, prev in enumerate(out)
@@ -617,9 +670,21 @@ def _dedupe_mentions(mentions: Iterable[EntityMention]) -> list[EntityMention]:
             None,
         )
         if dup is not None:
-            if out[dup].source == "rules" and m.source == "berturk":
+            if _source_priority(m.source) > _source_priority(out[dup].source):
                 out[dup] = m
             continue
         out.append(m)
     out.sort(key=lambda m: m.char_start)
     return out
+
+
+def _source_priority(source: str) -> int:
+    if source == "hf_ner":
+        return 40
+    if source == "gazetteer":
+        return 30
+    if source in {"time", "pronoun"}:
+        return 25
+    if source == "rules":
+        return 20
+    return 0

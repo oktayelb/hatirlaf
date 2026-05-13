@@ -20,7 +20,7 @@ echo
 echo "Optional ML deps (install one of the Whisper backends for real transcription):"
 echo "  pip install faster-whisper                # preferred, light CPU footprint"
 echo "  pip install openai-whisper                # reference implementation"
-echo "  pip install transformers torch            # enable BERTurk NER"
+echo "  pip install transformers torch            # enable Turkish NER"
 echo
 
 python manage.py makemigrations diary

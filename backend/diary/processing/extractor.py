@@ -11,7 +11,7 @@ Strategy: run a rule-based Turkish NLP layer *before* the LLM. It:
   2. Resolves every date/time expression to an absolute ISO date using
      ``dateparser`` anchored on the session's ``recorded_at``.
   3. Collects person / location / org mentions from the existing NER
-     pipeline (Zeyrek + rule-based or BERTurk).
+     pipeline (Hugging Face Turkish NER when enabled, otherwise rules).
   4. Classifies each clause's ``zaman_dilimi`` (Geçmiş / Şu An / Gelecek)
      using tense-marking verb suffixes (-di, -miş, -ecek, -acak, -yor).
   5. Builds a privacy mask: replaces real names/places with opaque
@@ -99,6 +99,8 @@ class ExtractionResult:
     masked_paragraph: str = ""
     # Carry the upstream parse so callers don't re-run it.
     parse: nlp_mod.ParseResult | None = None
+    nlp_backend: str = "rules"
+    ner_backend: str = "rules"
 
     def to_json(self) -> dict:
         return {
@@ -108,6 +110,8 @@ class ExtractionResult:
             "locations": self.locations,
             "orgs": self.orgs,
             "references": self.references,
+            "nlp_backend": self.nlp_backend,
+            "ner_backend": self.ner_backend,
             "mask_map": self.mask_map,
             "masked_paragraph": self.masked_paragraph,
         }
@@ -805,6 +809,8 @@ def extract(
         mask_map=mask_map,
         masked_paragraph=masked,
         parse=parse,
+        nlp_backend=parse.nlp_backend,
+        ner_backend=parse.ner_backend,
     )
 
 

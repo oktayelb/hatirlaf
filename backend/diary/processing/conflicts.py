@@ -134,7 +134,7 @@ def _find_antecedent(
         m for m in mentions
         if m.char_end <= pronoun.char_start
         and m.mention_type in ("PERSON", "ORG", "LOCATION")
-        and m.source in ("berturk", "rules")
+        and m.source in ("hf_ner", "rules", "gazetteer")
     ]
     if not candidates:
         return None

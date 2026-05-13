@@ -167,12 +167,14 @@ def _hints_prompt(extraction: ExtractionResult) -> str:
     lines = ["### Önişleme Verisi (NLP'den gelen kesin ipuçları)"]
     anchor = extraction.recorded_at.isoformat() if extraction.recorded_at else "bilinmiyor"
     lines.append(f"- Kayıt anı: {anchor}")
+    lines.append(f"- Morfoloji backend: {extraction.nlp_backend}")
+    lines.append(f"- NER backend: {extraction.ner_backend}")
     if extraction.persons:
-        lines.append(f"- Kişi adayları: {', '.join(extraction.persons)}")
+        lines.append(f"- NER kişi adayları (PER): {', '.join(extraction.persons)}")
     if extraction.locations:
-        lines.append(f"- Yer adayları: {', '.join(extraction.locations)}")
+        lines.append(f"- NER yer adayları (LOC): {', '.join(extraction.locations)}")
     if extraction.orgs:
-        lines.append(f"- Kurum adayları: {', '.join(extraction.orgs)}")
+        lines.append(f"- NER kurum adayları (ORG): {', '.join(extraction.orgs)}")
     if extraction.references:
         lines.append(
             "- Belirsiz gönderge/zaman adayları: "
@@ -222,8 +224,9 @@ PASS_1_SYSTEM = (
     "dönüştürmektir. Model yaratıcılığı değil, kanıta dayalı yapılandırma "
     "isteniyor.\n\n"
     "GİRDİ SÖZLEŞMESİ:\n"
-    "- 'Önişleme Verisi' kural tabanlı NLP katmanından gelir ve en güvenilir "
-    "kaynak kabul edilir.\n"
+    "- 'Önişleme Verisi' deterministik NLP + Named Entity Recognition "
+    "katmanından gelir ve kişi/yer/kurum adları için en güvenilir kaynak "
+    "kabul edilir.\n"
     "- 'Deterministik NLP taslağı' güvenli başlangıç çıktısıdır. Onu yalnızca "
     "orijinal metin ve ipuçları açıkça daha iyi bir birleşim gerektiriyorsa "
     "değiştir.\n"
@@ -235,12 +238,14 @@ PASS_1_SYSTEM = (
     "2) saat: yalnız açık saat ifadesi varsa HH:MM yaz. Yoksa boş bırak.\n"
     "3) zaman_dilimi: tarih kayıt gününden önceyse Geçmiş, aynı günse Şu An, "
     "sonraysa Gelecek. Bu sınıflandırmayı metin hissine göre bozma.\n"
-    "4) kisiler: açık kişi adlarını, 'Ben'i ve 'ozne=' ipucundan gelen düşmüş "
+    "4) kisiler: Önce NER kişi adaylarını (PER) kullan; metinde olmayan yeni "
+    "kişi adı üretme. Açık kişi adlarını, 'Ben'i ve 'ozne=' ipucundan gelen düşmüş "
     "özneyi kullan. 'ozne=1sg/Ben' -> Ben, '1pl/Biz' -> Biz, '2sg/Sen' -> Sen, "
     "'2pl/Siz' -> Siz, '3pl/Onlar' -> Onlar. '3sg/O' tek başına kişi kanıtı "
     "değildir; yalnız açık 'o/o da' kişi göndergesi veya yakın kişi adayı varsa "
     "kişiye bağla.\n"
-    "5) lokasyon: yalnız açık yer/kurum adaylarından seç. 'orada/burada/"
+    "5) lokasyon: Önce NER yer adaylarını (LOC) ve kurum adaylarını (ORG) kullan; "
+    "metinde veya ipuçlarında olmayan yer adı üretme. 'orada/burada/"
     "oradaki/buradaki' gibi göndergeleri açık yakın yerle eşleştiremiyorsan "
     "lokasyonu boş bırak veya Bilinmeyen Lokasyon yaz.\n"
     "6) olay: kısa, doğal Türkçe cümle yaz. Belirsiz gönderge çözülmediyse "

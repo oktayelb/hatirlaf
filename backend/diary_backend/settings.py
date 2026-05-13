@@ -154,8 +154,21 @@ HATIRLAF_PRELOAD_MODELS = os.environ.get("HATIRLAF_PRELOAD_MODELS", "1") == "1"
 # Run NLP synchronously instead of in a background thread (useful for tests).
 HATIRLAF_SYNC_PROCESSING = os.environ.get("HATIRLAF_SYNC_PROCESSING", "0") == "1"
 
-# Enable Hugging Face BERTurk NER. Defaults off (large download).
-HATIRLAF_USE_BERTURK = os.environ.get("HATIRLAF_USE_BERTURK", "0") == "1"
+# Enable Hugging Face Turkish named-entity recognition. Defaults off because
+# the first run downloads a transformer model and requires transformers+torch.
+# HATIRLAF_USE_BERTURK is kept as a backwards-compatible alias.
+HATIRLAF_USE_TURKISH_NER = (
+    os.environ.get(
+        "HATIRLAF_USE_TURKISH_NER",
+        os.environ.get("HATIRLAF_USE_BERTURK", "0"),
+    )
+    == "1"
+)
+HATIRLAF_USE_BERTURK = HATIRLAF_USE_TURKISH_NER
+HATIRLAF_TURKISH_NER_MODEL = os.environ.get(
+    "HATIRLAF_TURKISH_NER_MODEL",
+    "savasy/bert-base-turkish-ner-cased",
+)
 
 # Enable the local SAVYAR sentence-level ML morphology helper. Defaults off
 # because SAVYAR is still experimental and Hatirlaf must fail open without it.

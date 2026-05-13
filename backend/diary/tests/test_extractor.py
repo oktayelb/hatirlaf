@@ -36,6 +36,52 @@ class LlmLifecycleTests(SimpleTestCase):
 
 @override_settings(HATIRLAF_USE_BERTURK=False)
 class TurkishNlpPrepassTests(SimpleTestCase):
+    @override_settings(HATIRLAF_USE_TURKISH_NER=True)
+    def test_transformer_ner_people_and_places_feed_extractor_hints(self):
+        text = "Ayşe Kadıköy'de Emre ile buluştu."
+        start_ayse = text.index("Ayşe")
+        start_kadikoy = text.index("Kadıköy")
+        start_emre = text.index("Emre")
+
+        def fake_ner(_text):
+            return [
+                {
+                    "entity_group": "PER",
+                    "word": "Ayşe",
+                    "start": start_ayse,
+                    "end": start_ayse + len("Ayşe"),
+                    "score": 0.99,
+                },
+                {
+                    "entity_group": "LOC",
+                    "word": "Kadıköy",
+                    "start": start_kadikoy,
+                    "end": start_kadikoy + len("Kadıköy"),
+                    "score": 0.98,
+                },
+                {
+                    "entity_group": "PER",
+                    "word": "Emre",
+                    "start": start_emre,
+                    "end": start_emre + len("Emre"),
+                    "score": 0.97,
+                },
+            ]
+
+        with patch.object(
+            nlp,
+            "_load_ner",
+            return_value=(fake_ner, "hf_ner:savasy/bert-base-turkish-ner-cased"),
+        ):
+            result = extractor.extract(text, dt.datetime(2026, 4, 30, 12, 0))
+
+        self.assertEqual(result.ner_backend, "hf_ner:savasy/bert-base-turkish-ner-cased")
+        self.assertIn("Ayşe", result.persons)
+        self.assertIn("Emre", result.persons)
+        self.assertIn("Kadıköy", result.locations)
+        self.assertEqual(result.clauses[0].persons, ["Ayşe", "Emre"])
+        self.assertEqual(result.clauses[0].locations, ["Kadıköy"])
+
     def test_referential_pronouns_are_preserved_as_references(self):
         text = "Ayşe ile dün Kadıköy'de buluştuk. Oradaki konuşma önemliydi, bu yarınki planı etkiledi."
         anchor = dt.datetime(2026, 4, 30, 12, 0)
@@ -77,6 +123,15 @@ class TurkishNlpPrepassTests(SimpleTestCase):
         self.assertIn(("buradaki", "PRONOUN"), mentions)
         self.assertIn(("dünkü", "TIME"), mentions)
         self.assertIn(("yarınki", "TIME"), mentions)
+
+    def test_rule_fallback_treats_capitalized_bare_locative_as_place(self):
+        parsed = nlp.analyze("Ayşe Kadıköyde buluştu.")
+        persons = [m.surface for m in parsed.mentions if m.mention_type == "PERSON"]
+        locations = [m.surface for m in parsed.mentions if m.mention_type == "LOCATION"]
+
+        self.assertIn("Ayşe", persons)
+        self.assertNotIn("Kadıköyde", persons)
+        self.assertIn("Kadıköy", locations)
 
     def test_clause_subject_is_inferred_from_verb_conjugation(self):
         text = "Dün gittim. Bugün konuşuyoruz. Yarın gelecekler. Gitmelisin."
