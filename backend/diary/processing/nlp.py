@@ -25,6 +25,7 @@ from typing import Iterable
 from django.conf import settings
 
 from . import savyar_adapter
+from .name_gazetteer import TR_GIVEN_NAMES
 
 logger = logging.getLogger(__name__)
 
@@ -190,6 +191,13 @@ _FALLBACK_SUFFIXES = sorted(
     reverse=True,
 )
 
+_ENTITY_SUFFIX_HINTS = (
+    "da", "de", "ta", "te", "dan", "den", "tan", "ten",
+    "la", "le", "yla", "yle", "ya", "ye",
+    "a", "e", "ı", "i", "u", "ü", "yi", "yı", "yu", "yü",
+    "ın", "in", "un", "ün", "nın", "nin", "nun", "nün",
+)
+
 
 def fallback_lemma(word: str) -> str:
     savyar_lemma = savyar_adapter.best_lemma(word)
@@ -201,6 +209,85 @@ def fallback_lemma(word: str) -> str:
         if low.endswith(suf) and len(low) > len(suf) + 1:
             return low[: -len(suf)]
     return low
+
+
+def normalize_entity_lemma(text: str) -> str:
+    """Return a neutral lowercase lemma for an entity phrase.
+
+    Savyar handles Turkish proper-noun inflection better than the local
+    suffix stripper, so we try it first on each token. If Savyar does not
+    return a root, we fall back to the existing heuristic lemmatizer.
+    """
+    roots: list[str] = []
+    for part in re.split(r"(\s+)", str(text or "").strip()):
+        if not part:
+            continue
+        if part.isspace():
+            roots.append(part)
+            continue
+        roots.append(_normalize_entity_token(part))
+    return "".join(roots).strip()
+
+
+def normalize_entity_label(text: str) -> str:
+    """Return a user-facing neutral label for an entity phrase."""
+    normalized = normalize_entity_lemma(text)
+    if not normalized:
+        return str(text or "").strip()
+    return " ".join(_tr_title(token) for token in normalized.split())
+
+
+def _normalize_entity_token(token: str) -> str:
+    raw = token.strip()
+    bare = _strip_apostrophe_suffix(raw)
+    if not bare:
+        return ""
+    low = bare.lower()
+    root = savyar_adapter.best_lemma(bare)
+    if not root:
+        root = fallback_lemma(bare)
+    if not root:
+        root = low
+    root = root.lower()
+    if _should_keep_original_entity_form(raw, low, root):
+        return low
+    return root
+
+
+def _should_keep_original_entity_form(raw: str, low: str, root: str) -> bool:
+    if root == low:
+        return True
+    if "'" in raw or "’" in raw:
+        return False
+    if low in TR_GIVEN_NAMES or low in TR_CITIES or low in TR_COUNTRIES:
+        return True
+    if any(low.endswith(suffix) for suffix in _ENTITY_SUFFIX_HINTS):
+        return False
+    return True
+
+
+def _tr_title(token: str) -> str:
+    if not token:
+        return ""
+    low = token.lower()
+    first = low[0]
+    if first == "i":
+        first = "İ"
+    elif first == "ı":
+        first = "I"
+    elif first == "ş":
+        first = "Ş"
+    elif first == "ğ":
+        first = "Ğ"
+    elif first == "ü":
+        first = "Ü"
+    elif first == "ö":
+        first = "Ö"
+    elif first == "ç":
+        first = "Ç"
+    else:
+        first = first.upper()
+    return first + low[1:]
 
 
 # ---------------------------------------------------------------------------
@@ -350,7 +437,7 @@ def _hf_ner_entities(text: str, ner) -> list[EntityMention]:
         out.append(
             EntityMention(
                 surface=surface,
-                lemma=surface.lower(),
+                lemma=normalize_entity_lemma(surface),
                 char_start=start,
                 char_end=end,
                 mention_type=mtype,
@@ -416,7 +503,7 @@ def _rule_entities(text: str, tokens: list[Token]) -> list[EntityMention]:
             out.append(
                 EntityMention(
                     surface=surface,
-                    lemma=span_lower,
+                    lemma=normalize_entity_lemma(surface),
                     char_start=start,
                     char_end=end,
                     mention_type=mtype,
@@ -431,7 +518,7 @@ def _rule_entities(text: str, tokens: list[Token]) -> list[EntityMention]:
             out.append(
                 EntityMention(
                     surface=t.surface,
-                    lemma=bare,
+                    lemma=normalize_entity_lemma(t.surface),
                     char_start=t.char_start,
                     char_end=t.char_end,
                     mention_type="TIME",
@@ -443,7 +530,7 @@ def _rule_entities(text: str, tokens: list[Token]) -> list[EntityMention]:
             out.append(
                 EntityMention(
                     surface=t.surface,
-                    lemma=bare,
+                    lemma=normalize_entity_lemma(t.surface),
                     char_start=t.char_start,
                     char_end=t.char_end,
                     mention_type="LOCATION",
@@ -459,7 +546,7 @@ def _rule_entities(text: str, tokens: list[Token]) -> list[EntityMention]:
                 out.append(
                     EntityMention(
                         surface=recovered.label,
-                        lemma=recovered.label.lower(),
+                        lemma=normalize_entity_lemma(recovered.label),
                         char_start=t.char_start,
                         char_end=t.char_start + len(recovered.label),
                         mention_type="LOCATION",
@@ -540,7 +627,7 @@ def _find_pronouns(text: str) -> list[EntityMention]:
             out.append(
                 EntityMention(
                     surface=surface,
-                    lemma=low,
+                    lemma=normalize_entity_lemma(surface),
                     char_start=m.start(),
                     char_end=m.end(),
                     mention_type="PRONOUN",
@@ -573,7 +660,7 @@ def _find_relative_times(text: str) -> list[EntityMention]:
             out.append(
                 EntityMention(
                     surface=m.group(0),
-                    lemma=low,
+                    lemma=normalize_entity_lemma(m.group(0)),
                     char_start=m.start(),
                     char_end=m.end(),
                     mention_type="TIME",
@@ -592,7 +679,7 @@ def _find_relative_locations(text: str) -> list[EntityMention]:
             out.append(
                 EntityMention(
                     surface=m.group(0),
-                    lemma=low,
+                    lemma=normalize_entity_lemma(m.group(0)),
                     char_start=m.start(),
                     char_end=m.end(),
                     mention_type="LOCATION",
@@ -617,7 +704,7 @@ def _find_absolute_times(text: str) -> list[EntityMention]:
             out.append(
                 EntityMention(
                     surface=m.group(0),
-                    lemma=m.group(0).lower(),
+                    lemma=normalize_entity_lemma(m.group(0)),
                     char_start=m.start(),
                     char_end=m.end(),
                     mention_type="TIME",

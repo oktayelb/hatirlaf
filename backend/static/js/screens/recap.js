@@ -156,9 +156,9 @@ function rankedItem(item, index, kind) {
       ? el("button", {
           class: "recap-rank-label entity-link",
           type: "button",
-          onclick: () => (location.hash = entityMemoryHash(kind, item.label)),
-        }, [item.label])
-      : el("span", { class: "recap-rank-label" }, [item.label]),
+          onclick: () => (location.hash = entityMemoryHash(kind, item.display_label || item.label)),
+        }, [item.display_label || item.label])
+      : el("span", { class: "recap-rank-label" }, [item.display_label || item.label]),
     el("span", { class: "recap-rank-count" }, [item.count]),
   ]);
 }

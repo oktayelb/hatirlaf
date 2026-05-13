@@ -63,10 +63,10 @@ function header(payload) {
   const node = payload.node || {};
   return el("div", { class: "memory-page-hero" }, [
     el("div", { class: "memory-page-kicker" }, [kindLabel(node.kind)]),
-    el("h2", { class: "memory-page-title" }, [node.label || "Anılar"]),
+    el("h2", { class: "memory-page-title" }, [node.display_label || node.label || "Anılar"]),
     el("p", { class: "memory-page-sub" }, [
       payload.resolved
-        ? `Bu sayfa ${node.label} için ayrılmış hafıza izlerini gösterir.`
+        ? `Bu sayfa ${node.display_label || node.label} için ayrılmış hafıza izlerini gösterir.`
         : "Bu sayfa, NER tarafından tanınan isim veya yer için çıkarılmış hafızaları gösterir.",
     ]),
   ]);
@@ -111,7 +111,7 @@ function memoryCard(item) {
       ? el("p", { class: "memory-card-text", html: highlight(item.transcript_excerpt, item.matched_label) })
       : null,
     mentions.length
-      ? el("div", { class: "memory-card-tags" }, mentions.map((m) => tag(m.surface)))
+      ? el("div", { class: "memory-card-tags" }, mentions.map((m) => tag(m.display_label || m.surface)))
       : null,
     events.length
       ? el("div", { class: "memory-card-events" }, events.map((ev) => eventRow(ev)))

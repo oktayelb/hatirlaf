@@ -185,6 +185,26 @@ class SavyarIntegrationTests(SimpleTestCase):
         lemmas = {token.surface: token.lemma for token in parsed.tokens}
         self.assertEqual(lemmas["Kitaba"], "kitap")
 
+    def test_savyar_normalizes_inflected_entity_labels(self):
+        self.assertEqual(nlp.normalize_entity_label("Yiğitle"), "Yiğit")
+        self.assertEqual(nlp.normalize_entity_label("Kadıköy'de"), "Kadıköy")
+        self.assertEqual(nlp.normalize_entity_label("Ali Yılmaz"), "Ali Yılmaz")
+
+    def test_savyar_uses_force_decomposer_when_ranked_path_is_empty(self):
+        with (
+            patch.object(savyar_adapter, "analyze_word", return_value=()),
+            patch.object(
+                savyar_adapter,
+                "_forced_decompositions",
+                return_value=(
+                    ("yiğ", "noun", 2, "noun"),
+                    ("yiğit", "noun", 1, "noun"),
+                    ("y", "verb", 3, "verb"),
+                ),
+            ),
+        ):
+            self.assertEqual(savyar_adapter.best_lemma("Yiğitle"), "yiğit")
+
     def test_savyar_closed_class_context_skips_demonstrative_determiner(self):
         parsed = nlp.analyze("O araba geldi. O geldi.")
         pronoun_surfaces = [m.surface for m in parsed.mentions if m.mention_type == "PRONOUN"]

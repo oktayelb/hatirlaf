@@ -3,12 +3,14 @@ from __future__ import annotations
 from django.utils import timezone
 from rest_framework import serializers
 
+from .processing import nlp as nlp_mod
 from .models import Edge, EventificationStatus, Mention, Node, Session, SessionStatus
 
 
 class NodeSerializer(serializers.ModelSerializer):
     kind_display = serializers.CharField(source="get_kind_display", read_only=True)
     mention_count = serializers.IntegerField(source="mentions.count", read_only=True)
+    display_label = serializers.SerializerMethodField()
 
     class Meta:
         model = Node
@@ -17,6 +19,7 @@ class NodeSerializer(serializers.ModelSerializer):
             "kind",
             "kind_display",
             "label",
+            "display_label",
             "aliases",
             "is_unknown",
             "time_value",
@@ -25,7 +28,17 @@ class NodeSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["id", "kind_display", "mention_count", "created_at", "updated_at"]
+        read_only_fields = [
+            "id",
+            "kind_display",
+            "display_label",
+            "mention_count",
+            "created_at",
+            "updated_at",
+        ]
+
+    def get_display_label(self, obj):
+        return nlp_mod.normalize_entity_label(obj.label)
 
 
 class EdgeSerializer(serializers.ModelSerializer):
@@ -66,6 +79,7 @@ class MentionSerializer(serializers.ModelSerializer):
     conflict_reason_display = serializers.CharField(
         source="get_conflict_reason_display", read_only=True
     )
+    display_label = serializers.SerializerMethodField()
 
     class Meta:
         model = Mention
@@ -82,6 +96,7 @@ class MentionSerializer(serializers.ModelSerializer):
             "mention_type_display",
             "node",
             "node_id",
+            "display_label",
             "is_conflict",
             "conflict_reason",
             "conflict_reason_display",
@@ -106,8 +121,13 @@ class MentionSerializer(serializers.ModelSerializer):
             "conflict_reason_display",
             "conflict_hint",
             "node",
+            "display_label",
             "created_at",
         ]
+
+    def get_display_label(self, obj):
+        source = obj.node.label if obj.node and obj.node.label else obj.surface
+        return nlp_mod.normalize_entity_label(source)
 
 
 class SessionSerializer(serializers.ModelSerializer):

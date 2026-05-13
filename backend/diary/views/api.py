@@ -47,6 +47,7 @@ from ..processing.pipeline import (
     is_processing_active,
     kickoff,
 )
+from ..processing import nlp as nlp_mod
 from ..serializers import (
     EdgeSerializer,
     MentionSerializer,
@@ -275,9 +276,17 @@ class NodeViewSet(viewsets.ModelViewSet):
         if node_id:
             node = get_object_or_404(Node, pk=node_id)
             kind = node.kind
-            label = node.label
+            label = _entity_display_label(node.label)
         else:
-            node = Node.objects.filter(kind=kind, label__iexact=label).first()
+            label = _entity_display_label(label)
+            node = next(
+                (
+                    candidate
+                    for candidate in Node.objects.filter(kind=kind)
+                    if _entity_display_label(candidate.label).casefold() == label.casefold()
+                ),
+                None,
+            )
 
         memories = _node_memories_for(kind=kind, label=label, node=node)
         total_mentions = sum(len(item["matched_mentions"]) for item in memories)
@@ -291,6 +300,7 @@ class NodeViewSet(viewsets.ModelViewSet):
                 "kind": kind,
                 "kind_display": dict(NodeKind.choices).get(kind, kind),
                 "label": label,
+                "display_label": label,
                 "aliases": [],
                 "is_unknown": False,
                 "time_value": "",
@@ -419,9 +429,9 @@ def calendar_view(request):
                     "zaman_dilimi": ev.get("zaman_dilimi", ""),
                     "tarih": iso,
                     "saat": ev.get("saat", ""),
-                    "lokasyon": ev.get("lokasyon", ""),
+                    "lokasyon": _entity_display_label(ev.get("lokasyon", "")),
                     "olay": ev.get("olay", ""),
-                    "kisiler": ev.get("kisiler", []),
+                    "kisiler": [_entity_display_label(person) for person in ev.get("kisiler", [])],
                 }
             )
 
@@ -463,8 +473,7 @@ def recap_view(request):
 
     for session in sessions:
         for mention in session.mentions.all():
-            label = mention.node.label if mention.node else mention.surface
-            label = (label or "").strip()
+            label = _entity_display_label(mention.node.label if mention.node else mention.surface)
             if not label or (mention.node and mention.node.is_unknown):
                 continue
             if mention.mention_type == MentionType.PERSON:
@@ -489,8 +498,8 @@ def recap_view(request):
                 "time": event.get("saat", ""),
                 "bucket": event.get("zaman_dilimi", ""),
                 "text": event.get("olay", ""),
-                "people": event.get("kisiler", []),
-                "place": event.get("lokasyon", ""),
+                "people": [_entity_display_label(person) for person in event.get("kisiler", [])],
+                "place": _entity_display_label(event.get("lokasyon", "")),
             }
             event_rows.append(row)
             days[iso] += 1
@@ -777,7 +786,7 @@ def _bucket_for_date(date_iso: str, recorded_at) -> str:
 
 
 def _node_memories_for(*, kind: str, label: str, node: Node | None) -> list[dict]:
-    label_norm = _normalise_text(label)
+    label_norm = _normalise_text(_entity_display_label(label))
     sessions = (
         Session.objects.exclude(status=SessionStatus.FAILED)
         .prefetch_related("mentions__node")
@@ -811,6 +820,7 @@ def _node_memories_for(*, kind: str, label: str, node: Node | None) -> list[dict
                     {
                         "id": mention.id,
                         "surface": mention.surface,
+                        "display_label": _entity_display_label(mention.node.label if mention.node else mention.surface),
                         "mention_type": mention.mention_type,
                         "resolved": mention.resolved,
                         "node_id": mention.node_id,
@@ -823,8 +833,8 @@ def _node_memories_for(*, kind: str, label: str, node: Node | None) -> list[dict
                         "time": event.get("saat", ""),
                         "bucket": event.get("zaman_dilimi", ""),
                         "text": event.get("olay", ""),
-                        "place": event.get("lokasyon", ""),
-                        "people": event.get("kisiler", []),
+                        "place": _entity_display_label(event.get("lokasyon", "")),
+                        "people": [_entity_display_label(person) for person in event.get("kisiler", [])],
                     }
                     for event in event_matches
                 ],
@@ -840,22 +850,23 @@ def _mention_matches_entity(mention: Mention, *, kind: str, label_norm: str, nod
         return False
     if mention.mention_type != kind:
         return False
-    return _normalise_text(mention.surface) == label_norm
+    candidate = mention.node.label if mention.node else mention.surface
+    return _normalise_text(_entity_display_label(candidate)) == label_norm
 
 
 def _event_matches_entity(event: dict, *, kind: str, label_norm: str, label: str) -> bool:
     if kind == NodeKind.PERSON:
         people = event.get("kisiler") or []
         for person in people:
-            person_norm = _normalise_text(person)
+            person_norm = _normalise_text(_entity_display_label(person))
             if person_norm and person_norm != "ben" and person_norm == label_norm:
                 return True
         return False
     if kind == NodeKind.LOCATION:
-        return _normalise_text(event.get("lokasyon")) == label_norm
+        return _normalise_text(_entity_display_label(event.get("lokasyon"))) == label_norm
     if kind == NodeKind.ORG:
-        return _normalise_text(event.get("lokasyon")) == label_norm or any(
-            _normalise_text(person) == label_norm for person in (event.get("kisiler") or [])
+        return _normalise_text(_entity_display_label(event.get("lokasyon"))) == label_norm or any(
+            _normalise_text(_entity_display_label(person)) == label_norm for person in (event.get("kisiler") or [])
         )
     return label_norm in _normalise_text(event.get("olay"))
 
@@ -906,6 +917,14 @@ def _memory_excerpt(
 
 def _normalise_text(value) -> str:
     return str(value or "").strip().casefold()
+
+
+def _entity_display_label(value) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    display = nlp_mod.normalize_entity_label(raw)
+    return display or raw
 
 
 @api_view(["GET"])

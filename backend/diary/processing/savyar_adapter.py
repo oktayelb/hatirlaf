@@ -183,8 +183,61 @@ def analyze_word(word: str, timeout_seconds: float = _DEFAULT_TIMEOUT_SECONDS) -
 def best_lemma(word: str) -> str:
     candidates = [c for c in analyze_word(word) if not c.pos.startswith("cc_") and c.root]
     if not candidates:
-        return ""
+        return _best_forced_lemma(word)
     return candidates[0].root
+
+
+@lru_cache(maxsize=4096)
+def _forced_decompositions(word: str) -> tuple[tuple[str, str, int, str], ...]:
+    """Return force-mode decompositions from SAVYAR's local decomposer.
+
+    This is only used when the ranked ML-backed path returns no candidates.
+    The local decomposer gives us raw morphological candidates, which we then
+    rank heuristically so entity normalization can still recover a neutral root.
+    """
+    if not word.strip():
+        return ()
+
+    try:
+        if str(_SAVYAR_ROOT) not in sys.path:
+            sys.path.insert(0, str(_SAVYAR_ROOT))
+        from util.decomposer import decompose
+    except Exception as exc:
+        logger.warning("SAVYAR force decomposer unavailable: %s", exc)
+        return ()
+
+    try:
+        analyses = decompose(word, force=True)
+    except Exception as exc:
+        logger.warning("SAVYAR force decomposition failed for %s: %s", word, exc)
+        return ()
+
+    return tuple(
+        (root, pos, len(chain) if chain else 0, final_pos)
+        for root, pos, chain, final_pos in analyses
+        if root
+    )
+
+
+def _best_forced_lemma(word: str) -> str:
+    candidates = _forced_decompositions(word)
+    if not candidates:
+        return ""
+
+    bare = word.strip().lower()
+
+    def _score(item: tuple[str, str, int, str]) -> tuple[int, int, int, int, int]:
+        root, pos, chain_len, _final_pos = item
+        root_low = root.lower()
+        return (
+            1 if root_low == bare else 0,
+            1 if bare.startswith(root_low) else 0,
+            1 if chain_len > 0 else 0,
+            1 if pos == "noun" else 0,
+            len(root_low),
+        )
+
+    return max(candidates, key=_score)[0].lower()
 
 
 def closed_class_categories(word: str) -> set[str]:

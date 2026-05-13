@@ -178,7 +178,7 @@ function transcriptView(session) {
     );
     mark.addEventListener("click", () => {
       if (isMemoryEntity(m)) {
-        location.hash = entityMemoryHash(mentionKindToNodeKind(m.mention_type), m.node?.label || m.surface);
+        location.hash = entityMemoryHash(mentionKindToNodeKind(m.mention_type), m.node?.display_label || m.node?.label || m.surface);
         return;
       }
       focusMention(session, m);
@@ -240,7 +240,7 @@ function mentionCard(session, m, isResolved) {
       ? el("button", {
           class: "surface entity-link",
           type: "button",
-          onclick: () => (location.hash = entityMemoryHash(mentionKindToNodeKind(m.mention_type), m.node?.label || m.surface)),
+          onclick: () => (location.hash = entityMemoryHash(mentionKindToNodeKind(m.mention_type), m.node?.display_label || m.node?.label || m.surface)),
         }, [`"${m.surface}"`])
       : el("span", { class: "surface" }, [`"${m.surface}"`]),
     el("span", { class: "chip" }, [typeLabel]),
@@ -253,9 +253,9 @@ function mentionCard(session, m, isResolved) {
         ? el("button", {
             class: "entity-link",
             type: "button",
-            onclick: () => (location.hash = entityMemoryHash(m.node.kind, m.node.label)),
-          }, [`→ ${m.node.label}${tag}`])
-        : `→ ${m.node.label}${tag}`,
+            onclick: () => (location.hash = entityMemoryHash(m.node.kind, m.node.display_label || m.node.label)),
+          }, [`→ ${m.node.display_label || m.node.label}${tag}`])
+        : `→ ${m.node.display_label || m.node.label}${tag}`,
     ]));
   }
 
@@ -302,10 +302,10 @@ async function openResolveModal(session, mention) {
       suggestions.appendChild(
         el("button", {
           onclick: () => {
-            input.value = n.label;
+            input.value = n.display_label || n.label;
             input.dataset.nodeId = n.id;
           },
-        }, [`${n.label}${n.is_unknown ? " (Bilinmeyen)" : ""}`])
+        }, [`${n.display_label || n.label}${n.is_unknown ? " (Bilinmeyen)" : ""}`])
       );
     }
   };
