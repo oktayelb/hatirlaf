@@ -178,6 +178,17 @@
   font-size: 13px;
 }
 
+.recap-rank-label.entity-link {
+  display: block;
+  width: 100%;
+  text-align: left;
+  color: var(--fg);
+}
+.recap-rank-label.entity-link:hover {
+  text-decoration: none;
+  color: var(--accent-2);
+}
+
 .recap-rank-count {
   color: var(--accent-2);
   font-size: 12px;
@@ -222,13 +233,25 @@
   margin-top: 12px;
 }
 
-.recap-tags span {
+.recap-tags .recap-tag {
   border-radius: 6px;
   border: 1px solid rgba(47, 167, 160, 0.25);
   background: rgba(47, 167, 160, 0.1);
   color: var(--accent-2);
   padding: 4px 9px;
   font-size: 12px;
+}
+.recap-tags .recap-tag:hover {
+  text-decoration: none;
+  background: rgba(47, 167, 160, 0.16);
+}
+
+.recap-inline-link {
+  color: var(--accent-2);
+  font-size: inherit;
+}
+.recap-inline-link:hover {
+  text-decoration: none;
 }
 
 .recap-link {

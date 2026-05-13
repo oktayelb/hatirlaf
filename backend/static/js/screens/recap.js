@@ -1,5 +1,5 @@
 import { api } from "../api.js";
-import { el } from "./utils.js";
+import { el, entityMemoryHash } from "./utils.js";
 
 const MONTH_NAMES = [
   "Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran",
@@ -132,27 +132,33 @@ function statsGrid(stats) {
 
 function topLists(recap) {
   return el("section", { class: "recap-columns" }, [
-    rankedList("İnsanlar", recap.top_people || [], "Henüz kişi yok"),
-    rankedList("Yerler", recap.top_places || [], "Henüz yer yok"),
+    rankedList("İnsanlar", recap.top_people || [], "Henüz kişi yok", "PERSON"),
+    rankedList("Yerler", recap.top_places || [], "Henüz yer yok", "LOCATION"),
     rankedList("Yoğun Günler", formatDays(recap.busiest_days || []), "Henüz gün yok"),
   ]);
 }
 
-function rankedList(title, items, emptyText) {
+function rankedList(title, items, emptyText, kind) {
   return el("div", { class: "recap-panel" }, [
     el("h3", {}, [title]),
     items.length
       ? el("div", { class: "recap-rank-list" },
-          items.slice(0, 5).map((item, index) => rankedItem(item, index))
+          items.slice(0, 5).map((item, index) => rankedItem(item, index, kind))
         )
       : el("p", { class: "muted" }, [emptyText]),
   ]);
 }
 
-function rankedItem(item, index) {
+function rankedItem(item, index, kind) {
   return el("div", { class: "recap-rank" }, [
     el("span", { class: "recap-rank-num" }, [index + 1]),
-    el("span", { class: "recap-rank-label" }, [item.label]),
+    kind && item.label
+      ? el("button", {
+          class: "recap-rank-label entity-link",
+          type: "button",
+          onclick: () => (location.hash = entityMemoryHash(kind, item.label)),
+        }, [item.label])
+      : el("span", { class: "recap-rank-label" }, [item.label]),
     el("span", { class: "recap-rank-count" }, [item.count]),
   ]);
 }
@@ -192,11 +198,21 @@ function memoryCard(item) {
     el("div", { class: "recap-memory-meta" }, [
       date,
       item.time ? ` · ${item.time}` : "",
-      item.place ? ` · ${item.place}` : "",
+      item.place
+        ? el("button", {
+            class: "entity-link recap-inline-link",
+            type: "button",
+            onclick: () => (location.hash = entityMemoryHash("LOCATION", item.place)),
+          }, [item.place])
+        : "",
     ]),
     el("p", {}, [item.text || "Olay"]),
     people.length
-      ? el("div", { class: "recap-tags" }, people.map((p) => el("span", {}, [p])))
+      ? el("div", { class: "recap-tags" }, people.map((p) => el("button", {
+          class: "entity-link recap-tag",
+          type: "button",
+          onclick: () => (location.hash = entityMemoryHash("PERSON", p)),
+        }, [p])))
       : null,
     item.session_id
       ? el("button", {

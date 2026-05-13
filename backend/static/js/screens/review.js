@@ -4,7 +4,7 @@
 
 import { api } from "../api.js";
 import { emit, toast } from "../events.js";
-import { el, escapeHtml, MENTION_LABELS, modal } from "./utils.js";
+import { el, entityMemoryHash, MENTION_LABELS, modal } from "./utils.js";
 
 let pollHandle = null;
 
@@ -176,7 +176,13 @@ function transcriptView(session) {
       },
       [text.slice(m.char_start, m.char_end)]
     );
-    mark.addEventListener("click", () => focusMention(session, m));
+    mark.addEventListener("click", () => {
+      if (isMemoryEntity(m)) {
+        location.hash = entityMemoryHash(mentionKindToNodeKind(m.mention_type), m.node?.label || m.surface);
+        return;
+      }
+      focusMention(session, m);
+    });
     container.appendChild(mark);
     cursor = m.char_end;
   }
@@ -229,15 +235,27 @@ function mentionCard(session, m, isResolved) {
   const hint = m.conflict_hint || "";
   const typeLabel = MENTION_LABELS[m.mention_type] || m.mention_type;
 
-  card.appendChild(el("div", { style: "display:flex; justify-content:space-between;" }, [
-    el("span", { class: "surface" }, [`"${m.surface}"`]),
+  card.appendChild(el("div", { style: "display:flex; justify-content:space-between; gap:10px; align-items:flex-start;" }, [
+    isMemoryEntity(m)
+      ? el("button", {
+          class: "surface entity-link",
+          type: "button",
+          onclick: () => (location.hash = entityMemoryHash(mentionKindToNodeKind(m.mention_type), m.node?.label || m.surface)),
+        }, [`"${m.surface}"`])
+      : el("span", { class: "surface" }, [`"${m.surface}"`]),
     el("span", { class: "chip" }, [typeLabel]),
   ]));
   if (hint) card.appendChild(el("div", { class: "hint" }, [hint]));
   if (m.node) {
     const tag = m.node.is_unknown ? " (Bilinmeyen)" : "";
     card.appendChild(el("div", { class: "muted", style: "font-size:12px;" }, [
-      `→ ${m.node.label}${tag}`,
+      isMemoryEntity(m)
+        ? el("button", {
+            class: "entity-link",
+            type: "button",
+            onclick: () => (location.hash = entityMemoryHash(m.node.kind, m.node.label)),
+          }, [`→ ${m.node.label}${tag}`])
+        : `→ ${m.node.label}${tag}`,
     ]));
   }
 
@@ -409,6 +427,10 @@ function playRange(start, end) {
 
 function mentionKindToNodeKind(k) {
   return { PRONOUN: "PERSON" }[k] || k;
+}
+
+function isMemoryEntity(m) {
+  return ["PERSON", "LOCATION"].includes(m.mention_type);
 }
 
 function kindLabel(k) {

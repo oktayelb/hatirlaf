@@ -37,6 +37,14 @@ export const api = {
     const q = new URLSearchParams(params).toString();
     return request(`/nodes/${q ? "?" + q : ""}`);
   },
+  nodeMemories: ({ kind, label, node_id } = {}) => {
+    const params = {};
+    if (kind) params.kind = kind;
+    if (label) params.label = label;
+    if (node_id) params.node_id = node_id;
+    const q = new URLSearchParams(params).toString();
+    return request(`/nodes/memories/${q ? "?" + q : ""}`);
+  },
   createNode: (data) => request("/nodes/", { method: "POST", body: data }),
   listMentions: (params = {}) => {
     const q = new URLSearchParams(params).toString();

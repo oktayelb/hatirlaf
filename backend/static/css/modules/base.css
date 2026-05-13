@@ -40,6 +40,21 @@ body.startup-active .app-shell {
   pointer-events: none;
 }
 button { font-family: inherit; }
+button.entity-link {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+button.entity-link:hover {
+  text-decoration: underline;
+}
+button.entity-link:focus-visible {
+  outline: 2px solid rgba(112, 208, 200, 0.6);
+  outline-offset: 2px;
+}
 
 .app-shell {
   display: flex;
@@ -52,4 +67,3 @@ button { font-family: inherit; }
   position: relative;
   box-shadow: 0 0 0 1px rgba(255,255,255,0.04), var(--shadow);
 }
-

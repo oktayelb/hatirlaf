@@ -46,6 +46,18 @@
 .review-transcript mark.resolved { background: rgba(62, 201, 138, 0.1); border-bottom-color: var(--ok); border-bottom-style: solid; }
 .review-transcript mark.active { outline: 2px solid var(--accent); border-radius: 3px; }
 
+.mention-card .surface.entity-link {
+  color: var(--fg);
+  text-align: left;
+}
+.mention-card .surface.entity-link:hover {
+  text-decoration: none;
+  color: var(--accent-2);
+}
+.mention-card .entity-link {
+  text-align: left;
+}
+
 .mentions-list { display: flex; flex-direction: column; gap: 10px; margin-top: 14px; }
 .mention-card {
   background: var(--bg-elev);
@@ -75,4 +87,3 @@
 .mention-actions button.primary { background: var(--accent); color: white; border-color: transparent; }
 .mention-actions button.ghost { background: transparent; }
 .mention-actions button.warn { background: rgba(255, 182, 72, 0.12); color: var(--warn); border-color: rgba(255, 182, 72, 0.3); }
-

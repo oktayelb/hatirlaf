@@ -6,6 +6,7 @@ import { on, toast } from "./events.js";
 import * as home from "./screens/home.js";
 import * as record from "./screens/record.js";
 import * as recap from "./screens/recap.js";
+import * as memories from "./screens/memories.js";
 import * as review from "./screens/review.js";
 import * as timeline from "./screens/timeline.js";
 
@@ -13,6 +14,7 @@ const TITLES = {
   home: "Hatırlaf",
   record: "Girişler",
   recap: "Özet",
+  memories: "Anılar",
   review: "İnceleme",
   timeline: "Takvim",
 };
@@ -21,6 +23,13 @@ const routes = [
   { pattern: /^#\/?$|^#\/home$/, screen: "home", render: home.render },
   { pattern: /^#\/record$/, screen: "record", render: record.render },
   { pattern: /^#\/recap$/, screen: "recap", render: recap.render },
+  {
+    pattern: /^#\/memories\/([^/]+)\/(.+)$/,
+    screen: "memories",
+    params: ["kind", "label"],
+    render: memories.render,
+    title: (params) => decodeURIComponent(params.label || "") || "Anılar",
+  },
   { pattern: /^#\/review\/(\d+)$/, screen: "review", params: ["id"], render: review.render },
   { pattern: /^#\/timeline$/, screen: "timeline", render: timeline.render },
 ];
@@ -84,7 +93,9 @@ async function route() {
     location.hash = "#/home";
     return;
   }
-  titleEl.textContent = TITLES[matched.screen] || "Hatırlaf";
+  titleEl.textContent = typeof matched.title === "function"
+    ? matched.title(params)
+    : (TITLES[matched.screen] || "Hatırlaf");
   currentScreen = matched.screen;
   backBtn.hidden = matched.screen === "home";
   for (const btn of navBtns) {

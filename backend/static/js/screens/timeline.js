@@ -3,6 +3,7 @@
 // box opens a drawer with the full list for that day (people included).
 
 import { api } from "../api.js";
+import { entityMemoryHash } from "./utils.js";
 import { el, modal } from "./utils.js";
 
 const MONTH_NAMES = [
@@ -176,17 +177,23 @@ export async function render(root) {
           el("p", { class: "muted" }, ["Bu güne ait kayıt yok."]),
         ])
       );
-    } else {
-      content.appendChild(el("div", { class: "muted", style: "font-size:12px; margin-bottom:10px;" }, [`${events.length} olay`]));
-      for (const ev of events) content.appendChild(renderEventCard(ev));
+      modal(content);
+      return;
     }
-    modal(content);
+
+    const overlay = modal(content);
+    content.appendChild(el("div", { class: "muted", style: "font-size:12px; margin-bottom:10px;" }, [`${events.length} olay`]));
+    for (const ev of events) content.appendChild(renderEventCard(ev, overlay.close));
   }
 
   load();
 }
 
-function renderEventCard(ev) {
+function renderEventCard(ev, closeModal = null) {
+  const go = (hash) => {
+    if (closeModal) closeModal();
+    location.hash = hash;
+  };
   const badge = el("span", { class: `cal-bucket-badge ${slugBucket(ev.zaman_dilimi)}` }, [
     ev.zaman_dilimi || "Olay",
   ]);
@@ -199,14 +206,22 @@ function renderEventCard(ev) {
   if (ev.lokasyon && !/bilinmeyen/i.test(ev.lokasyon)) {
     metaBits.push(el("span", { class: "cal-meta-bit" }, [
       el("span", { class: "cal-meta-label" }, ["Yer"]),
-      el("span", {}, [ev.lokasyon]),
+      el("button", {
+        class: "entity-link cal-location",
+        type: "button",
+        onclick: () => go(entityMemoryHash("LOCATION", ev.lokasyon)),
+      }, [ev.lokasyon]),
     ]));
   }
 
   const people = (ev.kisiler || []).filter(Boolean);
   const peopleRow = people.length
     ? el("div", { class: "cal-people" },
-        people.map((p) => el("span", { class: "cal-person" }, [p]))
+        people.map((p) => el("button", {
+          class: "cal-person entity-link",
+          type: "button",
+          onclick: () => go(entityMemoryHash("PERSON", p)),
+        }, [p]))
       )
     : null;
 
@@ -216,7 +231,7 @@ function renderEventCard(ev) {
     metaBits.length ? el("div", { class: "cal-event-meta" }, metaBits) : null,
     peopleRow,
     ev.session_id
-      ? el("button", { class: "cta ghost", style: "margin-top:4px;", onclick: () => (location.hash = `#/review/${ev.session_id}`) }, ["Kayda git"])
+      ? el("button", { class: "cta ghost", style: "margin-top:4px;", onclick: () => go(`#/review/${ev.session_id}`) }, ["Kayda git"])
       : null,
   ]);
 }

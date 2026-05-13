@@ -72,6 +72,11 @@ export function escapeHtml(s) {
     .replace(/'/g, "&#39;");
 }
 
+export function entityMemoryHash(kind, label) {
+  const normalizedKind = kind === "PRONOUN" ? "PERSON" : String(kind || "").toUpperCase();
+  return `#/memories/${encodeURIComponent(normalizedKind)}/${encodeURIComponent(String(label || ""))}`;
+}
+
 export const MENTION_LABELS = {
   PERSON: "Kişi",
   LOCATION: "Yer",

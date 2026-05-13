@@ -253,6 +253,67 @@ class NodeViewSet(viewsets.ModelViewSet):
             qs = qs.filter(Q(label__icontains=q) | Q(aliases__icontains=q))
         return qs
 
+    @action(detail=False, methods=["get"], url_path="memories")
+    def memories(self, request):
+        kind = (request.query_params.get("kind") or "").strip().upper()
+        label = (request.query_params.get("label") or "").strip()
+        node_id = (request.query_params.get("node_id") or "").strip()
+
+        valid_kinds = {choice[0] for choice in NodeKind.choices}
+        if kind not in valid_kinds:
+            return Response(
+                {"detail": "kind must be a valid node kind"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not label and not node_id:
+            return Response(
+                {"detail": "label or node_id is required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        node = None
+        if node_id:
+            node = get_object_or_404(Node, pk=node_id)
+            kind = node.kind
+            label = node.label
+        else:
+            node = Node.objects.filter(kind=kind, label__iexact=label).first()
+
+        memories = _node_memories_for(kind=kind, label=label, node=node)
+        total_mentions = sum(len(item["matched_mentions"]) for item in memories)
+        total_events = sum(len(item["event_matches"]) for item in memories)
+
+        node_payload = (
+            NodeSerializer(node, context={"request": request}).data
+            if node
+            else {
+                "id": None,
+                "kind": kind,
+                "kind_display": dict(NodeKind.choices).get(kind, kind),
+                "label": label,
+                "aliases": [],
+                "is_unknown": False,
+                "time_value": "",
+                "notes": "",
+                "mention_count": total_mentions,
+                "created_at": None,
+                "updated_at": None,
+            }
+        )
+
+        return Response(
+            {
+                "node": node_payload,
+                "resolved": bool(node),
+                "stats": {
+                    "sessions": len(memories),
+                    "mentions": total_mentions,
+                    "events": total_events,
+                },
+                "memories": memories,
+            }
+        )
+
 
 class EdgeListView(generics.ListAPIView):
     serializer_class = EdgeSerializer
@@ -713,6 +774,138 @@ def _bucket_for_date(date_iso: str, recorded_at) -> str:
     if event_date > recorded_date:
         return "Gelecek"
     return "Şu An"
+
+
+def _node_memories_for(*, kind: str, label: str, node: Node | None) -> list[dict]:
+    label_norm = _normalise_text(label)
+    sessions = (
+        Session.objects.exclude(status=SessionStatus.FAILED)
+        .prefetch_related("mentions__node")
+        .order_by("-recorded_at")
+    )
+
+    rows: list[dict] = []
+    for session in sessions:
+        matched_mentions = [
+            mention
+            for mention in session.mentions.all()
+            if _mention_matches_entity(mention, kind=kind, label_norm=label_norm, node=node)
+        ]
+        event_matches = [
+            event
+            for event in _calendar_events_for_session(session)
+            if _event_matches_entity(event, kind=kind, label_norm=label_norm, label=label)
+        ]
+        if not matched_mentions and not event_matches:
+            continue
+
+        rows.append(
+            {
+                "session_id": session.id,
+                "recorded_at": session.recorded_at,
+                "status": session.status,
+                "eventification_status": session.eventification_status,
+                "matched_label": label,
+                "transcript_excerpt": _memory_excerpt(session, label, matched_mentions, event_matches),
+                "matched_mentions": [
+                    {
+                        "id": mention.id,
+                        "surface": mention.surface,
+                        "mention_type": mention.mention_type,
+                        "resolved": mention.resolved,
+                        "node_id": mention.node_id,
+                    }
+                    for mention in matched_mentions
+                ],
+                "event_matches": [
+                    {
+                        "date": event.get("tarih", ""),
+                        "time": event.get("saat", ""),
+                        "bucket": event.get("zaman_dilimi", ""),
+                        "text": event.get("olay", ""),
+                        "place": event.get("lokasyon", ""),
+                        "people": event.get("kisiler", []),
+                    }
+                    for event in event_matches
+                ],
+            }
+        )
+    return rows
+
+
+def _mention_matches_entity(mention: Mention, *, kind: str, label_norm: str, node: Node | None) -> bool:
+    if node and mention.node_id == node.id:
+        return True
+    if not label_norm:
+        return False
+    if mention.mention_type != kind:
+        return False
+    return _normalise_text(mention.surface) == label_norm
+
+
+def _event_matches_entity(event: dict, *, kind: str, label_norm: str, label: str) -> bool:
+    if kind == NodeKind.PERSON:
+        people = event.get("kisiler") or []
+        for person in people:
+            person_norm = _normalise_text(person)
+            if person_norm and person_norm != "ben" and person_norm == label_norm:
+                return True
+        return False
+    if kind == NodeKind.LOCATION:
+        return _normalise_text(event.get("lokasyon")) == label_norm
+    if kind == NodeKind.ORG:
+        return _normalise_text(event.get("lokasyon")) == label_norm or any(
+            _normalise_text(person) == label_norm for person in (event.get("kisiler") or [])
+        )
+    return label_norm in _normalise_text(event.get("olay"))
+
+
+def _memory_excerpt(
+    session: Session,
+    label: str,
+    mentions: list[Mention],
+    event_matches: list[dict],
+) -> str:
+    text = (session.transcript or "").strip()
+    if text:
+        for mention in mentions:
+            if mention.char_start is None or mention.char_end is None:
+                continue
+            if mention.char_start < 0 or mention.char_end <= mention.char_start:
+                continue
+            start = max(0, mention.char_start - 52)
+            end = min(len(text), mention.char_end + 90)
+            snippet = text[start:end].strip()
+            if start > 0:
+                snippet = "…" + snippet
+            if end < len(text):
+                snippet = snippet + "…"
+            if snippet:
+                return snippet
+        label_norm = _normalise_text(label)
+        idx = _normalise_text(text).find(label_norm)
+        if idx >= 0:
+            start = max(0, idx - 52)
+            end = min(len(text), idx + len(label) + 90)
+            snippet = text[start:end].strip()
+            if start > 0:
+                snippet = "…" + snippet
+            if end < len(text):
+                snippet = snippet + "…"
+            if snippet:
+                return snippet
+    if event_matches:
+        first = event_matches[0]
+        bits = [str(first.get("text") or "").strip()]
+        place = str(first.get("place") or "").strip()
+        if place:
+            bits.append(place)
+        return " · ".join(bit for bit in bits if bit)
+    return text[:180] + ("…" if len(text) > 180 else "")
+
+
+def _normalise_text(value) -> str:
+    return str(value or "").strip().casefold()
 
 
 @api_view(["GET"])
