@@ -365,7 +365,8 @@ def _calendar_events_for_session(session: Session) -> list[dict]:
     """Return structured events, then NLP hints, then a recording fallback."""
     events = session.structured_events or []
     if events:
-        return _expand_structured_event_text(events, session)
+        expanded = _expand_structured_event_text(events, session)
+        return [event for event in expanded if isinstance(event, dict)]
 
     hint_events = _events_from_nlp_hints(session)
     if hint_events:
@@ -386,12 +387,12 @@ def _calendar_events_for_session(session: Session) -> list[dict]:
 
 def _expand_structured_event_text(events: list[dict], session: Session) -> list[dict]:
     clauses = (session.nlp_hints or {}).get("clauses") or []
-    if not isinstance(clauses, list):
-        return events
 
     expanded = []
     for event in events:
         if not isinstance(event, dict):
+            continue
+        if not isinstance(clauses, list):
             expanded.append(event)
             continue
         full_text = _matching_clause_text(event, clauses)

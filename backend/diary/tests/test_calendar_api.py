@@ -135,3 +135,30 @@ class CalendarApiTests(TestCase):
         self.assertEqual(len(day_events), 1)
         self.assertEqual(day_events[0]["saat"], "10:30")
         self.assertEqual(day_events[0]["olay"], "Toplantıya gideceğim.")
+
+    def test_calendar_ignores_malformed_structured_event_items(self):
+        Session.objects.create(
+            client_uuid="calendar-malformed-structured-events",
+            recorded_at=timezone.make_aware(dt.datetime(2026, 4, 30, 8, 15)),
+            status=SessionStatus.COMPLETED,
+            transcript="Bugün okula gittim.",
+            eventification_status=EventificationStatus.COMPLETED,
+            structured_events=[
+                "not-an-event",
+                {
+                    "zaman_dilimi": "Şu An",
+                    "tarih": "2026-04-30",
+                    "saat": "08:15",
+                    "lokasyon": "Okul",
+                    "olay": "Okula gittim.",
+                    "kisiler": ["Ben"],
+                },
+            ],
+        )
+
+        response = self.client.get(reverse("calendar"), {"month": "2026-04"})
+
+        self.assertEqual(response.status_code, 200)
+        day_events = response.json()["days"]["2026-04-30"]
+        self.assertEqual(len(day_events), 1)
+        self.assertEqual(day_events[0]["olay"], "Okula gittim.")
