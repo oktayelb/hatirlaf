@@ -5,12 +5,14 @@ import { api } from "./api.js";
 import { on, toast } from "./events.js";
 import * as home from "./screens/home.js";
 import * as record from "./screens/record.js";
+import * as recap from "./screens/recap.js";
 import * as review from "./screens/review.js";
 import * as timeline from "./screens/timeline.js";
 
 const TITLES = {
   home: "Hatırlaf",
   record: "Girişler",
+  recap: "Özet",
   review: "İnceleme",
   timeline: "Takvim",
 };
@@ -18,14 +20,16 @@ const TITLES = {
 const routes = [
   { pattern: /^#\/?$|^#\/home$/, screen: "home", render: home.render },
   { pattern: /^#\/record$/, screen: "record", render: record.render },
+  { pattern: /^#\/recap$/, screen: "recap", render: recap.render },
   { pattern: /^#\/review\/(\d+)$/, screen: "review", params: ["id"], render: review.render },
   { pattern: /^#\/timeline$/, screen: "timeline", render: timeline.render },
 ];
-const MAIN_ROUTE_ORDER = ["home", "record", "timeline"];
+const MAIN_ROUTE_ORDER = ["home", "record", "timeline", "recap"];
 const MAIN_ROUTE_HASH = {
   home: "#/home",
   record: "#/record",
   timeline: "#/timeline",
+  recap: "#/recap",
 };
 
 const screenRoot = document.getElementById("screen-root");
@@ -62,7 +66,7 @@ function updateOnline(isOnline) {
 async function route() {
   const hash = location.hash || "#/home";
   const previousScreen = currentScreen;
-  for (const mod of [home, record, review, timeline]) {
+  for (const mod of [home, record, recap, review, timeline]) {
     if (typeof mod.cleanup === "function") mod.cleanup();
   }
   let matched = null;

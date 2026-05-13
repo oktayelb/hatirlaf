@@ -46,5 +46,6 @@ export const api = {
     request(`/mentions/${id}/resolve/`, { method: "POST", body: payload }),
   timeline: () => request("/timeline/"),
   calendar: (month) => request(`/calendar/${month ? `?month=${month}` : ""}`),
+  recap: (month) => request(`/recap/${month ? `?month=${month}` : ""}`),
   graph: () => request("/graph/"),
 };

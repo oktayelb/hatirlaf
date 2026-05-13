@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import logging
 import datetime as dt
+from collections import Counter
 
 from django.db.models import Count, Q
 from django.http import FileResponse, Http404
@@ -31,7 +32,16 @@ from rest_framework.decorators import action, api_view
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
 
-from ..models import Edge, EventificationStatus, Mention, Node, NodeKind, Session, SessionStatus
+from ..models import (
+    Edge,
+    EventificationStatus,
+    Mention,
+    MentionType,
+    Node,
+    NodeKind,
+    Session,
+    SessionStatus,
+)
 from ..processing.pipeline import (
     is_eventification_active,
     is_processing_active,
@@ -359,6 +369,218 @@ def calendar_view(request):
         days[iso].sort(key=lambda e: (e.get("saat") or "99:99"))
 
     return Response({"days": days})
+
+
+@api_view(["GET"])
+def recap_view(request):
+    """Monthly memory digest built from sessions, events, and graph mentions."""
+    month = (request.query_params.get("month") or "").strip()
+    if month:
+        try:
+            month_start, month_end = _month_bounds(month)
+        except ValueError:
+            return Response(
+                {"detail": "month must be YYYY-MM"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+    else:
+        today = timezone.localdate()
+        month_start, month_end = _month_bounds(f"{today.year}-{today.month:02d}")
+
+    sessions = list(
+        Session.objects.exclude(status=SessionStatus.FAILED)
+        .filter(recorded_at__date__gte=month_start, recorded_at__date__lt=month_end)
+        .prefetch_related("mentions__node")
+        .order_by("recorded_at")
+    )
+    event_rows: list[dict] = []
+    people: Counter[str] = Counter()
+    places: Counter[str] = Counter()
+    days: Counter[str] = Counter()
+    future_count = 0
+    past_count = 0
+
+    for session in sessions:
+        for mention in session.mentions.all():
+            label = mention.node.label if mention.node else mention.surface
+            label = (label or "").strip()
+            if not label or (mention.node and mention.node.is_unknown):
+                continue
+            if mention.mention_type == MentionType.PERSON:
+                people[label] += 1
+            elif mention.mention_type in {MentionType.LOCATION, MentionType.ORG}:
+                places[label] += 1
+
+        for event in _calendar_events_for_session(session):
+            if not isinstance(event, dict):
+                continue
+            iso = (event.get("tarih") or _recorded_date_iso(session)).strip()
+            try:
+                event_date = dt.date.fromisoformat(iso)
+            except ValueError:
+                continue
+            if event_date < month_start or event_date >= month_end:
+                continue
+            row = {
+                "session_id": session.id,
+                "recorded_at": session.recorded_at,
+                "date": iso,
+                "time": event.get("saat", ""),
+                "bucket": event.get("zaman_dilimi", ""),
+                "text": event.get("olay", ""),
+                "people": event.get("kisiler", []),
+                "place": event.get("lokasyon", ""),
+            }
+            event_rows.append(row)
+            days[iso] += 1
+            if row["bucket"] == "Gelecek":
+                future_count += 1
+            elif row["bucket"] == "Geçmiş":
+                past_count += 1
+            for person in row["people"] if isinstance(row["people"], list) else []:
+                person = str(person).strip()
+                if person and person.lower() != "ben":
+                    people[person] += 1
+            place = str(row["place"] or "").strip()
+            if place and "bilinmeyen" not in place.lower():
+                places[place] += 1
+
+    unresolved_count = Mention.objects.filter(
+        session__in=sessions,
+        is_conflict=True,
+        resolved=False,
+    ).count()
+    highlights = _recap_highlights(event_rows, sessions)
+    busiest = [
+        {"date": iso, "count": count}
+        for iso, count in sorted(days.items(), key=lambda item: (-item[1], item[0]))[:5]
+    ]
+
+    return Response(
+        {
+            "month": month_start.strftime("%Y-%m"),
+            "title": _recap_title(month_start, len(sessions), event_rows, people, places),
+            "summary": _recap_summary(month_start, sessions, event_rows, people, places),
+            "stats": {
+                "sessions": len(sessions),
+                "events": len(event_rows),
+                "people": len(people),
+                "places": len(places),
+                "future_events": future_count,
+                "past_events": past_count,
+                "unresolved_conflicts": unresolved_count,
+                "active_days": len(days),
+            },
+            "top_people": _counter_items(people),
+            "top_places": _counter_items(places),
+            "busiest_days": busiest,
+            "highlights": highlights,
+        }
+    )
+
+
+def _month_bounds(month: str) -> tuple[dt.date, dt.date]:
+    y, m = month.split("-")
+    year = int(y)
+    month_num = int(m)
+    start = dt.date(year, month_num, 1)
+    if month_num == 12:
+        return start, dt.date(year + 1, 1, 1)
+    return start, dt.date(year, month_num + 1, 1)
+
+
+def _counter_items(counter: Counter[str], limit: int = 6) -> list[dict]:
+    return [{"label": label, "count": count} for label, count in counter.most_common(limit)]
+
+
+def _recap_title(
+    month_start: dt.date,
+    session_count: int,
+    events: list[dict],
+    people: Counter[str],
+    places: Counter[str],
+) -> str:
+    month_name = _tr_month_name(month_start)
+    if people:
+        return f"{month_name}: en çok {people.most_common(1)[0][0]} akılda kaldı"
+    if places:
+        return f"{month_name}: {places.most_common(1)[0][0]} öne çıktı"
+    if events:
+        return f"{month_name}: {len(events)} anı yakalandı"
+    if session_count:
+        return f"{month_name}: {session_count} kayıt saklandı"
+    return f"{month_name}: henüz sessiz"
+
+
+def _recap_summary(
+    month_start: dt.date,
+    sessions: list[Session],
+    events: list[dict],
+    people: Counter[str],
+    places: Counter[str],
+) -> str:
+    if not sessions:
+        return "Bu ay için henüz günlük kaydı yok. İlk kaydı eklediğinde burası kendiliğinden bir hafıza özetine dönüşür."
+    month_name = _tr_month_name(month_start)
+    bits = [f"{month_name} ayında {len(sessions)} kayıt ve {len(events)} takvim olayı oluştu."]
+    if people:
+        names = ", ".join(label for label, _ in people.most_common(3))
+        bits.append(f"En çok adı geçen kişiler: {names}.")
+    if places:
+        labels = ", ".join(label for label, _ in places.most_common(2))
+        bits.append(f"Öne çıkan yerler: {labels}.")
+    if not people and not places:
+        bits.append("Kayıtlar daha çok kişisel notlar ve olay akışı etrafında toplanıyor.")
+    return " ".join(bits)
+
+
+def _recap_highlights(events: list[dict], sessions: list[Session]) -> list[dict]:
+    if events:
+        ranked = sorted(
+            events,
+            key=lambda ev: (
+                len(str(ev.get("people") or [])),
+                len(str(ev.get("text") or "")),
+            ),
+            reverse=True,
+        )
+        return ranked[:5]
+    fallback = []
+    for session in sessions[:5]:
+        text = (session.transcript or "").strip()
+        if not text:
+            continue
+        fallback.append(
+            {
+                "session_id": session.id,
+                "recorded_at": session.recorded_at,
+                "date": _recorded_date_iso(session),
+                "time": timezone.localtime(session.recorded_at).strftime("%H:%M"),
+                "bucket": "Geçmiş",
+                "text": text[:180],
+                "people": [],
+                "place": "",
+            }
+        )
+    return fallback
+
+
+def _tr_month_name(value: dt.date) -> str:
+    names = [
+        "Ocak",
+        "Şubat",
+        "Mart",
+        "Nisan",
+        "Mayıs",
+        "Haziran",
+        "Temmuz",
+        "Ağustos",
+        "Eylül",
+        "Ekim",
+        "Kasım",
+        "Aralık",
+    ]
+    return names[value.month - 1]
 
 
 def _calendar_events_for_session(session: Session) -> list[dict]:

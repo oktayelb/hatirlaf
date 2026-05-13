@@ -9,6 +9,7 @@ from .views.api import (
     calendar_view,
     graph_view,
     health_view,
+    recap_view,
     timeline_view,
 )
 
@@ -24,4 +25,5 @@ urlpatterns = [
     path("calendar/", calendar_view, name="calendar"),
     path("graph/", graph_view, name="graph"),
     path("health/", health_view, name="health"),
+    path("recap/", recap_view, name="recap"),
 ]
