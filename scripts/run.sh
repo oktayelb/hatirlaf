@@ -16,4 +16,6 @@ echo "  API:      http://$HOST:$PORT/api/"
 echo "  Admin:    http://$HOST:$PORT/admin/"
 echo
 
+python manage.py migrate --noinput
+
 exec python manage.py runserver "$HOST:$PORT"

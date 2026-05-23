@@ -176,6 +176,8 @@ def morph_analyze(text: str, analyzer, backend: str | None) -> list[Token]:
                 lemma = fallback_lemma(surface)
         else:
             lemma = fallback_lemma(surface)
+        if surface[:1].isupper() and lemma in TR_GIVEN_NAMES:
+            is_proper = True
         tokens.append(
             Token(
                 surface=surface,
