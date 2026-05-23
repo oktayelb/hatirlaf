@@ -16,16 +16,33 @@ from ..models import (
     SessionStatus,
 )
 from ..processing import entity_registry as entity_registry_mod
+from ..processing import nlp as nlp_mod
 
 
-def persist_parsing_result(session: Session, extraction, parsed, flagged) -> int:
+def persist_parsing_result(
+    session: Session,
+    extraction,
+    parsed,
+    flagged,
+    *,
+    queue_eventification: bool = True,
+) -> int:
     """Persist mentions, session NLP hints, and completion state."""
     session.nlp_hints = extraction.to_json()
     session.structured_events = []
-    session.eventification_status = EventificationStatus.QUEUED
-    session.eventification_detail = "Olaylaştırma sıraya alındı."
+    session.eventification_status = (
+        EventificationStatus.QUEUED
+        if queue_eventification
+        else EventificationStatus.COMPLETED
+    )
+    session.eventification_detail = (
+        "Olaylaştırma sıraya alındı."
+        if queue_eventification
+        else "Debug çıkarım yenilendi; takvim NLP ipuçlarından gösteriliyor."
+    )
 
     with transaction.atomic():
+        session.edges.all().delete()
         session.mentions.all().delete()
 
         conflict_count = 0
@@ -126,6 +143,8 @@ def _auto_resolve(mention: Mention, fm) -> None:
     """Create/find a Node for a non-conflict mention and wire it up."""
     kind = _suggested_kind_to_node_kind(fm.suggested_kind or mention.mention_type)
     label = mention.surface.strip()
+    if kind in {NodeKind.PERSON, NodeKind.LOCATION, NodeKind.ORG}:
+        label = nlp_mod.normalize_entity_label(label)
     if not label:
         return
     node, _ = Node.objects.get_or_create(kind=kind, label=label)

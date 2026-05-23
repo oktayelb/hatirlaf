@@ -18,7 +18,7 @@ from .nlp_models import (
     EntityMention,
     Token,
 )
-from .nlp_morph import _TOKEN_RE, normalize_entity_lemma
+from .nlp_morph import _TOKEN_RE, normalize_entity_label, normalize_entity_lemma
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +52,7 @@ def _hf_ner_entities(text: str, ner) -> list[EntityMention]:
         end = int(ent.get("end", start + len(surface)))
         if not surface:
             continue
+        surface, end = _canonical_entity_span(surface, start, end, mtype)
         out.append(
             EntityMention(
                 surface=surface,
@@ -112,6 +113,7 @@ def _rule_entities(text: str, tokens: list[Token]) -> list[EntityMention]:
                     surface = clean_surface
                     end = start + len(surface)
 
+            surface, end = _canonical_entity_span(surface, start, end, mtype)
             out.append(
                 EntityMention(
                     surface=surface,
@@ -166,6 +168,17 @@ def _rule_entities(text: str, tokens: list[Token]) -> list[EntityMention]:
                 )
         i += 1
     return out
+
+
+def _canonical_entity_span(surface: str, start: int, end: int, mention_type: str) -> tuple[str, int]:
+    if mention_type not in {"PERSON", "LOCATION", "ORG"}:
+        return surface, end
+    canonical = normalize_entity_label(surface)
+    if not canonical:
+        return surface, end
+    if canonical == surface:
+        return surface, end
+    return canonical, start + len(canonical)
 
 
 def _strip_apostrophe_suffix(text: str) -> str:

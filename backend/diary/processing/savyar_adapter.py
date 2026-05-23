@@ -193,6 +193,37 @@ def best_lemma(word: str) -> str:
     return candidates[0].root
 
 
+def best_matching_root(word: str, root_hint: str) -> str:
+    """Return the highest-ranked decomposition whose root matches ``root_hint``."""
+    hint = root_hint.strip().lower()
+    if not word.strip() or not hint:
+        return ""
+
+    candidates = [
+        c
+        for c in analyze_word(word)
+        if c.root and c.root.lower() == hint and not c.pos.startswith("cc_")
+    ]
+    if candidates:
+        best = max(
+            candidates,
+            key=lambda c: (
+                c.ml_score if c.ml_score is not None else float("-inf"),
+                len(c.root),
+            ),
+        )
+        return best.root.lower()
+
+    forced = [
+        root
+        for root, _pos, _chain_len, _final_pos in _forced_decompositions(word)
+        if root.lower() == hint
+    ]
+    if forced:
+        return max(forced, key=len).lower()
+    return ""
+
+
 @lru_cache(maxsize=4096)
 def _forced_decompositions(word: str) -> tuple[tuple[str, str, int, str], ...]:
     """Return force-mode decompositions from SAVYAR's local decomposer.

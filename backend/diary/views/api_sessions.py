@@ -13,6 +13,7 @@ from ..processing.pipeline import (
     is_eventification_active,
     is_processing_active,
     kickoff,
+    reextract_all_transcripts,
 )
 from ..serializers import SessionDetailSerializer, SessionSerializer, SessionUploadSerializer
 
@@ -86,6 +87,14 @@ class SessionViewSet(viewsets.ModelViewSet):
         kickoff(session.id)
         return Response(
             SessionDetailSerializer(session, context={"request": request}).data
+        )
+
+    @action(detail=False, methods=["post"], url_path="reextract-all")
+    def reextract_all(self, request):
+        summary = reextract_all_transcripts()
+        return Response(
+            summary,
+            status=status.HTTP_202_ACCEPTED if summary.get("started") else status.HTTP_409_CONFLICT,
         )
 
     @action(detail=True, methods=["get"], url_path="audio")

@@ -8,6 +8,7 @@ from rest_framework.response import Response
 
 from ..models import Mention, Node, NodeKind
 from ..processing import entity_registry as entity_registry_mod
+from ..processing import nlp as nlp_mod
 from ..serializers import MentionSerializer, ResolveMentionSerializer
 from .api_shared import _default_kind_for, _rebuild_edges_for_session
 
@@ -50,6 +51,8 @@ class MentionViewSet(viewsets.ReadOnlyModelViewSet):
             kind = serializer.validated_data.get("kind") or _default_kind_for(mention)
             if kind not in {c[0] for c in NodeKind.choices}:
                 kind = NodeKind.OTHER
+            if kind in {NodeKind.PERSON, NodeKind.LOCATION, NodeKind.ORG}:
+                label = nlp_mod.normalize_entity_label(label)
             node, _ = Node.objects.get_or_create(
                 kind=kind,
                 label=label,

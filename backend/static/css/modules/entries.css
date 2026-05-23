@@ -1,8 +1,23 @@
 /* ---------- Entries list (Girişler) ---------- */
 
-.entries-header { margin-bottom: 14px; }
+.entries-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.entries-heading { min-width: 0; }
 .entries-title { margin: 0 0 4px; font-size: 18px; }
 .entries-sub { font-size: 13px; margin: 0; line-height: 1.5; }
+.entries-debug-btn {
+  width: auto;
+  flex: 0 0 auto;
+  padding: 10px 14px;
+  font-size: 13px;
+  white-space: nowrap;
+}
 
 .entries-list {
   display: flex;
@@ -137,4 +152,3 @@
   font-size: 12px;
   line-height: 1.35;
 }
-

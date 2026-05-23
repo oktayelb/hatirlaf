@@ -55,11 +55,17 @@ _ENTITY_SUFFIX_HINTS = (
 
 
 def fallback_lemma(word: str) -> str:
+    low = word.lower()
+    root_hint = _known_entity_root_hint(low)
+    if root_hint:
+        matched = savyar_adapter.best_matching_root(word, root_hint)
+        if matched:
+            return matched
+
     savyar_lemma = savyar_adapter.best_lemma(word)
     if savyar_lemma:
         return savyar_lemma
 
-    low = word.lower()
     for suf in _FALLBACK_SUFFIXES:
         if low.endswith(suf) and len(low) > len(suf) + 1:
             return low[: -len(suf)]
@@ -102,6 +108,11 @@ def _normalize_entity_token(token: str) -> str:
     if not bare:
         return ""
     low = bare.lower()
+    root_hint = _known_entity_root_hint(low)
+    if root_hint:
+        matched = savyar_adapter.best_matching_root(bare, root_hint)
+        if matched:
+            return matched
     root = savyar_adapter.best_lemma(bare)
     if not root:
         root = fallback_lemma(bare)
@@ -123,6 +134,16 @@ def _should_keep_original_entity_form(raw: str, low: str, root: str) -> bool:
     if any(low.endswith(suffix) for suffix in _ENTITY_SUFFIX_HINTS):
         return False
     return True
+
+
+def _known_entity_root_hint(low: str) -> str:
+    for label in sorted(TR_GIVEN_NAMES | TR_CITIES | TR_COUNTRIES, key=len, reverse=True):
+        if low == label or not low.startswith(label):
+            continue
+        tail = low[len(label):]
+        if tail in _ENTITY_SUFFIX_HINTS:
+            return label
+    return ""
 
 
 def _tr_title(token: str) -> str:

@@ -604,16 +604,19 @@ def _augment_mentions(
             cleaned = _clean_entity_token(m.surface)
             if not cleaned or len(cleaned) < 2:
                 continue
+            canonical = nlp_mod.normalize_entity_label(m.lemma or cleaned)
+            if not canonical:
+                canonical = cleaned
             # Recompute span to fit the cleaned token.
             idx = paragraph.lower().find(cleaned.lower(), max(0, m.char_start - 5))
             if idx == -1:
                 idx = m.char_start
             out.append(
                 nlp_mod.EntityMention(
-                    surface=cleaned,
-                    lemma=cleaned.lower(),
+                    surface=canonical,
+                    lemma=nlp_mod.normalize_entity_lemma(canonical),
                     char_start=idx,
-                    char_end=idx + len(cleaned),
+                    char_end=idx + len(canonical),
                     mention_type=m.mention_type,
                     source=m.source,
                     score=m.score,

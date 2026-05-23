@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import datetime as dt
+from unittest.mock import patch
 
 from django.test import TestCase
+from django.urls import reverse
 
-from diary.models import Session, SessionStatus
+from diary.models import Edge, EncounteredEntity, Mention, MentionType, Node, NodeKind, Session, SessionStatus
 from diary.processing import extractor, nlp
 from diary.processing.conflicts import detect_conflicts
 from diary.services import session_pipeline
@@ -58,3 +60,58 @@ class SessionPipelineServiceTests(TestCase):
         self.assertEqual(session.eventification_status, "completed")
         self.assertEqual(session.structured_events, [{"baslik": "Buluşma", "tarih": "2026-04-30"}])
         self.assertIn("llm ile 1 olay üretildi", session.eventification_detail)
+
+    def test_reextract_all_endpoint_rebuilds_mentions_from_transcripts(self):
+        recorded_at = dt.datetime(2026, 4, 30, 12, 0, tzinfo=dt.timezone.utc)
+        session = Session.objects.create(
+            client_uuid="bulk-1",
+            recorded_at=recorded_at,
+            transcript="Fatihle buluştum.",
+            status=SessionStatus.COMPLETED,
+        )
+        empty = Session.objects.create(
+            client_uuid="bulk-empty",
+            recorded_at=recorded_at,
+            transcript="",
+            status=SessionStatus.COMPLETED,
+        )
+        stale_node = Node.objects.create(kind=NodeKind.PERSON, label="Fatihle")
+        fresh_node = Node.objects.create(kind=NodeKind.PERSON, label="Fatih")
+        Mention.objects.create(
+            session=session,
+            surface="Fatihle",
+            lemma="fatihle",
+            char_start=0,
+            char_end=7,
+            mention_type=MentionType.PERSON,
+            node=stale_node,
+            resolved=True,
+        )
+        Edge.objects.create(
+            session=session,
+            source=stale_node,
+            target=fresh_node,
+            relation=Edge.Relation.MENTIONED_WITH,
+        )
+        EncounteredEntity.objects.create(kind=NodeKind.PERSON, label="fatihle")
+
+        with (
+            patch("diary.processing.pipeline.kickoff_eventification"),
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            response = self.client.post(reverse("session-reextract-all"))
+
+        self.assertEqual(response.status_code, 202)
+        self.assertEqual(response.json()["processed"], 1)
+        self.assertEqual(response.json()["skipped"], 1)
+        self.assertFalse(empty.mentions.exists())
+
+        session.refresh_from_db()
+        self.assertEqual(session.status, SessionStatus.COMPLETED)
+        self.assertEqual(session.eventification_status, "completed")
+        self.assertFalse(session.edges.exists())
+        mentions = list(session.mentions.values_list("surface", "lemma", "mention_type"))
+        self.assertEqual(mentions, [("Fatih", "fatih", MentionType.PERSON)])
+        labels = set(EncounteredEntity.objects.values_list("kind", "label"))
+        self.assertIn((NodeKind.PERSON, "fatih"), labels)
+        self.assertNotIn((NodeKind.PERSON, "fatihle"), labels)

@@ -12,11 +12,17 @@ export async function render(root) {
   cleanup();
   root.innerHTML = "";
 
+  const reextractAllBtn = el("button", { class: "cta ghost entries-debug-btn" }, [
+    "Tüm çıkarımları yenile",
+  ]);
   const header = el("div", { class: "entries-header" }, [
-    el("h2", { class: "entries-title" }, ["Tüm Girişler"]),
-    el("p", { class: "entries-sub muted" }, [
-      "Sesli kayıtların hem ses hem de yazı haline buradan ulaşır, dilediğin gibi düzenleyebilirsin.",
+    el("div", { class: "entries-heading" }, [
+      el("h2", { class: "entries-title" }, ["Tüm Girişler"]),
+      el("p", { class: "entries-sub muted" }, [
+        "Sesli kayıtların hem ses hem de yazı haline buradan ulaşır, dilediğin gibi düzenleyebilirsin.",
+      ]),
     ]),
+    reextractAllBtn,
   ]);
   root.appendChild(header);
 
@@ -27,6 +33,9 @@ export async function render(root) {
     ]),
   ]);
   root.appendChild(listWrap);
+  reextractAllBtn.addEventListener("click", () => {
+    openReextractAllModal({ listWrap, reextractAllBtn });
+  });
 
   let sessions;
   try {
@@ -45,6 +54,44 @@ export async function render(root) {
 
   paintList(listWrap, sessions);
   if (sessions.some(isProcessing)) startPolling(listWrap);
+}
+
+function openReextractAllModal({ listWrap, reextractAllBtn }) {
+  const content = el("div", { class: "confirm-dialog" }, [
+    el("h3", {}, ["Tüm çıkarımları yenile"]),
+    el("p", { class: "muted" }, [
+      "Tüm kayıtların kişi, yer ve zaman çıkarımları mevcut transkriptlerden yeniden üretilecek.",
+    ]),
+    el("div", { class: "confirm-dialog-actions" }, [
+      el("button", { class: "cta ghost", onclick: () => dialog.close() }, ["Vazgeç"]),
+      el("button", {
+        class: "cta",
+        onclick: async () => {
+          await reextractAll({ listWrap, reextractAllBtn, dialog });
+        },
+      }, ["Yenile"]),
+    ]),
+  ]);
+  const dialog = modal(content);
+}
+
+async function reextractAll({ listWrap, reextractAllBtn, dialog }) {
+  reextractAllBtn.setAttribute("disabled", "");
+  reextractAllBtn.textContent = "Yenileniyor…";
+  try {
+    const summary = await api.reextractAll();
+    dialog.close();
+    toast(summary.detail || "Çıkarımlar yenilendi");
+    const resp = await api.listSessions();
+    const sessions = Array.isArray(resp) ? resp : resp.results || [];
+    paintList(listWrap, sessions);
+    if (sessions.some(isProcessing)) startPolling(listWrap);
+  } catch (err) {
+    toast("Hata: " + err.message);
+  } finally {
+    reextractAllBtn.removeAttribute("disabled");
+    reextractAllBtn.textContent = "Tüm çıkarımları yenile";
+  }
 }
 
 export function cleanup() {

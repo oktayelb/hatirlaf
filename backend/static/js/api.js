@@ -32,6 +32,7 @@ export const api = {
   deleteSession: (id) =>
     request(`/sessions/${id}/`, { method: "DELETE" }),
   reprocess: (id) => request(`/sessions/${id}/process/`, { method: "POST" }),
+  reextractAll: () => request("/sessions/reextract-all/", { method: "POST" }),
   audioUrl: (id) => `${BASE}/sessions/${id}/audio/`,
   listNodes: (params = {}) => {
     const q = new URLSearchParams(params).toString();

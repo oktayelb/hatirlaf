@@ -13,7 +13,7 @@ import traceback
 
 from django.conf import settings
 
-from ..models import Session, SessionStatus
+from ..models import Edge, EncounteredEntity, Session, SessionStatus
 from . import extractor as extractor_mod
 from . import llm as llm_mod
 from . import nlp as nlp_mod
@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 _active_lock = threading.Lock()
 _active_processing: set[int] = set()
 _active_eventification: set[int] = set()
+_bulk_reextract_lock = threading.Lock()
 
 
 def is_processing_active(session_id: int) -> bool:
@@ -136,12 +137,88 @@ def _process(session: Session) -> None:
     _parse_and_store(session)
 
 
-def _parse_and_store(session: Session) -> None:
+def _parse_and_store(session: Session, *, queue_eventification: bool = True) -> None:
     extraction = extractor_mod.extract(session.transcript, session.recorded_at)
     parsed = extraction.parse or nlp_mod.analyze(session.transcript)
     flagged = detect_conflicts(parsed.mentions, session.transcript, session.recorded_at)
-    session_pipeline_mod.persist_parsing_result(session, extraction, parsed, flagged)
-    kickoff_eventification(session.id)
+    session_pipeline_mod.persist_parsing_result(
+        session,
+        extraction,
+        parsed,
+        flagged,
+        queue_eventification=queue_eventification,
+    )
+    if queue_eventification:
+        kickoff_eventification(session.id)
+
+
+def reextract_all_transcripts() -> dict:
+    """Re-run NLP/entity extraction for every saved transcript.
+
+    This debug helper intentionally skips transcription and starts from the
+    current ``Session.transcript`` values. It rebuilds the encountered-entity
+    registry from the refreshed mentions so stale person/place labels do not
+    survive parser changes.
+    """
+    if not _bulk_reextract_lock.acquire(blocking=False):
+        return {
+            "started": False,
+            "processed": 0,
+            "skipped": 0,
+            "failed": 0,
+            "detail": "Toplu çıkarım zaten çalışıyor.",
+        }
+
+    processed = 0
+    skipped = 0
+    failed = 0
+    try:
+        EncounteredEntity.objects.all().delete()
+        sessions = list(Session.objects.order_by("id"))
+        for session in sessions:
+            if not (session.transcript or "").strip():
+                skipped += 1
+                continue
+            if is_processing_active(session.id) or is_eventification_active(session.id):
+                skipped += 1
+                continue
+
+            session.status = SessionStatus.PARSING
+            session.status_detail = "Debug: kişi/yer çıkarımı yeniden çalışıyor."
+            session.structured_events = []
+            session.save(
+                update_fields=[
+                    "status",
+                    "status_detail",
+                    "structured_events",
+                    "updated_at",
+                ]
+            )
+            try:
+                Edge.objects.filter(session=session).delete()
+                _parse_and_store(session, queue_eventification=False)
+                processed += 1
+            except Exception:  # pragma: no cover
+                failed += 1
+                logger.error(
+                    "Bulk re-extract for session %s failed: %s",
+                    session.id,
+                    traceback.format_exc(),
+                )
+                session_pipeline_mod.mark_session_failed(session.id, traceback.format_exc())
+
+        return {
+            "started": True,
+            "processed": processed,
+            "skipped": skipped,
+            "failed": failed,
+            "detail": (
+                f"{processed} kayıt yeniden çıkarıldı; "
+                f"{skipped} kayıt atlandı; {failed} hata."
+            ),
+        }
+    finally:
+        _bulk_reextract_lock.release()
 
 
 def run_eventification(session_id: int) -> None:

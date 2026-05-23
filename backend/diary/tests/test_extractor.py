@@ -189,8 +189,44 @@ class SavyarIntegrationTests(SimpleTestCase):
 
     def test_savyar_normalizes_inflected_entity_labels(self):
         self.assertEqual(nlp.normalize_entity_label("Yiğitle"), "Yiğit")
+        self.assertEqual(nlp.normalize_entity_label("Fatihle"), "Fatih")
         self.assertEqual(nlp.normalize_entity_label("Kadıköy'de"), "Kadıköy")
         self.assertEqual(nlp.normalize_entity_label("Ali Yılmaz"), "Ali Yılmaz")
+
+    def test_savyar_prefers_decomposition_matching_known_name_root(self):
+        with patch.object(
+            savyar_adapter,
+            "analyze_word",
+            return_value=(
+                savyar_adapter.MorphCandidate(
+                    word="Fatihle",
+                    root="fatihle",
+                    pos="noun",
+                    suffixes=(),
+                    final_pos="noun",
+                    ml_score=-1.0,
+                ),
+                savyar_adapter.MorphCandidate(
+                    word="Fatihle",
+                    root="fatih",
+                    pos="noun",
+                    suffixes=("confactuous_le",),
+                    final_pos="noun",
+                    ml_score=-2.0,
+                ),
+            ),
+        ):
+            self.assertEqual(nlp.normalize_entity_label("Fatihle"), "Fatih")
+
+    def test_extractor_collapses_inflected_person_name_to_root(self):
+        result = extractor.extract(
+            "Fatihle buluştum. Fatih.",
+            dt.datetime(2026, 4, 30, 12, 0),
+        )
+
+        self.assertEqual(result.persons, ["Fatih"])
+        person_mentions = [m.surface for m in result.parse.mentions if m.mention_type == "PERSON"]
+        self.assertEqual(person_mentions.count("Fatih"), 2)
 
     def test_savyar_uses_force_decomposer_when_ranked_path_is_empty(self):
         with (
