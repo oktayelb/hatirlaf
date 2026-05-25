@@ -84,6 +84,6 @@
   cursor: pointer;
   min-height: 36px;
 }
-.mention-actions button.primary { background: var(--accent); color: white; border-color: transparent; }
+.mention-actions button.primary { background: var(--accent); color: var(--accent-contrast); border-color: transparent; }
 .mention-actions button.ghost { background: transparent; }
 .mention-actions button.warn { background: rgba(255, 182, 72, 0.12); color: var(--warn); border-color: rgba(255, 182, 72, 0.3); }

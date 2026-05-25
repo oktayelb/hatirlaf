@@ -27,10 +27,10 @@ export async function render(root) {
   root.appendChild(wrap);
 
   const header = el("div", { class: "cal-header" });
-  const weekdayRow = el("div", { class: "cal-weekdays" },
+  const weekdayRow = el("div", { class: "cal-weekdays", "aria-hidden": "true" },
     WEEKDAY_NAMES.map((w) => el("div", { class: "cal-weekday" }, [w]))
   );
-  const grid = el("div", { class: "cal-grid" });
+  const grid = el("div", { class: "cal-grid", role: "grid", "aria-label": "Aylık takvim" });
   const legend = el("div", { class: "cal-legend" }, [
     el("span", { class: "cal-legend-item past" }, [legendDot("past"), "Geçmiş"]),
     el("span", { class: "cal-legend-item now" }, [legendDot("now"), "Bugün"]),
@@ -75,6 +75,7 @@ export async function render(root) {
 
   function paintHeader() {
     header.innerHTML = "";
+    header.classList.toggle("is-loading", state.loading);
     header.appendChild(el("button", { class: "cal-nav", onclick: () => changeMonth(-1), "aria-label": "Önceki ay" }, ["‹"]));
     header.appendChild(
       el("div", { class: "cal-title" }, [
@@ -82,6 +83,7 @@ export async function render(root) {
         el("div", { class: "cal-title-sub" }, [
           state.loading ? "Yükleniyor…" : subtitle(),
         ]),
+        el("div", { class: "cal-title-metrics" }, monthMetrics()),
       ])
     );
     const right = el("div", { class: "cal-header-right" }, [
@@ -100,6 +102,21 @@ export async function render(root) {
 
   function totalEvents() {
     return Object.values(state.days).reduce((sum, evs) => sum + evs.length, 0);
+  }
+
+  function monthMetrics() {
+    const counts = { past: 0, now: 0, future: 0 };
+    for (const events of Object.values(state.days)) {
+      for (const ev of events) {
+        const bucket = slugBucket(ev.zaman_dilimi);
+        if (counts[bucket] != null) counts[bucket] += 1;
+      }
+    }
+    return [
+      metricPill("past", "Geçmiş", counts.past),
+      metricPill("now", "Bugün", counts.now),
+      metricPill("future", "Gelecek", counts.future),
+    ];
   }
 
   function paintGrid() {
@@ -139,13 +156,20 @@ export async function render(root) {
     const cell = el("div", {
       class: cls.join(" "),
       onclick: () => openDay(iso, events),
+      onkeydown: (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          openDay(iso, events);
+        }
+      },
       role: "button",
       tabindex: "0",
+      "aria-label": dayAriaLabel(iso, events),
     });
 
     const top = el("div", { class: "cal-day-top" }, [
       el("span", { class: "cal-day-num" }, [String(day)]),
-      events.length ? el("span", { class: "cal-day-dot" }, []) : null,
+      events.length ? el("span", { class: "cal-day-count" }, [String(events.length)]) : null,
     ].filter(Boolean));
     cell.appendChild(top);
 
@@ -240,6 +264,13 @@ function legendDot(bucket) {
   return el("span", { class: `legend-dot ${bucket}`, "aria-hidden": "true" });
 }
 
+function metricPill(bucket, label, count) {
+  return el("span", { class: `cal-metric ${bucket}` }, [
+    el("span", { class: "cal-metric-label" }, [label]),
+    el("span", { class: "cal-metric-value" }, [String(count)]),
+  ]);
+}
+
 function eventSummary(ev) {
   const who = (ev.kisiler || []).filter((p) => p && p.toLowerCase() !== "ben").slice(0, 2).join(", ");
   const where = ev.lokasyon && !/bilinmeyen/i.test(ev.lokasyon) ? ev.lokasyon : "";
@@ -274,4 +305,14 @@ function isoLocal(d) {
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
+}
+
+function dayAriaLabel(iso, events) {
+  const date = new Date(iso + "T00:00:00").toLocaleDateString("tr-TR", {
+    day: "numeric",
+    month: "long",
+    weekday: "long",
+  });
+  if (!events.length) return `${date}, kayıt yok`;
+  return `${date}, ${events.length} olay`;
 }

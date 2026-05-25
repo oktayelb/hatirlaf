@@ -69,7 +69,7 @@
   width: 100%;
   min-height: 110px;
   border-radius: var(--radius);
-  background: #111317;
+  background: var(--field-bg);
   color: var(--fg);
   border: 1px solid var(--border);
   padding: 12px;

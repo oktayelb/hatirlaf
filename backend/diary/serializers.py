@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from django.utils import timezone
+from django.urls import reverse
 from rest_framework import serializers
 
 from .processing import nlp as nlp_mod
@@ -185,7 +186,7 @@ class SessionSerializer(serializers.ModelSerializer):
     def get_audio_url(self, obj):
         if obj.audio_file:
             request = self.context.get("request")
-            url = obj.audio_file.url
+            url = reverse("session-audio", kwargs={"pk": obj.pk})
             return request.build_absolute_uri(url) if request else url
         return None
 

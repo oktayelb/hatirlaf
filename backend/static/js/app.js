@@ -8,6 +8,7 @@ import * as record from "./screens/record.js";
 import * as recap from "./screens/recap.js";
 import * as memories from "./screens/memories.js";
 import * as review from "./screens/review.js";
+import * as settings from "./screens/settings.js";
 import * as timeline from "./screens/timeline.js";
 
 const TITLES = {
@@ -17,6 +18,7 @@ const TITLES = {
   memories: "Anılar",
   review: "İnceleme",
   timeline: "Takvim",
+  settings: "Ayarlar",
 };
 
 const routes = [
@@ -32,30 +34,41 @@ const routes = [
   },
   { pattern: /^#\/review\/(\d+)$/, screen: "review", params: ["id"], render: review.render },
   { pattern: /^#\/timeline$/, screen: "timeline", render: timeline.render },
+  { pattern: /^#\/settings$/, screen: "settings", render: settings.render },
 ];
-const MAIN_ROUTE_ORDER = ["home", "record", "timeline", "recap"];
+const MAIN_ROUTE_ORDER = ["home", "record", "timeline", "recap", "settings"];
 const MAIN_ROUTE_HASH = {
   home: "#/home",
   record: "#/record",
   timeline: "#/timeline",
   recap: "#/recap",
+  settings: "#/settings",
 };
 
 const screenRoot = document.getElementById("screen-root");
 const titleEl = document.getElementById("screen-title");
 const backBtn = document.querySelector(".app-back");
 const onlineDot = document.getElementById("online-dot");
+const themeToggle = document.getElementById("theme-toggle");
+const themeColorMeta = document.getElementById("theme-color-meta");
 const navBtns = Array.from(document.querySelectorAll(".app-nav .app-nav-btn"));
 const startupScreen = document.getElementById("startup-screen");
 const startupFill = document.getElementById("startup-progress-fill");
 const startupPercent = document.getElementById("startup-percent");
+const THEME_KEY = "hatirlaf-theme";
 let currentScreen = "";
 let touchStartX = 0;
 let touchStartY = 0;
 let touchStartTime = 0;
 let touchTracking = false;
+let privacyState = { password_enabled: false, unlocked: true };
 
 backBtn.addEventListener("click", () => history.back());
+
+themeToggle?.addEventListener("click", () => {
+  const current = document.documentElement.dataset.theme === "light" ? "light" : "dark";
+  applyTheme(current === "light" ? "dark" : "light", { persist: true });
+});
 
 for (const btn of navBtns) {
   btn.addEventListener("click", () => {
@@ -65,6 +78,13 @@ for (const btn of navBtns) {
 
 on("online-changed", updateOnline);
 on("session-uploaded", () => pollEventificationStatuses());
+on("privacy-locked", () => {
+  privacyState = { password_enabled: true, unlocked: false };
+  renderPrivacyLock();
+});
+on("privacy-updated", async () => {
+  await refreshPrivacyStatus();
+});
 
 function updateOnline(isOnline) {
   if (isOnline === undefined) isOnline = navigator.onLine;
@@ -75,8 +95,12 @@ function updateOnline(isOnline) {
 async function route() {
   const hash = location.hash || "#/home";
   const previousScreen = currentScreen;
-  for (const mod of [home, record, recap, review, timeline]) {
+  for (const mod of [home, record, recap, review, settings, timeline]) {
     if (typeof mod.cleanup === "function") mod.cleanup();
+  }
+  if (isPrivacyLocked()) {
+    renderPrivacyLock();
+    return;
   }
   let matched = null;
   let params = {};
@@ -126,13 +150,17 @@ function escapeHTML(s) {
 
 window.addEventListener("hashchange", route);
 window.addEventListener("DOMContentLoaded", async () => {
+  initTheme();
   if (!location.hash) location.hash = "#/home";
   updateOnline(navigator.onLine);
   setupSwipeNavigation();
   await waitForStartup();
+  await refreshPrivacyStatus();
   route();
-  flush();
-  startEventificationWatcher();
+  if (!isPrivacyLocked()) {
+    flush();
+    startEventificationWatcher();
+  }
 });
 
 function setupSwipeNavigation() {
@@ -249,6 +277,112 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+async function refreshPrivacyStatus() {
+  try {
+    privacyState = await api.privacyStatus();
+  } catch (err) {
+    console.debug("privacy status failed", err);
+    privacyState = { password_enabled: false, unlocked: true };
+  }
+}
+
+function isPrivacyLocked() {
+  return Boolean(privacyState.password_enabled && !privacyState.unlocked);
+}
+
+function renderPrivacyLock() {
+  currentScreen = "locked";
+  titleEl.textContent = "Kilitli";
+  backBtn.hidden = true;
+  for (const btn of navBtns) btn.classList.remove("active");
+  screenRoot.innerHTML = "";
+
+  const wrap = document.createElement("section");
+  wrap.className = "privacy-lock";
+  wrap.innerHTML = `
+    <div class="privacy-lock-card">
+      <div class="privacy-lock-mark" aria-hidden="true">H</div>
+      <div>
+        <h2 class="privacy-lock-title">Hatırlaf kilitli</h2>
+        <p class="privacy-lock-copy">Günlük kayıtlarını, takvimi ve anıları görmek için uygulama parolasını gir.</p>
+      </div>
+      <form class="privacy-lock-form">
+        <input class="privacy-lock-input" type="password" autocomplete="current-password" placeholder="Parola" aria-label="Parola" />
+        <button class="cta" type="submit">Kilidi Aç</button>
+        <div class="privacy-lock-error" role="alert"></div>
+      </form>
+    </div>
+  `;
+  const form = wrap.querySelector("form");
+  const input = wrap.querySelector("input");
+  const button = wrap.querySelector("button");
+  const error = wrap.querySelector(".privacy-lock-error");
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    error.textContent = "";
+    button.setAttribute("disabled", "");
+    button.textContent = "Açılıyor...";
+    try {
+      privacyState = await api.unlockPrivacy(input.value);
+      toast("Kilit açıldı");
+      route();
+      flush();
+      startEventificationWatcher();
+    } catch (err) {
+      error.textContent = readApiError(err);
+      button.removeAttribute("disabled");
+      button.textContent = "Kilidi Aç";
+    }
+  });
+  screenRoot.appendChild(wrap);
+  setTimeout(() => input.focus(), 0);
+}
+
+function readApiError(err) {
+  const raw = String(err.message || "");
+  const match = raw.match(/\{.*\}$/);
+  if (!match) return "Hata: " + raw;
+  try {
+    const data = JSON.parse(match[0]);
+    return data.detail || raw;
+  } catch (_) {
+    return "Hata: " + raw;
+  }
+}
+
+function initTheme() {
+  const stored = readStoredTheme();
+  const preferred = window.matchMedia?.("(prefers-color-scheme: light)")?.matches ? "light" : "dark";
+  applyTheme(stored || preferred);
+}
+
+function applyTheme(theme, { persist = false } = {}) {
+  const normalized = theme === "light" ? "light" : "dark";
+  document.documentElement.dataset.theme = normalized;
+  document.documentElement.style.colorScheme = normalized;
+  if (themeColorMeta) themeColorMeta.content = normalized === "light" ? "#f5f7fb" : "#0b1220";
+  if (themeToggle) {
+    themeToggle.dataset.theme = normalized;
+    themeToggle.setAttribute("aria-label", normalized === "light" ? "Koyu temaya geç" : "Açık temaya geç");
+    themeToggle.title = normalized === "light" ? "Koyu tema" : "Açık tema";
+  }
+  if (persist) writeStoredTheme(normalized);
+}
+
+function readStoredTheme() {
+  try {
+    return localStorage.getItem(THEME_KEY);
+  } catch (_) {
+    return "";
+  }
+}
+
+function writeStoredTheme(theme) {
+  try {
+    localStorage.setItem(THEME_KEY, theme);
+  } catch (_) {}
+}
+
 let eventPollStarted = false;
 let eventStatusSnapshot = null;
 
@@ -261,6 +395,7 @@ function startEventificationWatcher() {
 
 async function pollEventificationStatuses(opts = {}) {
   if (!navigator.onLine) return;
+  if (isPrivacyLocked()) return;
   let sessions = [];
   try {
     const resp = await api.listSessions();

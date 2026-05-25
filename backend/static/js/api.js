@@ -1,5 +1,7 @@
 // Thin REST client. All calls go through a single wrapper so failures route
 // into the offline-queue system in db.js without scattering try/catch.
+import { emit } from "./events.js";
+
 const BASE = (window.HATIRLAF_API_BASE || "/api").replace(/\/$/, "");
 
 async function request(path, opts = {}) {
@@ -14,6 +16,7 @@ async function request(path, opts = {}) {
     const text = await res.text().catch(() => "");
     const err = new Error(`HTTP ${res.status}: ${text}`);
     err.status = res.status;
+    if (res.status === 423) emit("privacy-locked");
     throw err;
   }
   if (res.status === 204) return null;
@@ -57,4 +60,15 @@ export const api = {
   calendar: (month) => request(`/calendar/${month ? `?month=${month}` : ""}`),
   recap: (month) => request(`/recap/${month ? `?month=${month}` : ""}`),
   graph: () => request("/graph/"),
+  privacyStatus: () => request("/privacy/status/"),
+  unlockPrivacy: (password) =>
+    request("/privacy/unlock/", { method: "POST", body: { password } }),
+  lockPrivacy: () => request("/privacy/lock/", { method: "POST" }),
+  setPrivacyPassword: (data) =>
+    request("/privacy/set-password/", { method: "POST", body: data }),
+  clearPrivacyPassword: (currentPassword) =>
+    request("/privacy/clear-password/", {
+      method: "POST",
+      body: { current_password: currentPassword },
+    }),
 };

@@ -2,7 +2,9 @@
 
 .hero {
   position: relative;
-  background: linear-gradient(180deg, #1c2025, #15171b);
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--accent) 13%, transparent), transparent 48%),
+    var(--bg-elev);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   overflow: hidden;
@@ -100,7 +102,7 @@
   background: var(--danger);
 }
 .hero-hint {
-  color: rgba(230, 237, 247, 0.75);
+  color: var(--fg-muted);
   font-size: 12px;
   text-align: center;
   letter-spacing: 0.2px;
@@ -187,7 +189,7 @@
   width: 100%;
   min-height: 220px;
   border-radius: var(--radius);
-  background: #111317;
+  background: var(--field-bg);
   color: var(--fg);
   border: 1px solid var(--border);
   padding: 14px 14px;
@@ -204,4 +206,3 @@
 }
 .composer-counter { color: var(--fg-muted); font-size: 12px; flex: 1; }
 .composer-footer .cta { width: auto; padding: 12px 22px; }
-

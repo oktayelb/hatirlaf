@@ -16,6 +16,7 @@ Design notes (per spec):
 from __future__ import annotations
 
 from django.db import models
+from django.contrib.auth.hashers import check_password, make_password
 
 
 class NodeKind(models.TextChoices):
@@ -275,3 +276,40 @@ class Edge(models.Model):
 
     def __str__(self) -> str:
         return f"{self.source} -[{self.relation}]-> {self.target}"
+
+
+class PrivacySettings(models.Model):
+    """Singleton app privacy lock settings.
+
+    This is deliberately not a multi-user auth model. It stores one optional
+    app password hash and lets a browser session unlock the local diary UI/API.
+    """
+
+    password_hash = models.CharField(max_length=256, blank=True, default="")
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Privacy settings"
+        verbose_name_plural = "Privacy settings"
+
+    @property
+    def password_enabled(self) -> bool:
+        return bool(self.password_hash)
+
+    @classmethod
+    def load(cls) -> "PrivacySettings":
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj
+
+    def set_password(self, raw_password: str) -> None:
+        self.password_hash = make_password(raw_password)
+        self.save(update_fields=["password_hash", "updated_at"])
+
+    def clear_password(self) -> None:
+        self.password_hash = ""
+        self.save(update_fields=["password_hash", "updated_at"])
+
+    def password_matches(self, raw_password: str) -> bool:
+        if not self.password_enabled:
+            return False
+        return check_password(raw_password, self.password_hash)

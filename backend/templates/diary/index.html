@@ -4,8 +4,19 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
-<meta name="theme-color" content="#0b1220" />
+<meta name="theme-color" content="#0b1220" id="theme-color-meta" />
 <title>Hatırlaf — Sesli Günlük</title>
+<script>
+  (() => {
+    try {
+      const stored = localStorage.getItem("hatirlaf-theme");
+      const preferred = matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+      const theme = stored || preferred;
+      document.documentElement.dataset.theme = theme;
+      document.documentElement.style.colorScheme = theme;
+    } catch (_) {}
+  })();
+</script>
 <link rel="stylesheet" href="{% static 'css/app.css' %}" />
 </head>
 <body class="startup-active">
@@ -28,13 +39,19 @@
     <div class="app-header-row">
       <button class="app-back" data-action="back" aria-label="Geri" hidden>&#8592;</button>
       <h1 id="screen-title" class="app-brand">Hatırlaf</h1>
-      <span class="app-online" id="online-dot" title="Çevrimiçi">&bull;</span>
+      <div class="app-header-actions">
+        <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Temayı değiştir" title="Temayı değiştir">
+          <span class="theme-toggle-icon" aria-hidden="true"></span>
+        </button>
+        <span class="app-online" id="online-dot" title="Çevrimiçi">&bull;</span>
+      </div>
     </div>
     <nav class="app-nav" aria-label="Ana gezinti">
       <button class="app-nav-btn" data-route="#/home">Ana</button>
       <button class="app-nav-btn" data-route="#/record">Girişler</button>
       <button class="app-nav-btn" data-route="#/timeline">Takvim</button>
       <button class="app-nav-btn" data-route="#/recap">Özet</button>
+      <button class="app-nav-btn" data-route="#/settings">Ayarlar</button>
     </nav>
   </header>
 
