@@ -2,6 +2,7 @@
 Django>=5.1
 djangorestframework>=3.15
 django-cors-headers>=4.3
+cryptography>=48.0
 
 # Optional (heavy) ML dependencies. The app degrades gracefully if these are
 # missing — transcription falls back to a placeholder and NER uses a

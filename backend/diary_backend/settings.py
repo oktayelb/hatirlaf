@@ -109,6 +109,21 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
+HATIRLAF_ENCRYPTION_KEY = os.environ.get("HATIRLAF_ENCRYPTION_KEY", "")
+HATIRLAF_ENCRYPTION_KEY_FILE = os.environ.get(
+    "HATIRLAF_ENCRYPTION_KEY_FILE",
+    str(BASE_DIR / ".hatirlaf_encryption.key"),
+)
+
+STORAGES = {
+    "default": {
+        "BACKEND": "diary.storage.EncryptedFileSystemStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+    },
+}
+
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # --- DRF ---------------------------------------------------------------------

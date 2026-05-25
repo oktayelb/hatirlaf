@@ -13,6 +13,7 @@ import traceback
 
 from django.conf import settings
 
+from ..media import decrypted_file_path
 from ..models import Edge, EncounteredEntity, Session, SessionStatus
 from . import extractor as extractor_mod
 from . import llm as llm_mod
@@ -112,7 +113,11 @@ def _process(session: Session) -> None:
         session.save(update_fields=["status", "status_detail", "updated_at"])
         return
 
-    result = tx_mod.transcribe(session.audio_file.path, language=session.language)
+    suffix = ""
+    if session.audio_file.name:
+        suffix = "." + session.audio_file.name.rsplit(".", 1)[-1]
+    with decrypted_file_path(session.audio_file, suffix=suffix) as audio_path:
+        result = tx_mod.transcribe(audio_path, language=session.language)
 
     session.transcript = result.text
     aligned = tx_mod.assign_word_timings(result.words, result.text)

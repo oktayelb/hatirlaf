@@ -31,9 +31,18 @@ def record_entity(kind: str, label: str) -> EncounteredEntity | None:
         return None
 
     with _REGISTRY_LOCK:
-        entity, created = EncounteredEntity.objects.get_or_create(kind=kind, label=normalized)
-        if not created:
-            EncounteredEntity.objects.filter(pk=entity.pk).update(last_seen_at=timezone.now())
+        entity = next(
+            (
+                candidate
+                for candidate in EncounteredEntity.objects.filter(kind=kind)
+                if candidate.label == normalized
+            ),
+            None,
+        )
+        if entity is None:
+            return EncounteredEntity.objects.create(kind=kind, label=normalized)
+        EncounteredEntity.objects.filter(pk=entity.pk).update(last_seen_at=timezone.now())
+        entity.last_seen_at = timezone.now()
         return entity
 
 
@@ -66,16 +75,8 @@ def record_session(session_id: int) -> dict:
 
 def snapshot() -> dict:
     """Return the current registry as a JSON-serializable payload."""
-    people = list(
-        EncounteredEntity.objects.filter(kind=NodeKind.PERSON)
-        .order_by("label")
-        .values_list("label", flat=True)
-    )
-    places = list(
-        EncounteredEntity.objects.filter(kind=NodeKind.LOCATION)
-        .order_by("label")
-        .values_list("label", flat=True)
-    )
+    people = sorted(entity.label for entity in EncounteredEntity.objects.filter(kind=NodeKind.PERSON))
+    places = sorted(entity.label for entity in EncounteredEntity.objects.filter(kind=NodeKind.LOCATION))
     return {
         "version": 1,
         "updated_at": timezone.now().isoformat(),

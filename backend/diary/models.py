@@ -18,6 +18,8 @@ from __future__ import annotations
 from django.db import models
 from django.contrib.auth.hashers import check_password, make_password
 
+from .encryption import EncryptedJSONField, EncryptedTextField
+
 
 class NodeKind(models.TextChoices):
     PERSON = "PERSON", "Kişi"
@@ -68,12 +70,12 @@ class Node(models.Model):
 
     kind = models.CharField(max_length=16, choices=NodeKind.choices)
     label = models.CharField(max_length=200)
-    aliases = models.JSONField(default=list, blank=True)
+    aliases = EncryptedJSONField(default=list, blank=True)
     is_unknown = models.BooleanField(default=False)
     # ISO 8601 string for TIME nodes, else empty.
-    time_value = models.CharField(max_length=40, blank=True, default="")
+    time_value = EncryptedTextField(blank=True, default="")
     # Free-form user notes.
-    notes = models.TextField(blank=True, default="")
+    notes = EncryptedTextField(blank=True, default="")
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -116,7 +118,7 @@ class EncounteredEntity(models.Model):
     """A persistent local registry of bare-root people and places."""
 
     kind = models.CharField(max_length=16, choices=NodeKind.choices)
-    label = models.CharField(max_length=200)
+    label = EncryptedTextField()
     first_seen_at = models.DateTimeField(auto_now_add=True)
     last_seen_at = models.DateTimeField(auto_now=True)
 
@@ -148,26 +150,26 @@ class Session(models.Model):
     status = models.CharField(
         max_length=20, choices=SessionStatus.choices, default=SessionStatus.QUEUED
     )
-    status_detail = models.TextField(blank=True, default="")
+    status_detail = EncryptedTextField(blank=True, default="")
 
-    transcript = models.TextField(blank=True, default="")
-    processed_text = models.TextField(blank=True, default="")
+    transcript = EncryptedTextField(blank=True, default="")
+    processed_text = EncryptedTextField(blank=True, default="")
 
     # Whisper word-level timings, stored as a list of {"word","start","end"}.
-    word_timings = models.JSONField(default=list, blank=True)
+    word_timings = EncryptedJSONField(default=list, blank=True)
 
     # LLM + NLP output: list of events with resolved ISO dates, zaman_dilimi,
     # lokasyon, olay, kisiler. Drives the calendar view.
-    structured_events = models.JSONField(default=list, blank=True)
+    structured_events = EncryptedJSONField(default=list, blank=True)
     eventification_status = models.CharField(
         max_length=20,
         choices=EventificationStatus.choices,
         default=EventificationStatus.NOT_STARTED,
     )
-    eventification_detail = models.TextField(blank=True, default="")
+    eventification_detail = EncryptedTextField(blank=True, default="")
     # Clause-level hints from the deterministic NLP pre-pass. Kept so we
     # can re-run only the LLM step without re-parsing.
-    nlp_hints = models.JSONField(default=dict, blank=True)
+    nlp_hints = EncryptedJSONField(default=dict, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -189,8 +191,8 @@ class Mention(models.Model):
 
     session = models.ForeignKey(Session, related_name="mentions", on_delete=models.CASCADE)
 
-    surface = models.CharField(max_length=200)
-    lemma = models.CharField(max_length=200, blank=True, default="")
+    surface = EncryptedTextField()
+    lemma = EncryptedTextField(blank=True, default="")
 
     char_start = models.IntegerField()
     char_end = models.IntegerField()
@@ -211,7 +213,7 @@ class Mention(models.Model):
     conflict_reason = models.CharField(
         max_length=32, choices=ConflictReason.choices, blank=True, default=""
     )
-    conflict_hint = models.CharField(max_length=300, blank=True, default="")
+    conflict_hint = EncryptedTextField(blank=True, default="")
 
     resolved = models.BooleanField(default=False)
     # How the mention was resolved: ASSIGNED to an existing/new node,

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from django.db import transaction
-from django.db.models import Count, Q
+from django.db.models import Count
 from django.shortcuts import get_object_or_404
 from rest_framework import generics, status, viewsets
 from rest_framework.decorators import action
@@ -24,7 +24,13 @@ class NodeViewSet(viewsets.ModelViewSet):
         if kind:
             qs = qs.filter(kind=kind)
         if q:
-            qs = qs.filter(Q(label__icontains=q) | Q(aliases__icontains=q))
+            needle = q.casefold()
+            qs = [
+                node
+                for node in qs
+                if needle in (node.label or "").casefold()
+                or any(needle in str(alias).casefold() for alias in (node.aliases or []))
+            ]
         return qs
 
     def perform_create(self, serializer):

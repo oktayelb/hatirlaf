@@ -13,7 +13,7 @@ export async function render(root) {
           el("div", {}, [
             el("h2", { class: "settings-title" }, ["Gizlilik"]),
             el("p", { class: "settings-copy" }, [
-              "Uygulama parolası bu tarayıcı oturumunda günlük verilerini kilitler. Bu özellik kullanıcı hesabı değildir ve veritabanını ya da ses dosyalarını şifrelemez.",
+              "Uygulama parolası bu tarayıcı oturumunda günlük verilerini kilitler. Yerel veritabanındaki hassas alanlar ve ses dosyaları ayrıca disk üzerinde şifreli tutulur.",
             ]),
           ]),
           el("span", { class: `settings-status ${status.password_enabled ? "on" : "off"}` }, [
