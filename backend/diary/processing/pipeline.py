@@ -73,6 +73,20 @@ def kickoff_eventification(session_id: int) -> None:
     t.start()
 
 
+def kickoff_transcript_reprocess(session_id: int) -> None:
+    """Rebuild NLP/event data from the saved transcript without re-running STT."""
+    if getattr(settings, "HATIRLAF_SYNC_PROCESSING", False):
+        run_transcript_reprocess(session_id)
+        return
+    t = threading.Thread(
+        target=run_transcript_reprocess,
+        args=(session_id,),
+        daemon=True,
+        name=f"hatirlaf-reparse-{session_id}",
+    )
+    t.start()
+
+
 def run(session_id: int) -> None:
     if not _try_mark_active(_active_processing, session_id):
         logger.info("Session %s processing is already active; skipping duplicate.", session_id)
@@ -88,6 +102,26 @@ def run(session_id: int) -> None:
             _process(session)
         except Exception:  # pragma: no cover
             logger.error("Processing session %s failed: %s", session_id, traceback.format_exc())
+            session_pipeline_mod.mark_session_failed(session_id, traceback.format_exc())
+    finally:
+        _clear_active(_active_processing, session_id)
+
+
+def run_transcript_reprocess(session_id: int) -> None:
+    if not _try_mark_active(_active_processing, session_id):
+        logger.info("Session %s transcript reprocess is already active; skipping duplicate.", session_id)
+        return
+    try:
+        try:
+            session = Session.objects.get(pk=session_id)
+        except Session.DoesNotExist:
+            logger.error("Session %s vanished before transcript reprocess", session_id)
+            return
+
+        try:
+            _reprocess_saved_transcript(session)
+        except Exception:  # pragma: no cover
+            logger.error("Transcript reprocess for session %s failed: %s", session_id, traceback.format_exc())
             session_pipeline_mod.mark_session_failed(session_id, traceback.format_exc())
     finally:
         _clear_active(_active_processing, session_id)
@@ -139,6 +173,25 @@ def _process(session: Session) -> None:
     session.status = SessionStatus.PARSING
     session.status_detail = f"Transkripsiyon backend: {result.backend}"
     session.save(update_fields=["status", "status_detail", "updated_at"])
+    _parse_and_store(session)
+
+
+def _reprocess_saved_transcript(session: Session) -> None:
+    if not (session.transcript or "").strip():
+        _process(session)
+        return
+
+    session.status = SessionStatus.PARSING
+    session.status_detail = "Kaydedilmiş transkript yeniden işleniyor."
+    session.structured_events = []
+    session.save(
+        update_fields=[
+            "status",
+            "status_detail",
+            "structured_events",
+            "updated_at",
+        ]
+    )
     _parse_and_store(session)
 
 

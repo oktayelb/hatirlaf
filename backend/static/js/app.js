@@ -3,6 +3,7 @@
 import { flush } from "./sync.js";
 import { api } from "./api.js";
 import { on, toast } from "./events.js";
+import { initReminderTimers } from "./reminders.js";
 import * as home from "./screens/home.js";
 import * as record from "./screens/record.js";
 import * as recap from "./screens/recap.js";
@@ -151,6 +152,7 @@ function escapeHTML(s) {
 window.addEventListener("hashchange", route);
 window.addEventListener("DOMContentLoaded", async () => {
   initTheme();
+  initReminderTimers();
   if (!location.hash) location.hash = "#/home";
   updateOnline(navigator.onLine);
   setupSwipeNavigation();

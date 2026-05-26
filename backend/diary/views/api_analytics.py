@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
 from collections import Counter, defaultdict
 
 from django.db.models import Count, Q
@@ -97,17 +98,17 @@ def calendar_view(request):
                 continue
             if month_start and (d < month_start or d >= month_end):
                 continue
-            days[iso].append(
-                {
-                    "session_id": s.id,
-                    "zaman_dilimi": ev.get("zaman_dilimi", ""),
-                    "tarih": iso,
-                    "saat": ev.get("saat", ""),
-                    "lokasyon": _entity_display_label(ev.get("lokasyon", "")),
-                    "olay": ev.get("olay", ""),
-                    "kisiler": [_entity_display_label(person) for person in ev.get("kisiler", [])],
-                }
-            )
+            payload = {
+                "session_id": s.id,
+                "zaman_dilimi": ev.get("zaman_dilimi", ""),
+                "tarih": iso,
+                "saat": ev.get("saat", ""),
+                "lokasyon": _entity_display_label(ev.get("lokasyon", "")),
+                "olay": ev.get("olay", ""),
+                "kisiler": [_entity_display_label(person) for person in ev.get("kisiler", [])],
+            }
+            payload["reminder"] = _reminder_payload(session_id=s.id, event=payload)
+            days[iso].append(payload)
 
     for iso in days:
         days[iso].sort(key=lambda e: (e.get("saat") or "99:99"))
@@ -236,6 +237,64 @@ def graph_view(request):
 @api_view(["GET"])
 def health_view(request):
     return Response({"ok": True, "startup": startup.snapshot()})
+
+
+def _reminder_payload(*, session_id: int, event: dict) -> dict:
+    """Return client-friendly scheduling metadata for future calendar events."""
+    if event.get("zaman_dilimi") != "Gelecek":
+        return {"eligible": False}
+
+    event_at = _event_datetime(event.get("tarih", ""), event.get("saat", ""))
+    if event_at is None:
+        return {"eligible": False}
+
+    now = timezone.localtime(timezone.now())
+    if event_at <= now:
+        return {"eligible": False}
+
+    remind_at = event_at - dt.timedelta(minutes=30)
+    if remind_at <= now:
+        remind_at = now + dt.timedelta(seconds=5)
+
+    title = (event.get("olay") or "Yaklaşan olay").strip()
+    digest_src = "|".join(
+        [
+            str(session_id),
+            str(event.get("tarih") or ""),
+            str(event.get("saat") or ""),
+            title,
+        ]
+    )
+    digest = hashlib.sha256(digest_src.encode("utf-8")).hexdigest()[:12]
+    return {
+        "eligible": True,
+        "id": f"rem-{session_id}-{digest}",
+        "event_at": event_at.isoformat(),
+        "remind_at": remind_at.isoformat(),
+        "minutes_before": 30,
+        "title": title,
+    }
+
+
+def _event_datetime(date_iso: str, time_hm: str):
+    try:
+        day = dt.date.fromisoformat(str(date_iso or "").strip())
+    except ValueError:
+        return None
+
+    clock = str(time_hm or "").strip()
+    hour = 9
+    minute = 0
+    if clock:
+        try:
+            parsed = dt.datetime.strptime(clock[:5], "%H:%M").time()
+            hour = parsed.hour
+            minute = parsed.minute
+        except ValueError:
+            pass
+
+    naive = dt.datetime.combine(day, dt.time(hour=hour, minute=minute))
+    return timezone.make_aware(naive, timezone.get_current_timezone())
 
 
 def _month_bounds(month: str) -> tuple[dt.date, dt.date]:

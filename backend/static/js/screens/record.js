@@ -229,7 +229,7 @@ function entryCard(session, draft = null) {
     else saveBtn.setAttribute("disabled", "");
   });
 
-  saveBtn.addEventListener("click", async () => {
+  async function saveTranscript() {
     const next = textarea.value;
     saveBtn.setAttribute("disabled", "");
     saveBtn.textContent = "Kaydediliyor…";
@@ -240,17 +240,25 @@ function entryCard(session, draft = null) {
       saveBtn.textContent = "Kaydet";
       status.textContent = "Kaydedildi";
       toast("Giriş güncellendi");
+      return true;
     } catch (err) {
       console.error(err);
       saveBtn.removeAttribute("disabled");
       saveBtn.textContent = "Kaydet";
       status.textContent = "Hata: " + err.message;
+      return false;
     }
-  });
+  }
+
+  saveBtn.addEventListener("click", saveTranscript);
 
   reprocessBtn.addEventListener("click", async () => {
     reprocessBtn.setAttribute("disabled", "");
     try {
+      if (textarea.value !== original) {
+        const saved = await saveTranscript();
+        if (!saved) return;
+      }
       const updated = await api.reprocess(session.id);
       const list = card.parentElement;
       toast(updated.processing_progress === 0 ? "Yeniden işleniyor…" : "İşleme zaten sürüyor…");

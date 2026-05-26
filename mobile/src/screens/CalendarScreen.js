@@ -1,7 +1,11 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { Alert, ScrollView, StyleSheet, Text, View } from "react-native";
 import { api } from "../services/api";
-import { scheduleFutureEventReminders } from "../services/reminders";
+import {
+  cancelReminderForEvent,
+  scheduleReminderForEvent,
+  scheduledReminderIds,
+} from "../services/reminders";
 import { Button, Card, EmptyState, Loading, Screen } from "../ui/Primitives";
 import { colors } from "../theme";
 
@@ -14,6 +18,7 @@ export function CalendarScreen() {
   const now = new Date();
   const [cursor, setCursor] = useState({ year: now.getFullYear(), month: now.getMonth() });
   const [days, setDays] = useState({});
+  const [scheduled, setScheduled] = useState(new Set());
   const [loading, setLoading] = useState(true);
   const monthKey = `${cursor.year}-${String(cursor.month + 1).padStart(2, "0")}`;
 
@@ -24,7 +29,7 @@ export function CalendarScreen() {
       .then((data) => {
         if (cancelled) return;
         setDays(data.days || {});
-        scheduleFutureEventReminders(data.days || {});
+        scheduledReminderIds().then((ids) => !cancelled && setScheduled(ids));
       })
       .catch(console.warn)
       .finally(() => !cancelled && setLoading(false));
@@ -42,6 +47,26 @@ export function CalendarScreen() {
   function changeMonth(delta) {
     const next = new Date(cursor.year, cursor.month + delta, 1);
     setCursor({ year: next.getFullYear(), month: next.getMonth() });
+  }
+
+  async function toggleReminder(event) {
+    if (!event.reminder?.eligible) return;
+    const isScheduled = scheduled.has(event.reminder.id);
+    if (isScheduled) {
+      await cancelReminderForEvent(event);
+      const ids = await scheduledReminderIds();
+      setScheduled(ids);
+      Alert.alert("Hatırlatma kaldırıldı");
+      return;
+    }
+    const result = await scheduleReminderForEvent(event);
+    if (!result?.scheduled) {
+      Alert.alert("Hatırlatma planlanamadı", "Bildirim izni kapalı olabilir ya da zaman geçmiş olabilir.");
+      return;
+    }
+    const ids = await scheduledReminderIds();
+    setScheduled(ids);
+    Alert.alert("Hatırlatma planlandı", "Olaydan 30 dakika önce bildirim gelecek.");
   }
 
   return (
@@ -73,6 +98,11 @@ export function CalendarScreen() {
                   .filter(Boolean)
                   .join(" · ")}
               </Text>
+              {event.reminder?.eligible ? (
+                <Button variant={scheduled.has(event.reminder.id) ? "ghost" : "primary"} onPress={() => toggleReminder(event)}>
+                  {scheduled.has(event.reminder.id) ? "Hatırlatma açık" : "30 dk önce hatırlat"}
+                </Button>
+              ) : null}
             </Card>
           ))}
         </ScrollView>

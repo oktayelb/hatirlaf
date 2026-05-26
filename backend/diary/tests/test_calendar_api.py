@@ -136,6 +136,35 @@ class CalendarApiTests(TestCase):
         self.assertEqual(day_events[0]["saat"], "10:30")
         self.assertEqual(day_events[0]["olay"], "Toplantıya gideceğim.")
 
+    def test_future_events_include_schedulable_reminder_metadata(self):
+        Session.objects.create(
+            client_uuid="calendar-future-reminder",
+            recorded_at=timezone.make_aware(dt.datetime(2099, 4, 30, 8, 15)),
+            status=SessionStatus.COMPLETED,
+            transcript="Yarın Ahmet ile buluşacağım.",
+            eventification_status=EventificationStatus.COMPLETED,
+            structured_events=[
+                {
+                    "zaman_dilimi": "Gelecek",
+                    "tarih": "2099-05-01",
+                    "saat": "10:30",
+                    "lokasyon": "Kadıköy",
+                    "olay": "Ahmet ile buluşacağım.",
+                    "kisiler": ["Ben", "Ahmet"],
+                }
+            ],
+        )
+
+        response = self.client.get(reverse("calendar"), {"month": "2099-05"})
+
+        self.assertEqual(response.status_code, 200)
+        event = response.json()["days"]["2099-05-01"][0]
+        self.assertEqual(event["reminder"]["eligible"], True)
+        self.assertTrue(event["reminder"]["id"].startswith("rem-"))
+        self.assertIn("2099-05-01T10:30:00", event["reminder"]["event_at"])
+        self.assertIn("2099-05-01T10:00:00", event["reminder"]["remind_at"])
+        self.assertEqual(event["reminder"]["minutes_before"], 30)
+
     def test_calendar_ignores_malformed_structured_event_items(self):
         Session.objects.create(
             client_uuid="calendar-malformed-structured-events",

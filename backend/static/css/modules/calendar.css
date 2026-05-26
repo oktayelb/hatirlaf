@@ -321,6 +321,35 @@
 .cal-bucket-badge.now { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 35%, transparent); background: color-mix(in srgb, var(--ok) 8%, transparent); }
 .cal-bucket-badge.future { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 35%, transparent); background: color-mix(in srgb, var(--warn) 8%, transparent); }
 
+.cal-reminder-btn {
+  align-self: flex-start;
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid color-mix(in srgb, var(--warn) 34%, var(--border));
+  background: color-mix(in srgb, var(--warn) 10%, transparent);
+  color: var(--warn);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease, transform 120ms ease;
+}
+.cal-reminder-btn:hover {
+  background: color-mix(in srgb, var(--warn) 16%, transparent);
+  border-color: color-mix(in srgb, var(--warn) 48%, var(--border));
+}
+.cal-reminder-btn:active { transform: translateY(1px); }
+.cal-reminder-btn.is-on {
+  background: color-mix(in srgb, var(--ok) 12%, transparent);
+  border-color: color-mix(in srgb, var(--ok) 36%, var(--border));
+  color: var(--ok);
+}
+.cal-reminder-btn:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
 .filter-row { display: flex; gap: 6px; overflow-x: auto; padding: 4px 0 12px; }
 .filter-row button { padding: 6px 12px; border-radius: var(--radius-sm); background: var(--bg-elev-2); color: var(--fg); border: 1px solid var(--border); font-size: 12px; cursor: pointer; white-space: nowrap; }
 .filter-row button.active { background: var(--accent); border-color: transparent; color: var(--accent-contrast); }

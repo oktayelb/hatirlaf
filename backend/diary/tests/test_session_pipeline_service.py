@@ -115,3 +115,40 @@ class SessionPipelineServiceTests(TestCase):
         labels = set(EncounteredEntity.objects.values_list("kind", "label"))
         self.assertIn((NodeKind.PERSON, "fatih"), labels)
         self.assertNotIn((NodeKind.PERSON, "fatihle"), labels)
+
+    @patch("diary.processing.pipeline.kickoff_eventification")
+    @patch("diary.processing.pipeline.tx_mod.transcribe")
+    def test_reprocess_endpoint_uses_saved_transcript_instead_of_retranscribing_audio(
+        self,
+        transcribe,
+        kickoff_eventification,
+    ):
+        recorded_at = dt.datetime(2026, 4, 30, 12, 0, tzinfo=dt.timezone.utc)
+        session = Session.objects.create(
+            client_uuid="manual-stt-edit",
+            recorded_at=recorded_at,
+            audio_file="sessions/manual-stt-edit.m4a",
+            transcript="Eski transkript.",
+            status=SessionStatus.COMPLETED,
+        )
+        response = self.client.patch(
+            reverse("session-detail", kwargs={"pk": session.pk}),
+            data={"transcript": "Yarın Ahmet ile buluşacağım."},
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+
+        with self.settings(HATIRLAF_SYNC_PROCESSING=True):
+            response = self.client.post(reverse("session-process", kwargs={"pk": session.pk}))
+
+        self.assertEqual(response.status_code, 200)
+        transcribe.assert_not_called()
+        kickoff_eventification.assert_called_once_with(session.pk)
+
+        session.refresh_from_db()
+        self.assertEqual(session.transcript, "Yarın Ahmet ile buluşacağım.")
+        self.assertEqual(session.status, SessionStatus.COMPLETED)
+        self.assertEqual(session.eventification_status, "queued")
+        mention_surfaces = set(session.mentions.values_list("surface", flat=True))
+        self.assertIn("Ahmet", mention_surfaces)
+        self.assertNotIn("Eski", mention_surfaces)

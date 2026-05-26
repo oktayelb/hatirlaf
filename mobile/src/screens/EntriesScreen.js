@@ -63,6 +63,7 @@ function EntryCard({ session, onChanged }) {
     try {
       await api.updateSession(session.id, { transcript: text });
       await onChanged();
+      return true;
     } finally {
       setSaving(false);
     }
@@ -71,6 +72,9 @@ function EntryCard({ session, onChanged }) {
   async function reprocess() {
     setSaving(true);
     try {
+      if (changed) {
+        await api.updateSession(session.id, { transcript: text });
+      }
       await api.reprocess(session.id);
       await onChanged();
     } finally {

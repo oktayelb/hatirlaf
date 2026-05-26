@@ -3,6 +3,12 @@
 // box opens a drawer with the full list for that day (people included).
 
 import { api } from "../api.js";
+import { toast } from "../events.js";
+import {
+  cancelReminderForEvent,
+  isReminderScheduled,
+  scheduleReminderForEvent,
+} from "../reminders.js";
 import { entityMemoryHash } from "./utils.js";
 import { el, modal } from "./utils.js";
 
@@ -254,10 +260,43 @@ function renderEventCard(ev, closeModal = null) {
     el("div", { class: "cal-event-body" }, [ev.olay || ""]),
     metaBits.length ? el("div", { class: "cal-event-meta" }, metaBits) : null,
     peopleRow,
+    reminderAction(ev),
     ev.session_id
       ? el("button", { class: "cta ghost", style: "margin-top:4px;", onclick: () => go(`#/review/${ev.session_id}`) }, ["Kayda git"])
       : null,
-  ]);
+  ].filter(Boolean));
+}
+
+function reminderAction(ev) {
+  if (!ev.reminder?.eligible) return null;
+  const scheduled = isReminderScheduled(ev);
+  const button = el("button", {
+    class: `cal-reminder-btn ${scheduled ? "is-on" : ""}`,
+    type: "button",
+  }, [scheduled ? "Hatırlatma açık" : "30 dk önce hatırlat"]);
+
+  button.addEventListener("click", async () => {
+    button.setAttribute("disabled", "");
+    try {
+      if (isReminderScheduled(ev)) {
+        cancelReminderForEvent(ev);
+        button.classList.remove("is-on");
+        button.textContent = "30 dk önce hatırlat";
+        toast("Hatırlatma kaldırıldı.");
+      } else {
+        await scheduleReminderForEvent(ev);
+        button.classList.add("is-on");
+        button.textContent = "Hatırlatma açık";
+        toast("Hatırlatma planlandı.");
+      }
+    } catch (err) {
+      toast(err.message || "Hatırlatma planlanamadı.");
+    } finally {
+      button.removeAttribute("disabled");
+    }
+  });
+
+  return button;
 }
 
 function legendDot(bucket) {

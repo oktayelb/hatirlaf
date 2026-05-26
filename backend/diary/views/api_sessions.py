@@ -13,6 +13,7 @@ from ..processing.pipeline import (
     is_eventification_active,
     is_processing_active,
     kickoff,
+    kickoff_transcript_reprocess,
     reextract_all_transcripts,
 )
 from ..serializers import SessionDetailSerializer, SessionSerializer, SessionUploadSerializer
@@ -69,8 +70,13 @@ class SessionViewSet(viewsets.ModelViewSet):
                 SessionDetailSerializer(session, context={"request": request}).data,
                 status=status.HTTP_202_ACCEPTED,
             )
-        session.status = SessionStatus.QUEUED
-        session.status_detail = ""
+        use_saved_transcript = bool((session.transcript or "").strip())
+        session.status = SessionStatus.PARSING if use_saved_transcript else SessionStatus.QUEUED
+        session.status_detail = (
+            "Kaydedilmiş transkript yeniden işleniyor."
+            if use_saved_transcript
+            else ""
+        )
         session.structured_events = []
         session.eventification_status = EventificationStatus.QUEUED
         session.eventification_detail = "Yeniden olaylaştırma sıraya alındı."
@@ -84,7 +90,10 @@ class SessionViewSet(viewsets.ModelViewSet):
                 "updated_at",
             ]
         )
-        kickoff(session.id)
+        if use_saved_transcript:
+            kickoff_transcript_reprocess(session.id)
+        else:
+            kickoff(session.id)
         return Response(
             SessionDetailSerializer(session, context={"request": request}).data
         )
