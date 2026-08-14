@@ -185,13 +185,6 @@ select:focus-visible,
   margin: 0;
   font-size: var(--fs-xl);
 }
-.section-lede {
-  margin: 8px 0 0;
-  color: var(--ink-2);
-  font-size: var(--fs-base);
-  line-height: 1.55;
-}
-
 .cta {
   display: block;
   width: 100%;

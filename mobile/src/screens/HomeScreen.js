@@ -10,7 +10,7 @@ import {
 } from "expo-audio";
 import { Ionicons } from "@expo/vector-icons";
 import { Pressable } from "react-native";
-import { Button, Card, Help } from "../ui/Primitives";
+import { Button, Card } from "../ui/Primitives";
 import { PhotoBoard } from "../ui/PhotoBoard";
 import { enqueueAudio, enqueueText, flushQueue, queueCount } from "../services/queue";
 import { colors, radius, spacing, type } from "../theme";
@@ -105,9 +105,6 @@ export function HomeScreen({ onQueueChanged }) {
 
       <Card style={styles.recorder}>
         <Text style={styles.cardTitle}>Konuşarak Anlat</Text>
-        <Help>
-          Sesini kaydet. Söylediklerin daha sonra yazıya çevrilir ve günlüğünde saklanır.
-        </Help>
 
         <Text style={styles.time}>{elapsed}</Text>
 
@@ -126,25 +123,16 @@ export function HomeScreen({ onQueueChanged }) {
           <Ionicons name={recording ? "stop" : "mic"} size={52} color={colors.accentInk} />
           <Text style={styles.micLabel}>{recording ? "Bitir" : "Başlat"}</Text>
         </Pressable>
-
-        <Text style={styles.hint}>
-          {recording
-            ? "Kayıt sürüyor. Bitirmek için düğmeye tekrar bas."
-            : "Yuvarlak düğmeye bas ve konuşmaya başla. Bitince aynı düğmeye tekrar bas."}
-        </Text>
       </Card>
 
       <Card style={styles.composer}>
         <Text style={styles.cardTitle}>Yazarak Anlat</Text>
-        <Help>
-          Konuşmak istemiyorsan aşağıdaki kutuya yaz. Yazdıkların da günlüğünde saklanır.
-        </Help>
         <TextInput
           value={text}
           onChangeText={setText}
           multiline
           accessibilityLabel="Günlük yazısı"
-          placeholder={"Bugün neler yaptın? Kimlerle görüştün, nereye gittin?"}
+          placeholder={"Bugün neler yaptın?"}
           placeholderTextColor={colors.faint}
           style={styles.input}
         />
@@ -221,14 +209,6 @@ const styles = StyleSheet.create({
     color: colors.accentInk,
     fontSize: type.base,
     fontWeight: "700",
-  },
-  hint: {
-    color: colors.text,
-    fontSize: type.md,
-    fontWeight: "600",
-    textAlign: "center",
-    lineHeight: type.md * 1.4,
-    marginTop: spacing.xs,
   },
   composer: {
     gap: spacing.sm,

@@ -16,11 +16,8 @@ const CAPTIONS = ["1. Fotoğraf", "2. Fotoğraf"];
 export function photoBoard() {
   const frames = el("div", { class: "photo-frames" });
   const actions = el("div", { class: "photo-actions" });
-  const help = el("p", { class: "help" }, [
-    "Konuşurken bakmak istediğin bir fotoğraf ekleyebilirsin. Fotoğraflar yalnızca bu cihazda kalır, hiçbir yere gönderilmez.",
-  ]);
 
-  const board = el("section", { class: "photo-board" }, [frames, help, actions]);
+  const board = el("section", { class: "photo-board" }, [frames, actions]);
 
   const filePicker = el("input", {
     type: "file",
@@ -84,10 +81,6 @@ export function photoBoard() {
         actions.appendChild(removeBtn);
       }
     }
-
-    help.textContent = bySlot.size
-      ? "Değiştirmek için fotoğrafın üzerine dokun. Fotoğraflar yalnızca bu cihazda kalır."
-      : "Konuşurken bakmak istediğin bir fotoğraf ekleyebilirsin. Fotoğraflar yalnızca bu cihazda kalır, hiçbir yere gönderilmez.";
   }
 
   function filledFrame(slot, record) {
@@ -121,16 +114,11 @@ export function photoBoard() {
         "aria-label": `${CAPTIONS[slot]}ı ekle`,
       },
       [
-        el("span", { class: "photo-frame-mat" }, [
-          el("span", { class: "photo-frame-inner" }, [
-            icon("photo", { size: 44, className: "photo-empty-icon" }),
-            el("span", { class: "photo-empty-label" }, ["Fotoğraf Ekle"]),
-            el("span", { class: "photo-empty-help" }, [
-              slot === 0
-                ? "Cihazından bir fotoğraf seç"
-                : "İstersen ikinci bir fotoğraf daha ekle",
-            ]),
-          ]),
+        // No mat and no 4:3 box while empty: the invitation is a slim strip
+        // that grows into a full frame only once a picture is in it.
+        el("span", { class: "photo-empty-inner" }, [
+          icon("photo", { size: 28, className: "photo-empty-icon" }),
+          el("span", { class: "photo-empty-label" }, ["Fotoğraf Ekle"]),
         ]),
       ]
     );

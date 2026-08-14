@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { Alert, Image, Pressable, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { SLOTS, loadPhotos, pickPhoto, removePhoto } from "../services/photos";
-import { Button, Help } from "./Primitives";
+import { Button } from "./Primitives";
 import { colors, radius, spacing, type } from "../theme";
 
 const CAPTIONS = ["1. Fotoğraf", "2. Fotoğraf"];
@@ -45,12 +45,6 @@ export function PhotoBoard() {
         )}
       </View>
 
-      <Help>
-        {hasAny
-          ? "Değiştirmek için fotoğrafa dokun. Fotoğraflar yalnızca bu telefonda kalır."
-          : "Konuşurken bakmak istediğin bir fotoğraf ekleyebilirsin. Fotoğraflar yalnızca bu telefonda kalır, hiçbir yere gönderilmez."}
-      </Help>
-
       {hasAny ? (
         <View style={styles.actions}>
           {SLOTS.filter((slot) => photos[slot]).map((slot) => (
@@ -81,6 +75,8 @@ function FilledFrame({ uri, slot, onPress }) {
 }
 
 function EmptyFrame({ slot, onPress }) {
+  // A slim strip while empty — no mat, no 4:3 box — so the invitation takes
+  // far less room than the picture it will hold.
   return (
     <Pressable
       accessibilityRole="button"
@@ -89,11 +85,8 @@ function EmptyFrame({ slot, onPress }) {
       style={[styles.frame, styles.frameEmpty]}
     >
       <View style={styles.emptyInner}>
-        <Ionicons name="image-outline" size={44} color={colors.accentDeep} />
+        <Ionicons name="image-outline" size={28} color={colors.accentDeep} />
         <Text style={styles.emptyLabel}>Fotoğraf Ekle</Text>
-        <Text style={styles.emptyHelp}>
-          {slot === 0 ? "Telefonundan bir fotoğraf seç" : "İstersen ikinci bir fotoğraf daha ekle"}
-        </Text>
       </View>
     </Pressable>
   );
@@ -106,6 +99,8 @@ const styles = StyleSheet.create({
   frames: {
     flexDirection: "row",
     gap: spacing.md,
+    // An empty slot next to a filled one keeps its own small height.
+    alignItems: "flex-start",
   },
   framesPair: {
     // Both frames share the row evenly; `flex: 1` on the frame does the work.
@@ -122,6 +117,8 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: colors.lineStrong,
     borderStyle: "dashed",
+    paddingVertical: 10,
+    paddingHorizontal: 14,
   },
   mat: {
     width: "100%",
@@ -147,20 +144,16 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   emptyInner: {
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: spacing.xs,
-    paddingVertical: spacing.xl,
+    gap: spacing.sm,
+    minHeight: 44,
   },
   emptyLabel: {
     fontSize: type.md,
     fontWeight: "700",
     color: colors.accentDeep,
-  },
-  emptyHelp: {
-    fontSize: type.sm,
-    color: colors.muted,
-    textAlign: "center",
   },
   actions: {
     flexDirection: "row",

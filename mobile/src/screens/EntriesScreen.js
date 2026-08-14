@@ -3,7 +3,6 @@
 
 import React, { useCallback, useEffect, useState } from "react";
 import { FlatList, RefreshControl, StyleSheet, Text, TextInput, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import { api } from "../services/api";
 import { nlpEnabled } from "../services/features";
 import { Button, Card, EmptyState, Loading, Screen } from "../ui/Primitives";
@@ -41,10 +40,7 @@ export function EntriesScreen({ locked }) {
   }
 
   return (
-    <Screen
-      title="Günlüğüm"
-      subtitle="Bugüne kadar kaydettiğin her şey burada. Yazıya çevrilmiş hâllerini okuyup düzeltebilirsin."
-    >
+    <Screen title="Günlüğüm">
       {loading ? (
         <Loading label="Günlüğün yükleniyor…" />
       ) : (
@@ -112,16 +108,6 @@ function EntryCard({ session, onChanged }) {
             {recordedAt.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}
           </Text>
         </View>
-        <View style={[styles.kind, hasAudio ? styles.kindVoice : styles.kindText]}>
-          <Ionicons
-            name={hasAudio ? "mic" : "create-outline"}
-            size={18}
-            color={hasAudio ? colors.accentDeep : colors.muted}
-          />
-          <Text style={[styles.kindLabel, hasAudio && styles.kindLabelVoice]}>
-            {hasAudio ? "Sesli kayıt" : "Yazılı not"}
-          </Text>
-        </View>
       </View>
 
       {busy || failed ? (
@@ -136,13 +122,11 @@ function EntryCard({ session, onChanged }) {
         </View>
       ) : null}
 
-      <Text style={styles.label}>
-        {hasAudio ? "Yazıya çevrilmiş hâli — düzeltebilirsin" : "Yazdıkların — düzeltebilirsin"}
-      </Text>
       <TextInput
         value={text}
         onChangeText={setText}
         multiline
+        accessibilityLabel={hasAudio ? "Yazıya çevrilmiş hâli" : "Yazdıkların"}
         placeholder={
           hasAudio
             ? busy
@@ -200,31 +184,6 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontSize: type.sm,
   },
-  kind: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.xs,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-  },
-  kindVoice: {
-    backgroundColor: colors.accentSoft,
-    borderColor: colors.accent,
-  },
-  kindText: {
-    backgroundColor: colors.surface2,
-    borderColor: colors.lineStrong,
-  },
-  kindLabel: {
-    color: colors.muted,
-    fontSize: type.sm,
-    fontWeight: "600",
-  },
-  kindLabelVoice: {
-    color: colors.accentDeep,
-  },
   progress: {
     backgroundColor: colors.goldSoft,
     borderColor: colors.gold,
@@ -239,11 +198,6 @@ const styles = StyleSheet.create({
   progressText: {
     color: colors.text,
     fontSize: type.base,
-    fontWeight: "600",
-  },
-  label: {
-    color: colors.muted,
-    fontSize: type.sm,
     fontWeight: "600",
   },
   input: {

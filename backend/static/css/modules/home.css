@@ -24,6 +24,8 @@
   display: grid;
   gap: 16px;
   grid-template-columns: 1fr;
+  /* An empty slot next to a filled one stays its own small height. */
+  align-items: start;
 }
 .photo-frames.is-pair {
   grid-template-columns: 1fr 1fr;
@@ -73,38 +75,36 @@
   display: block;
 }
 
-/* The empty frame is itself the "add a photo" button. */
+/* The empty frame is itself the "add a photo" button. It is a slim strip —
+   no mat, no 4:3 box — so the invitation takes far less room than the
+   picture it will hold. */
 .photo-frame.is-empty {
   background: var(--surface-2);
   box-shadow: none;
   border: 2px dashed var(--line-strong);
-}
-.photo-frame.is-empty .photo-frame-mat {
-  background: transparent;
-}
-.photo-frame.is-empty .photo-frame-inner {
-  background: transparent;
-  gap: 10px;
-  padding: 16px;
+  padding: 10px 14px;
 }
 .photo-frame.is-empty:hover {
   border-color: var(--accent);
   background: var(--accent-soft);
 }
+.photo-empty-inner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 44px;
+}
 .photo-empty-icon {
-  width: 44px;
-  height: 44px;
+  width: 28px;
+  height: 28px;
   color: var(--accent-deep);
+  flex: none;
 }
 .photo-empty-label {
   font-size: var(--fs-md);
   font-weight: 600;
   color: var(--accent-deep);
-}
-.photo-empty-help {
-  font-size: var(--fs-sm);
-  color: var(--ink-2);
-  line-height: 1.4;
 }
 
 .photo-frame-caption {
@@ -145,13 +145,6 @@
 .recorder-title {
   margin: 0;
   font-size: var(--fs-xl);
-}
-.recorder-lede {
-  margin: 10px auto 0;
-  max-width: 44ch;
-  color: var(--ink-2);
-  font-size: var(--fs-base);
-  line-height: 1.55;
 }
 
 .recorder-stage {
@@ -228,14 +221,6 @@
   }
 }
 
-.recorder-hint {
-  margin: 8px auto 0;
-  max-width: 40ch;
-  font-size: var(--fs-md);
-  color: var(--ink);
-  font-weight: 600;
-  min-height: 2.6em;
-}
 .recorder-actions {
   display: flex;
   gap: 12px;
@@ -257,14 +242,8 @@
   padding: 24px 20px;
 }
 .composer-title {
-  margin: 0;
+  margin: 0 0 16px;
   font-size: var(--fs-xl);
-}
-.composer-lede {
-  margin: 10px 0 18px;
-  color: var(--ink-2);
-  font-size: var(--fs-base);
-  line-height: 1.55;
 }
 .composer-field {
   width: 100%;

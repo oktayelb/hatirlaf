@@ -1,6 +1,6 @@
 // Ana — the whole app in one screen: your photos, a microphone, a box to
-// write in. Nothing else. Every control carries a full sentence explaining
-// what it does, in body-sized text.
+// write in. Nothing else. The controls speak for themselves; anything that
+// needs saying while recording goes to the toast.
 
 import { Recorder, fileExtFor, fmtDuration } from "../audio.js";
 import { uuid } from "../db.js";
@@ -64,10 +64,6 @@ function recorderPanel() {
     { class: "recorder-mic", type: "button", "aria-label": "Konuşmaya başla" },
     [icon("mic", { size: 52 }), micLabel]
   );
-  const hintEl = el("p", { class: "recorder-hint" }, [
-    "Yuvarlak düğmeye bas ve konuşmaya başla. Bitince aynı düğmeye tekrar bas.",
-  ]);
-
   const saveBtn = el("button", { class: "cta", type: "button", hidden: "" }, [
     "Günlüğüme Kaydet",
   ]);
@@ -75,7 +71,7 @@ function recorderPanel() {
     "Bu Kaydı Sil",
   ]);
 
-  const ui = { levelEl, timeEl, micBtn, micLabel, hintEl, saveBtn, discardBtn };
+  const ui = { levelEl, timeEl, micBtn, micLabel, saveBtn, discardBtn };
 
   micBtn.addEventListener("click", async () => {
     if (state.recording) await stopRecording(state, ui);
@@ -100,11 +96,7 @@ function recorderPanel() {
 
   return el("section", { class: "recorder" }, [
     el("h3", { class: "recorder-title" }, ["Konuşarak Anlat"]),
-    el("p", { class: "recorder-lede" }, [
-      "Sesini kaydet. Söylediklerin daha sonra yazıya çevrilir ve günlüğünde saklanır.",
-    ]),
     el("div", { class: "recorder-stage" }, [levelEl, timeEl, micBtn]),
-    hintEl,
     el("div", { class: "recorder-actions" }, [saveBtn, discardBtn]),
   ]);
 }
@@ -121,8 +113,7 @@ async function startRecording(state, ui) {
   } catch (err) {
     console.error(err);
     liveRecorder = null;
-    ui.hintEl.textContent =
-      "Mikrofona ulaşılamadı. Aşağıdaki kutuya yazarak da günlük tutabilirsin.";
+    // The panel carries no help text any more, so status only goes to the toast.
     toast("Mikrofona erişilemedi");
     return;
   }
@@ -133,7 +124,6 @@ async function startRecording(state, ui) {
   ui.micBtn.classList.add("is-recording");
   ui.micBtn.setAttribute("aria-label", "Konuşmayı bitir");
   ui.micLabel.textContent = "Bitir";
-  ui.hintEl.textContent = "Kayıt sürüyor. Bitirmek için düğmeye tekrar bas.";
   ui.saveBtn.hidden = true;
   ui.discardBtn.hidden = true;
 
@@ -159,23 +149,18 @@ async function stopRecording(state, ui) {
   ui.levelEl.style.opacity = "0";
 
   if (!result || !result.blob || result.blob.size === 0) {
-    ui.hintEl.textContent = "Kayıt boş göründü. Bir daha dener misin?";
+    toast("Kayıt boş göründü. Bir daha dener misin?");
     return;
   }
 
   state.lastTake = { blob: result.blob, duration: result.duration, mime: result.mime };
   ui.timeEl.textContent = fmtDuration(result.duration);
-  ui.hintEl.textContent = `${fmtDuration(
-    result.duration
-  )} uzunluğunda bir kayıt hazır. Saklamak için "Günlüğüme Kaydet"e bas.`;
   ui.saveBtn.hidden = false;
   ui.discardBtn.hidden = false;
 }
 
 function resetRecorder(ui) {
   ui.timeEl.textContent = "00:00";
-  ui.hintEl.textContent =
-    "Yuvarlak düğmeye bas ve konuşmaya başla. Bitince aynı düğmeye tekrar bas.";
   ui.saveBtn.hidden = true;
   ui.discardBtn.hidden = true;
   ui.saveBtn.removeAttribute("disabled");
@@ -201,8 +186,7 @@ function composerPanel() {
   const textarea = el("textarea", {
     class: "composer-field",
     "aria-label": "Günlük yazısı",
-    placeholder:
-      "Bugün neler yaptın? Kimlerle görüştün, nereye gittin?\n\nDilediğin kadar uzun yazabilirsin.",
+    placeholder: "Bugün neler yaptın?",
     rows: "8",
   });
 
@@ -245,9 +229,6 @@ function composerPanel() {
 
   return el("section", { class: "composer" }, [
     el("h3", { class: "composer-title" }, ["Yazarak Anlat"]),
-    el("p", { class: "composer-lede" }, [
-      "Konuşmak istemiyorsan aşağıdaki kutuya yaz. Yazdıkların da günlüğünde saklanır.",
-    ]),
     textarea,
     el("div", { class: "composer-footer" }, [counter, submit]),
   ]);

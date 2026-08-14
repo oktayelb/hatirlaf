@@ -8,7 +8,6 @@
 import { api } from "../api.js";
 import { nlpEnabled } from "../config.js";
 import { toast } from "../events.js";
-import { icon } from "../icons.js";
 import { el, fmtRelative, modal } from "./utils.js";
 
 let pollHandle = null;
@@ -20,10 +19,6 @@ export async function render(root) {
   root.appendChild(
     el("header", { class: "entries-header" }, [
       el("h2", { class: "section-title" }, ["Günlüğüm"]),
-      el("p", { class: "section-lede" }, [
-        "Bugüne kadar kaydettiğin her şey burada. Sesli kayıtlarını dinleyebilir, " +
-          "yazıya çevrilmiş hâllerini okuyup düzeltebilirsin.",
-      ]),
     ])
   );
 
@@ -127,10 +122,6 @@ function entryCard(session, draft = null) {
             fmtRelative(session.recorded_at),
         ]),
       ]),
-      el("span", { class: `entry-kind ${hasAudio ? "voice" : "text"}` }, [
-        icon(hasAudio ? "mic" : "pen", { size: 18 }),
-        hasAudio ? "Sesli kayıt" : "Yazılı not",
-      ]),
     ])
   );
 
@@ -168,14 +159,7 @@ function entryCard(session, draft = null) {
     }, 0);
   }
 
-  card.appendChild(
-    el("div", {}, [
-      el("label", { class: "entry-label" }, [
-        hasAudio ? "Yazıya çevrilmiş hâli — düzeltebilirsin" : "Yazdıkların — düzeltebilirsin",
-      ]),
-      textarea,
-    ])
-  );
+  card.appendChild(textarea);
 
   card.appendChild(actionRow({ session, card, textarea, transcript }));
   return card;

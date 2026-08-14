@@ -3,9 +3,6 @@
 .entries-header {
   margin-bottom: 22px;
 }
-.entries-header .section-lede {
-  max-width: 46ch;
-}
 
 .entries-list {
   display: grid;
@@ -38,31 +35,6 @@
 .entry-time {
   color: var(--ink-2);
   font-size: var(--fs-sm);
-}
-
-.entry-kind {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 14px;
-  border-radius: var(--radius-pill);
-  font-size: var(--fs-sm);
-  font-weight: 600;
-  border: 1px solid transparent;
-}
-.entry-kind svg {
-  width: 18px;
-  height: 18px;
-}
-.entry-kind.voice {
-  background: var(--accent-soft);
-  color: var(--accent-deep);
-  border-color: var(--accent);
-}
-.entry-kind.text {
-  background: var(--sky-soft);
-  color: var(--sky);
-  border-color: var(--sky);
 }
 
 .entry-audio {
@@ -108,14 +80,6 @@
 }
 .entry-progress.failed .entry-progress-bar span {
   background: var(--clay);
-}
-
-.entry-label {
-  font-size: var(--fs-sm);
-  font-weight: 600;
-  color: var(--ink-2);
-  margin-bottom: 8px;
-  display: block;
 }
 
 .entry-transcript {
