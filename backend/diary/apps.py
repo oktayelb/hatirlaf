@@ -88,6 +88,7 @@ def _should_preload() -> bool:
 def _preload_models() -> None:
     # Imports are deferred so this module stays importable even when the
     # heavy ML deps aren't installed (e.g., during ``manage.py check``).
+    from .pipeline import flags
     from .processing import startup
 
     try:
@@ -115,6 +116,13 @@ def _preload_models() -> None:
     except Exception as exc:  # pragma: no cover - defensive
         logger.warning("STT preload failed: %s", exc)
         startup.mark_done("stt", "failed", "Whisper yüklenemedi.")
+
+    # The LLM and the morphology bridge only serve the understanding stages.
+    # With the NLP flag off, loading several GB of weights would buy nothing.
+    if not flags.nlp_enabled():
+        startup.mark_done("llm", "skipped", "NLP hattı kapalı.")
+        startup.mark_done("savyar", "skipped", "NLP hattı kapalı.")
+        return
 
     startup.mark_loading("llm", "Yerel LLM ağırlıkları belleğe alınıyor.")
     try:

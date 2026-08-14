@@ -10,10 +10,11 @@ from rest_framework.response import Response
 from ..models import Edge, Node, NodeKind
 from ..processing import entity_registry as entity_registry_mod
 from ..serializers import EdgeSerializer, NodeSerializer
+from .api_config import NlpOnlyMixin
 from .api_shared import _entity_display_label, _node_memories_for
 
 
-class NodeViewSet(viewsets.ModelViewSet):
+class NodeViewSet(NlpOnlyMixin, viewsets.ModelViewSet):
     serializer_class = NodeSerializer
     queryset = Node.objects.annotate(_mention_count=Count("mentions")).all()
 
@@ -112,6 +113,6 @@ class NodeViewSet(viewsets.ModelViewSet):
         )
 
 
-class EdgeListView(generics.ListAPIView):
+class EdgeListView(NlpOnlyMixin, generics.ListAPIView):
     serializer_class = EdgeSerializer
     queryset = Edge.objects.select_related("source", "target", "session").all()

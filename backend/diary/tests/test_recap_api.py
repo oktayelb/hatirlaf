@@ -9,7 +9,7 @@ from django.utils import timezone
 from diary.models import EventificationStatus, Mention, MentionType, Node, NodeKind, Session, SessionStatus
 
 
-@override_settings(HATIRLAF_PRELOAD_MODELS=False)
+@override_settings(HATIRLAF_PRELOAD_MODELS=False, HATIRLAF_NLP_ENABLED=True)
 class RecapApiTests(TestCase):
     def test_recap_rolls_up_monthly_memory_digest(self):
         recorded_at = timezone.make_aware(dt.datetime(2026, 4, 30, 8, 15))

@@ -9,7 +9,7 @@ from django.utils import timezone
 from diary.models import EventificationStatus, Mention, MentionType, Session, SessionStatus
 
 
-@override_settings(HATIRLAF_PRELOAD_MODELS=False)
+@override_settings(HATIRLAF_PRELOAD_MODELS=False, HATIRLAF_NLP_ENABLED=True)
 class NodeMemoriesApiTests(TestCase):
     def test_memories_page_includes_unresolved_person_mentions(self):
         session = Session.objects.create(

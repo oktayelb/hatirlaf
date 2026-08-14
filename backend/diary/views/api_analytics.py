@@ -10,7 +10,9 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
 from ..models import Edge, EventificationStatus, Mention, MentionType, Node, NodeKind, Session, SessionStatus
+from ..pipeline import flags
 from ..processing import startup
+from .api_config import nlp_only
 from .api_shared import (
     _calendar_events_for_session,
     _counter_items,
@@ -23,6 +25,7 @@ from .api_shared import (
 
 
 @api_view(["GET"])
+@nlp_only
 def timeline_view(request):
     """Return sessions + key mentions in chronological order for the timeline."""
     sessions = (
@@ -61,6 +64,7 @@ def timeline_view(request):
 
 
 @api_view(["GET"])
+@nlp_only
 def calendar_view(request):
     """Event-per-day rollup for the Personal History calendar."""
     month = (request.query_params.get("month") or "").strip()
@@ -120,6 +124,7 @@ def calendar_view(request):
 
 
 @api_view(["GET"])
+@nlp_only
 def recap_view(request):
     """Monthly memory digest built from sessions, events, and graph mentions."""
     month = (request.query_params.get("month") or "").strip()
@@ -227,6 +232,7 @@ def recap_view(request):
 
 
 @api_view(["GET"])
+@nlp_only
 def graph_view(request):
     nodes = list(
         Node.objects.annotate(_mention_count=Count("mentions")).values(
@@ -239,7 +245,14 @@ def graph_view(request):
 
 @api_view(["GET"])
 def health_view(request):
-    return Response({"ok": True, "startup": startup.snapshot()})
+    # Features ride along so the boot screen needs a single round trip.
+    return Response(
+        {
+            "ok": True,
+            "startup": startup.snapshot(),
+            "features": flags.snapshot(),
+        }
+    )
 
 
 def _reminder_payload(*, session_id: int, event: dict) -> dict:

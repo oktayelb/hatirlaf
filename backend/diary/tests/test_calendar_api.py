@@ -10,7 +10,7 @@ from diary.models import EventificationStatus, Session, SessionStatus
 from diary.processing import extractor, llm
 
 
-@override_settings(HATIRLAF_PRELOAD_MODELS=False)
+@override_settings(HATIRLAF_PRELOAD_MODELS=False, HATIRLAF_NLP_ENABLED=True)
 class CalendarApiTests(TestCase):
     def test_completed_session_appears_while_eventification_is_still_running(self):
         Session.objects.create(

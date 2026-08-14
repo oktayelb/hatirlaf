@@ -4,6 +4,7 @@ from django.utils import timezone
 from django.urls import reverse
 from rest_framework import serializers
 
+from .pipeline import flags
 from .processing import nlp as nlp_mod
 from .models import Edge, EventificationStatus, Mention, Node, Session, SessionStatus
 
@@ -132,6 +133,24 @@ class MentionSerializer(serializers.ModelSerializer):
 
 
 class SessionSerializer(serializers.ModelSerializer):
+    #: Everything the understanding pipeline produces. Removed from the
+    #: payload entirely while the NLP flag is off, so a client cannot show
+    #: analysis output that does not exist.
+    NLP_FIELDS = (
+        "processed_text",
+        "word_timings",
+        "structured_events",
+        "eventification_status",
+        "eventification_detail",
+        "conflict_count",
+        "mention_count",
+        "mentions",
+        "mood",
+        "mood_source",
+        "tags",
+        "tags_source",
+    )
+
     status_display = serializers.CharField(source="get_status_display", read_only=True)
     audio_url = serializers.SerializerMethodField()
     conflict_count = serializers.SerializerMethodField()
@@ -196,6 +215,12 @@ class SessionSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if not flags.nlp_enabled():
+            for name in self.NLP_FIELDS:
+                self.fields.pop(name, None)
+
     def validate_tags(self, value):
         if value in (None, ""):
             return []
@@ -235,6 +260,8 @@ class SessionSerializer(serializers.ModelSerializer):
         return obj.mentions.count()
 
     def get_processing_progress(self, obj):
+        if not flags.nlp_enabled():
+            return self._capture_only_progress(obj)
         if obj.status == SessionStatus.FAILED or obj.eventification_status == EventificationStatus.FAILED:
             return 100
         if obj.status == SessionStatus.QUEUED:
@@ -253,12 +280,30 @@ class SessionSerializer(serializers.ModelSerializer):
             return 62
         return 0
 
+    def _capture_only_progress(self, obj) -> int:
+        """Progress when the diary is just recording: upload, transcribe, done."""
+        if obj.status == SessionStatus.FAILED:
+            return 100
+        if obj.status == SessionStatus.QUEUED:
+            return 5
+        if obj.status in {SessionStatus.TRANSCRIBING, SessionStatus.PARSING}:
+            return self._elapsed_progress(obj, start=15, end=95, seconds=90)
+        return 100
+
     def _elapsed_progress(self, obj, *, start: int, end: int, seconds: int) -> int:
         elapsed = max((timezone.now() - obj.updated_at).total_seconds(), 0)
         ratio = min(elapsed / max(seconds, 1), 1.0)
         return round(start + ((end - start) * ratio))
 
     def get_processing_detail(self, obj):
+        if not flags.nlp_enabled():
+            if obj.status == SessionStatus.FAILED:
+                return "Bu kayıt yazıya çevrilemedi."
+            if obj.status == SessionStatus.QUEUED:
+                return "Kaydın sırada bekliyor."
+            if obj.status in {SessionStatus.TRANSCRIBING, SessionStatus.PARSING}:
+                return "Sesin yazıya çevriliyor."
+            return "Hazır."
         if obj.status == SessionStatus.FAILED:
             return obj.status_detail or obj.get_status_display()
         if obj.status in {

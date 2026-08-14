@@ -12,6 +12,7 @@ from .views.api import (
     recap_view,
     timeline_view,
 )
+from .views.api_config import config_view
 from .views.api_privacy import (
     privacy_clear_password_view,
     privacy_lock_view,
@@ -32,6 +33,7 @@ urlpatterns = [
     path("calendar/", calendar_view, name="calendar"),
     path("graph/", graph_view, name="graph"),
     path("health/", health_view, name="health"),
+    path("config/", config_view, name="config"),
     path("recap/", recap_view, name="recap"),
     path("privacy/status/", privacy_status_view, name="privacy-status"),
     path("privacy/unlock/", privacy_unlock_view, name="privacy-unlock"),

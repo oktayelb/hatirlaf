@@ -11,6 +11,9 @@ class PrivacyLockMiddleware:
 
     EXEMPT_PATHS = {
         "/api/health/",
+        # Feature flags carry no diary content, and the client needs them to
+        # build its navigation before the lock screen can even be drawn.
+        "/api/config/",
         "/api/privacy/status/",
         "/api/privacy/unlock/",
     }

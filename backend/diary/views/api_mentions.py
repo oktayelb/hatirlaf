@@ -10,10 +10,11 @@ from ..models import Mention, Node, NodeKind
 from ..processing import entity_registry as entity_registry_mod
 from ..processing import nlp as nlp_mod
 from ..serializers import MentionSerializer, ResolveMentionSerializer
+from .api_config import NlpOnlyMixin
 from .api_shared import _default_kind_for, _rebuild_edges_for_session
 
 
-class MentionViewSet(viewsets.ReadOnlyModelViewSet):
+class MentionViewSet(NlpOnlyMixin, viewsets.ReadOnlyModelViewSet):
     serializer_class = MentionSerializer
     queryset = Mention.objects.select_related("node", "session").all()
 
