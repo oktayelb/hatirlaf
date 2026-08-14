@@ -142,6 +142,20 @@ REST_FRAMEWORK = {
 CORS_ALLOW_ALL_ORIGINS = DEBUG
 CORS_ALLOWED_ORIGINS = os.environ.get("HATIRLAF_CORS_ORIGINS", "").split(",") if not DEBUG else []
 
+# --- The NLP switch ----------------------------------------------------------
+# One flag turns the entire natural-language understanding layer on or off.
+#
+#   OFF (default) — Hatırlaf is a plain voice diary. Record or type, get the
+#     speech-to-text back, browse your entries. No mentions, no entity
+#     resolution, no LLM eventification, no calendar, no memory pages. The
+#     matching endpoints return 404 and the clients hide those screens.
+#
+#   ON — the full pipeline runs and the analysis screens reappear.
+#
+# Flip it by editing the default below, or without touching code:
+#   HATIRLAF_NLP_ENABLED=1 scripts/run.sh
+HATIRLAF_NLP_ENABLED = os.environ.get("HATIRLAF_NLP_ENABLED", "0") == "1"
+
 # --- App config --------------------------------------------------------------
 # Whisper model size. ``large-v3-turbo`` is the recommended Turkish default —
 # nearly identical accuracy to ``large-v3`` at roughly 4-5× the speed on CPU.

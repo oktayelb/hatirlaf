@@ -3,7 +3,7 @@ from __future__ import annotations
 import datetime as dt
 from unittest.mock import patch
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from diary.models import Edge, EncounteredEntity, Mention, MentionType, Node, NodeKind, Session, SessionStatus
@@ -12,6 +12,7 @@ from diary.processing.conflicts import detect_conflicts
 from diary.services import session_pipeline
 
 
+@override_settings(HATIRLAF_NLP_ENABLED=True)
 class SessionPipelineServiceTests(TestCase):
     def test_persist_parsing_result_creates_mentions_and_completes_session(self):
         recorded_at = dt.datetime(2026, 4, 30, 12, 0)
@@ -131,7 +132,7 @@ class SessionPipelineServiceTests(TestCase):
         EncounteredEntity.objects.create(kind=NodeKind.PERSON, label="fatihle")
 
         with (
-            patch("diary.processing.pipeline.kickoff_eventification"),
+            patch("diary.pipeline.runner.kickoff_eventification"),
             self.captureOnCommitCallbacks(execute=True),
         ):
             response = self.client.post(reverse("session-reextract-all"))
@@ -151,8 +152,8 @@ class SessionPipelineServiceTests(TestCase):
         self.assertIn((NodeKind.PERSON, "fatih"), labels)
         self.assertNotIn((NodeKind.PERSON, "fatihle"), labels)
 
-    @patch("diary.processing.pipeline.kickoff_eventification")
-    @patch("diary.processing.pipeline.tx_mod.transcribe")
+    @patch("diary.pipeline.runner.kickoff_eventification")
+    @patch("diary.pipeline.stages.tx_mod.transcribe")
     def test_reprocess_endpoint_uses_saved_transcript_instead_of_retranscribing_audio(
         self,
         transcribe,

@@ -9,11 +9,12 @@ from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
 
 from ..models import EventificationStatus, Session, SessionStatus
-from ..processing.pipeline import (
+from ..pipeline import (
     is_eventification_active,
     is_processing_active,
     kickoff,
     kickoff_transcript_reprocess,
+    nlp_enabled,
     reextract_all_transcripts,
 )
 from ..serializers import SessionDetailSerializer, SessionSerializer, SessionUploadSerializer
@@ -78,8 +79,12 @@ class SessionViewSet(viewsets.ModelViewSet):
             else ""
         )
         session.structured_events = []
-        session.eventification_status = EventificationStatus.QUEUED
-        session.eventification_detail = "Yeniden olaylaştırma sıraya alındı."
+        if nlp_enabled():
+            session.eventification_status = EventificationStatus.QUEUED
+            session.eventification_detail = "Yeniden olaylaştırma sıraya alındı."
+        else:
+            session.eventification_status = EventificationStatus.NOT_STARTED
+            session.eventification_detail = ""
         session.save(
             update_fields=[
                 "status",
