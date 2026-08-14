@@ -7,11 +7,10 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: max(28px, env(safe-area-inset-top, 0px)) 24px max(28px, env(safe-area-inset-bottom, 0px));
-  background:
-    linear-gradient(180deg, rgba(20, 29, 47, 0.94), rgba(11, 18, 32, 1) 42%),
-    var(--bg);
-  transition: opacity 220ms ease, visibility 220ms ease;
+  padding: max(28px, env(safe-area-inset-top, 0px)) 24px
+    max(28px, env(safe-area-inset-bottom, 0px));
+  background: linear-gradient(180deg, var(--paper-2), var(--paper) 55%);
+  transition: opacity 240ms ease, visibility 240ms ease;
 }
 .startup-screen.is-done {
   opacity: 0;
@@ -19,61 +18,63 @@
 }
 .startup-shell {
   width: min(100%, 460px);
-  min-height: min(680px, 100%);
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  align-items: flex-start;
 }
 .startup-brand-mark {
-  width: 64px;
-  height: 64px;
+  width: 76px;
+  height: 76px;
   display: grid;
   place-items: center;
-  border-radius: 12px;
-  background: var(--fg);
-  color: var(--bg);
-  font-size: 30px;
-  font-weight: 800;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  border: 2px solid var(--accent);
+  color: var(--accent-deep);
+  font-family: var(--font-display);
+  font-size: var(--fs-2xl);
+  font-weight: 600;
   line-height: 1;
-  margin-bottom: 22px;
+  margin-bottom: 24px;
 }
 .startup-kicker {
-  color: var(--accent-2);
-  font-size: 11px;
+  color: var(--accent-deep);
+  font-size: var(--fs-sm);
   font-weight: 700;
-  letter-spacing: 2.2px;
+  letter-spacing: 1.6px;
   text-transform: uppercase;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 .startup-title {
   margin: 0 0 30px;
-  font-size: 30px;
-  line-height: 1.12;
-  font-weight: 750;
+  font-size: var(--fs-xl);
+  line-height: 1.25;
 }
 .startup-progress-row {
+  width: 100%;
   display: grid;
-  grid-template-columns: 1fr 48px;
+  grid-template-columns: 1fr auto;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
 }
 .startup-progress {
   width: 100%;
-  height: 8px;
+  height: 12px;
   overflow: hidden;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 999px;
+  background: var(--surface-3);
+  border-radius: var(--radius-pill);
 }
 .startup-progress-fill {
   width: 0;
   height: 100%;
   border-radius: inherit;
-  background: var(--fg);
+  background: var(--accent);
   transition: width 420ms ease;
 }
 .startup-percent {
-  color: var(--fg);
-  font-size: 14px;
+  color: var(--ink-2);
+  font-size: var(--fs-base);
   font-variant-numeric: tabular-nums;
   text-align: right;
+  min-width: 3.5ch;
 }

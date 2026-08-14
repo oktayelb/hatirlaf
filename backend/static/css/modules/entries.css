@@ -1,154 +1,168 @@
-/* ---------- Entries list (Girişler) ---------- */
+/* ---------- Entry log ---------- */
 
 .entries-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
-  margin-bottom: 14px;
+  margin-bottom: 22px;
 }
-.entries-heading { min-width: 0; }
-.entries-title { margin: 0 0 4px; font-size: 18px; }
-.entries-sub { font-size: 13px; margin: 0; line-height: 1.5; }
-.entries-debug-btn {
-  width: auto;
-  flex: 0 0 auto;
-  padding: 10px 14px;
-  font-size: 13px;
-  white-space: nowrap;
+.entries-header .section-lede {
+  max-width: 46ch;
 }
 
 .entries-list {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
+  display: grid;
+  gap: 18px;
 }
 
 .entry-card {
-  background: var(--bg-elev);
-  border: 1px solid var(--border);
+  background: var(--surface);
+  border: 1px solid var(--line);
   border-radius: var(--radius);
-  padding: 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+  box-shadow: var(--shadow);
+  padding: 20px;
+  display: grid;
+  gap: 16px;
 }
 
-.entry-meta { display: flex; flex-direction: column; gap: 4px; }
-.entry-meta-row {
+.entry-head {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
   flex-wrap: wrap;
 }
-.entry-time { font-size: 12px; }
-.entry-date { font-size: 12px; }
+.entry-date {
+  font-family: var(--font-display);
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  text-transform: capitalize;
+}
+.entry-time {
+  color: var(--ink-2);
+  font-size: var(--fs-sm);
+}
 
 .entry-kind {
   display: inline-flex;
   align-items: center;
-  padding: 2px 8px;
-  border-radius: 6px;
-  font-size: 11px;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: var(--radius-pill);
+  font-size: var(--fs-sm);
   font-weight: 600;
-  letter-spacing: 0.4px;
-  text-transform: uppercase;
-  border: 1px solid var(--border-strong);
+  border: 1px solid transparent;
 }
-.entry-kind.voice { background: rgba(47, 167, 160, 0.14); color: var(--accent-2); border-color: rgba(47, 167, 160, 0.35); }
-.entry-kind.text { background: rgba(62, 201, 138, 0.12); color: var(--ok); border-color: rgba(62, 201, 138, 0.35); }
+.entry-kind svg {
+  width: 18px;
+  height: 18px;
+}
+.entry-kind.voice {
+  background: var(--accent-soft);
+  color: var(--accent-deep);
+  border-color: var(--accent);
+}
+.entry-kind.text {
+  background: var(--sky-soft);
+  color: var(--sky);
+  border-color: var(--sky);
+}
 
 .entry-audio {
   width: 100%;
-  height: 36px;
-  filter: brightness(0.95);
+  height: 46px;
+  border-radius: var(--radius-sm);
+}
+
+/* Transcription progress. The only status the user ever sees, phrased in
+   plain Turkish — no pipeline vocabulary. */
+.entry-progress {
+  background: var(--gold-soft);
+  border: 1px solid var(--gold);
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+  display: grid;
+  gap: 10px;
+}
+.entry-progress.failed {
+  background: var(--clay-soft);
+  border-color: var(--clay);
+}
+.entry-progress-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: var(--fs-base);
+  font-weight: 600;
+  color: var(--ink);
+}
+.entry-progress-bar {
+  height: 10px;
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  overflow: hidden;
+}
+.entry-progress-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--gold);
+  transition: width 500ms ease;
+}
+.entry-progress.failed .entry-progress-bar span {
+  background: var(--clay);
+}
+
+.entry-label {
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--ink-2);
+  margin-bottom: 8px;
+  display: block;
 }
 
 .entry-transcript {
   width: 100%;
-  min-height: 110px;
-  border-radius: var(--radius);
-  background: var(--field-bg);
-  color: var(--fg);
-  border: 1px solid var(--border);
-  padding: 12px;
-  font: inherit;
-  line-height: 1.55;
+  min-height: 150px;
+  padding: 18px;
+  border-radius: var(--radius-sm);
+  border: 2px solid var(--line-strong);
+  background: var(--surface-2);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: var(--fs-md);
+  line-height: 1.7;
   resize: vertical;
 }
-.entry-transcript:focus { outline: 2px solid rgba(47,167,160,0.5); outline-offset: -1px; border-color: transparent; }
+.entry-transcript:focus {
+  border-color: var(--accent);
+  background: var(--surface);
+  outline: none;
+}
+.entry-transcript::placeholder {
+  color: var(--ink-3);
+}
 
 .entry-actions {
   display: flex;
-  align-items: center;
-  gap: 10px;
+  gap: 12px;
   flex-wrap: wrap;
-}
-.entry-actions .cta { width: auto; padding: 10px 18px; }
-.entry-status { font-size: 12px; }
-
-.entry-processing,
-.review-processing {
-  display: grid;
-  gap: 8px;
-  padding: 10px 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: rgba(11, 18, 32, 0.45);
-}
-.review-processing { margin-top: 12px; }
-.entry-processing.active,
-.review-processing.active {
-  border-color: rgba(47, 167, 160, 0.32);
-  background: rgba(47, 167, 160, 0.08);
-}
-.entry-processing.complete,
-.review-processing.complete {
-  border-color: rgba(62, 201, 138, 0.26);
-}
-.entry-processing.failed,
-.review-processing.failed {
-  border-color: rgba(255, 182, 72, 0.32);
-}
-.entry-processing-head {
-  display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
 }
-.entry-processing-title {
-  font-size: 13px;
-  font-weight: 650;
+.entry-actions .cta {
+  width: auto;
+  flex: 1 1 150px;
+  font-size: var(--fs-base);
+  padding: 12px 16px;
 }
-.entry-processing-percent {
-  color: var(--fg-muted);
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
+.entry-status {
+  flex-basis: 100%;
+  color: var(--ink-2);
+  font-size: var(--fs-sm);
+  min-height: 1.4em;
 }
-.entry-processing-bar {
-  height: 6px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.08);
-}
-.entry-processing-bar span {
-  display: block;
-  width: 0;
-  height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, var(--accent), var(--accent-2));
-  transition: width 320ms ease;
-}
-.entry-processing.complete .entry-processing-bar span,
-.review-processing.complete .entry-processing-bar span {
-  background: var(--ok);
-}
-.entry-processing.failed .entry-processing-bar span,
-.review-processing.failed .entry-processing-bar span {
-  background: var(--warn);
-}
-.entry-processing-detail {
-  font-size: 12px;
-  line-height: 1.35;
+
+/* Developer-only affordance, shown when the NLP pipeline is switched on. */
+.entries-debug-btn {
+  width: auto;
+  margin-top: 16px;
+  font-size: var(--fs-sm);
+  padding: 10px 16px;
 }

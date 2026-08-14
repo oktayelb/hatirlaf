@@ -1,201 +1,245 @@
-/* ---------- Top appbar ---------- */
+/* ---------- Top bar ---------- */
 
 .app-header {
   position: sticky;
   top: 0;
   z-index: 30;
-  padding: calc(env(safe-area-inset-top, 0) + 10px) 14px 8px;
+  padding: calc(env(safe-area-inset-top, 0) + 14px) 18px 14px;
   background: var(--header-bg);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  border-bottom: 1px solid var(--border);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--line);
 }
+
 .app-header-row {
   display: flex;
   align-items: center;
-  gap: 10px;
-  height: 36px;
+  gap: 12px;
+  min-height: 48px;
 }
+
 .app-back {
-  width: 34px; height: 34px;
+  width: 48px;
+  height: 48px;
+  flex: 0 0 auto;
   border-radius: var(--radius-sm);
-  background: transparent;
-  border: 1px solid var(--border);
-  color: var(--fg);
-  font-size: 18px;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  color: var(--ink);
+  font-size: var(--fs-lg);
   cursor: pointer;
-  display: grid; place-items: center;
+  display: grid;
+  place-items: center;
 }
-.app-back[hidden] { display: none; }
+.app-back[hidden] {
+  display: none;
+}
+.app-back:hover {
+  background: var(--surface-2);
+}
+
 .app-brand {
   flex: 1;
   margin: 0;
-  font-size: 17px;
-  font-weight: 700;
-  letter-spacing: 0;
+  font-family: var(--font-display);
+  font-size: var(--fs-lg);
+  font-weight: 600;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
 .app-header-actions {
   display: inline-flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   flex: 0 0 auto;
 }
-.app-online {
-  font-size: 10px;
-  width: 10px; height: 10px;
-  border-radius: 50%;
-  background: var(--ok);
-  box-shadow: 0 0 8px rgba(62, 201, 138, 0.6);
-  color: transparent;
-  display: inline-block;
-}
-.app-online.offline { background: var(--warn); box-shadow: 0 0 8px rgba(255, 182, 72, 0.5); }
 
-.theme-toggle {
-  width: 34px;
-  height: 34px;
+/* The settings door. Deliberately not a main tab: the two tabs below are
+   the whole app, and this is the thing you touch twice a year. */
+.app-settings-btn {
+  width: 48px;
+  height: 48px;
   border-radius: var(--radius-sm);
-  background: var(--bg-elev);
-  color: var(--fg);
-  border: 1px solid var(--border);
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  color: var(--ink-2);
   display: grid;
   place-items: center;
   cursor: pointer;
-  transition: background 140ms ease, border-color 140ms ease, transform 120ms ease;
+  transition: background 130ms ease, color 130ms ease;
 }
-.theme-toggle:hover {
-  background: var(--bg-elev-2);
-  border-color: var(--border-strong);
+.app-settings-btn:hover {
+  background: var(--surface-2);
+  color: var(--ink);
 }
-.theme-toggle:active { transform: translateY(1px); }
-.theme-toggle-icon {
-  position: relative;
-  width: 18px;
-  height: 18px;
+.app-settings-btn.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent-deep);
+}
+.app-settings-btn svg {
+  width: 24px;
+  height: 24px;
+}
+
+.app-online {
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
-  border: 2px solid currentColor;
-  display: block;
+  background: var(--accent);
+  color: transparent;
+  font-size: 0;
+  display: inline-block;
+  flex: 0 0 auto;
 }
-.theme-toggle-icon::before {
-  content: "";
-  position: absolute;
-  inset: -5px;
-  border-radius: inherit;
-  background:
-    linear-gradient(currentColor, currentColor) 50% 0 / 2px 4px no-repeat,
-    linear-gradient(currentColor, currentColor) 50% 100% / 2px 4px no-repeat,
-    linear-gradient(90deg, currentColor, currentColor) 0 50% / 4px 2px no-repeat,
-    linear-gradient(90deg, currentColor, currentColor) 100% 50% / 4px 2px no-repeat;
-  opacity: 0;
+.app-online.offline {
+  background: var(--gold);
 }
-.theme-toggle[data-theme="light"] .theme-toggle-icon::before { opacity: 1; }
-.theme-toggle[data-theme="dark"] .theme-toggle-icon {
-  border-color: transparent;
-  background: currentColor;
-  box-shadow: inset -6px 0 0 var(--bg-elev);
-}
+
+/* ---------- Main tabs ---------- */
 
 .app-nav {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 1px;
-  margin-top: 10px;
-  padding: 2px;
-  background: var(--seg-bg);
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 8px;
+  margin-top: 14px;
+  padding: 6px;
+  background: var(--surface-2);
   border-radius: var(--radius);
-  border: 1px solid var(--border);
+  border: 1px solid var(--line);
 }
+
 .app-nav-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
   background: transparent;
-  color: var(--fg-muted);
-  border: 0;
-  border-radius: 6px;
-  padding: 9px 8px;
-  font-size: 13px;
+  color: var(--ink-2);
+  border: 2px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: 10px 6px;
+  min-height: var(--tap);
+  font-size: var(--fs-md);
   font-weight: 600;
-  letter-spacing: 0.2px;
   cursor: pointer;
-  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+  transition: background 130ms ease, color 130ms ease, border-color 130ms ease;
   touch-action: manipulation;
 }
-.app-nav-btn:hover { color: var(--fg); border-color: var(--border-strong); }
+.app-nav-btn svg {
+  width: 26px;
+  height: 26px;
+}
+.app-nav-btn:hover {
+  color: var(--ink);
+  background: var(--surface);
+}
 .app-nav-btn.active {
-  background: var(--bg-elev-3);
-  color: var(--fg);
-  border-color: transparent;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.14);
+  background: var(--surface);
+  color: var(--accent-deep);
+  border-color: var(--accent);
+  box-shadow: var(--shadow);
 }
 
 /* ---------- Screen canvas ---------- */
 
 .screen-root {
   flex: 1;
-  padding: 18px 16px 34px;
+  padding: 22px 18px calc(env(safe-area-inset-bottom, 0) + 40px);
   overflow-y: auto;
   scroll-behavior: smooth;
   touch-action: pan-y;
-  will-change: transform, opacity;
 }
 .screen-root.route-enter {
-  animation: routeIn 150ms ease-out both;
+  animation: routeIn 170ms ease-out both;
 }
 .screen-root.route-enter.route-forward {
-  --route-x: 18px;
+  --route-x: 16px;
 }
 .screen-root.route-enter.route-back {
-  --route-x: -18px;
+  --route-x: -16px;
 }
-
-/* ---------- Cards / CTAs ---------- */
-
-.card {
-  background: var(--bg-elev);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 14px;
-  margin-bottom: 12px;
-  box-shadow: 0 1px 0 color-mix(in srgb, var(--fg) 5%, transparent) inset;
-}
-.card h2 { margin: 0 0 6px; font-size: 15px; }
-.card .muted { color: var(--fg-muted); font-size: 13px; }
-
-.muted { color: var(--fg-muted); }
-
-.cta {
-  display: block;
-  width: 100%;
-  background: var(--accent);
-  color: var(--accent-contrast);
-  border: 0;
-  padding: 14px;
-  border-radius: var(--radius-sm);
-  font-weight: 600;
-  font-size: 15px;
-  cursor: pointer;
-  min-height: var(--tap);
-  letter-spacing: 0.2px;
-  transition: transform 100ms ease, box-shadow 100ms ease, background 120ms ease, border-color 120ms ease;
-  touch-action: manipulation;
-}
-.cta:hover:not([disabled]) { filter: brightness(1.06); }
-.cta:active:not([disabled]) { transform: translateY(1px); }
-.cta[disabled] { opacity: 0.4; cursor: not-allowed; }
-.cta.secondary { background: var(--bg-elev-2); color: var(--fg); }
-.cta.ghost { background: transparent; color: var(--accent-2); border: 1px solid var(--border); }
-.cta.ghost:hover:not([disabled]) { background: var(--accent-soft); }
-.cta.danger { background: rgba(255, 90, 99, 0.12); color: var(--danger); border: 1px solid rgba(255,90,99,0.35); }
 
 @keyframes routeIn {
   from {
-    opacity: 0.72;
+    opacity: 0.6;
     transform: translate3d(var(--route-x, 12px), 0, 0);
   }
   to {
     opacity: 1;
     transform: translate3d(0, 0, 0);
   }
+}
+
+/* ---------- Lock screen ---------- */
+
+.privacy-lock {
+  display: grid;
+  place-items: center;
+  min-height: 60vh;
+  padding: 20px 0;
+}
+.privacy-lock-card {
+  width: 100%;
+  max-width: 420px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 30px 24px;
+  display: grid;
+  gap: 20px;
+  justify-items: center;
+  text-align: center;
+}
+.privacy-lock-mark {
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--accent-soft);
+  color: var(--accent-deep);
+  font-family: var(--font-display);
+  font-size: var(--fs-xl);
+  font-weight: 600;
+}
+.privacy-lock-title {
+  margin: 0 0 8px;
+  font-size: var(--fs-xl);
+}
+.privacy-lock-copy {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: var(--fs-base);
+}
+.privacy-lock-form {
+  width: 100%;
+  display: grid;
+  gap: 14px;
+}
+.privacy-lock-input {
+  width: 100%;
+  min-height: var(--tap);
+  padding: 14px 16px;
+  font-size: var(--fs-md);
+  color: var(--ink);
+  background: var(--surface-2);
+  border: 2px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+}
+.privacy-lock-input:focus {
+  border-color: var(--accent);
+  outline: none;
+  background: var(--surface);
+}
+.privacy-lock-error {
+  color: var(--clay);
+  font-size: var(--fs-sm);
+  min-height: 1.4em;
 }

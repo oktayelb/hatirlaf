@@ -1,137 +1,147 @@
-/* ---------- Settings / Privacy lock ---------- */
+/* ---------- Ayarlar ---------- */
 
-.settings,
-.privacy-lock {
+.settings {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 18px;
 }
 
-.settings-panel,
-.privacy-lock-card {
-  background: var(--bg-elev);
-  border: 1px solid var(--border);
+.settings-panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
   border-radius: var(--radius);
-  padding: 16px;
-  box-shadow: 0 1px 0 color-mix(in srgb, var(--fg) 5%, transparent) inset;
-}
-
-.settings-panel.compact {
-  display: grid;
-  gap: 10px;
+  padding: 22px 20px;
+  box-shadow: var(--shadow);
 }
 
 .settings-panel-head {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
+  gap: 14px;
   margin-bottom: 16px;
+  flex-wrap: wrap;
 }
 
-.settings-title,
-.privacy-lock-title {
+.settings-title {
   margin: 0 0 8px;
-  font-size: 20px;
-  line-height: 1.2;
+  font-size: var(--fs-lg);
 }
 
-.settings-subtitle {
+.settings-copy {
   margin: 0;
-  font-size: 16px;
-}
-
-.settings-copy,
-.privacy-lock-copy {
-  margin: 0;
-  color: var(--fg-muted);
-  font-size: 13px;
+  color: var(--ink-2);
+  font-size: var(--fs-base);
   line-height: 1.55;
 }
 
 .settings-status {
   flex: 0 0 auto;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  padding: 5px 9px;
-  font-size: 11px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--line-strong);
+  padding: 6px 14px;
+  font-size: var(--fs-sm);
   font-weight: 700;
-  color: var(--fg-muted);
-  background: var(--bg-elev-2);
+  color: var(--ink-2);
+  background: var(--surface-2);
 }
 .settings-status.on {
-  color: var(--ok);
-  border-color: color-mix(in srgb, var(--ok) 32%, transparent);
-  background: color-mix(in srgb, var(--ok) 10%, transparent);
+  color: var(--accent-deep);
+  border-color: var(--accent);
+  background: var(--accent-soft);
 }
 
 .settings-form {
   display: grid;
-  gap: 12px;
+  gap: 16px;
 }
 
 .settings-field {
   display: grid;
-  gap: 6px;
-  color: var(--fg-muted);
-  font-size: 12px;
-  font-weight: 650;
+  gap: 8px;
+  color: var(--ink-2);
+  font-size: var(--fs-sm);
+  font-weight: 600;
 }
 
-.settings-input,
-.privacy-lock-input {
+.settings-input {
   width: 100%;
-  min-height: 44px;
-  border: 1px solid var(--border);
+  min-height: var(--tap);
+  border: 2px solid var(--line-strong);
   border-radius: var(--radius-sm);
-  background: var(--field-bg);
-  color: var(--fg);
+  background: var(--surface-2);
+  color: var(--ink);
   font: inherit;
-  padding: 11px 12px;
+  font-size: var(--fs-base);
+  padding: 14px 16px;
+}
+.settings-input:focus {
+  border-color: var(--accent);
+  background: var(--surface);
+  outline: none;
 }
 
 .settings-actions {
   display: flex;
-  gap: 10px;
+  gap: 12px;
   flex-wrap: wrap;
   margin-top: 4px;
 }
 .settings-action {
   width: auto;
-  min-width: 140px;
-  padding-left: 18px;
-  padding-right: 18px;
+  flex: 1 1 180px;
 }
 
-.privacy-lock {
-  min-height: min(520px, 70dvh);
-  justify-content: center;
-}
+/* --- Text size chooser --- */
 
-.privacy-lock-card {
-  display: grid;
-  gap: 14px;
+.text-size-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 16px;
 }
-
-.privacy-lock-mark {
-  width: 46px;
-  height: 46px;
-  border-radius: var(--radius);
+.text-size-btn {
+  flex: 1 1 100px;
+  min-height: var(--tap);
+  border-radius: var(--radius-sm);
+  border: 2px solid var(--line-strong);
+  background: var(--surface-2);
+  color: var(--ink);
+  font-family: inherit;
+  font-weight: 600;
+  cursor: pointer;
   display: grid;
   place-items: center;
-  color: var(--accent-contrast);
-  background: var(--accent);
-  font-size: 24px;
-  font-weight: 800;
+  gap: 2px;
+  padding: 10px;
+  touch-action: manipulation;
 }
-
-.privacy-lock-form {
-  display: grid;
-  gap: 10px;
+.text-size-btn:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
 }
-
-.privacy-lock-error {
-  min-height: 18px;
-  color: var(--danger);
-  font-size: 12px;
+.text-size-btn.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent-deep);
+}
+.text-size-sample {
+  line-height: 1;
+  font-weight: 700;
+}
+.text-size-btn[data-size="small"] .text-size-sample {
+  font-size: 17px;
+}
+.text-size-btn[data-size="normal"] .text-size-sample {
+  font-size: 22px;
+}
+.text-size-btn[data-size="large"] .text-size-sample {
+  font-size: 28px;
+}
+.text-size-btn[data-size="xlarge"] .text-size-sample {
+  font-size: 34px;
+}
+.text-size-name {
+  font-size: var(--fs-sm);
+  font-weight: 600;
 }

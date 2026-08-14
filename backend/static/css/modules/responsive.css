@@ -1,42 +1,48 @@
-@media (max-width: 380px) {
-  .cal-cell { min-height: 72px; padding: 5px 4px 6px; }
-  .cal-day-num { font-size: 12px; }
-  .cal-event-chip { font-size: 9px; padding: 1px 4px; }
-  .cal-grid,
-  .cal-weekdays { gap: 4px; }
-  .cal-day-count {
-    min-width: 18px;
-    height: 18px;
-    font-size: 10px;
+@media (max-width: 400px) {
+  /* Two side-by-side frames get too small to see on a narrow phone. */
+  .photo-frames.is-pair {
+    grid-template-columns: 1fr;
   }
-  .hero-title { font-size: 22px; }
+  .recorder-mic {
+    width: 132px;
+    height: 132px;
+  }
+  .cal-cell {
+    min-height: 72px;
+    padding: 5px 4px 6px;
+  }
+  .cal-event-chip {
+    font-size: var(--fs-xs);
+    padding: 1px 4px;
+  }
+  .cal-grid,
+  .cal-weekdays {
+    gap: 4px;
+  }
 }
 
 @media (max-width: 519px) {
   .app-header {
-    padding-bottom: 10px;
+    padding-bottom: 12px;
   }
+  /* Tabs move to the thumb on phones. */
   .app-nav {
     position: fixed;
     left: 50%;
     right: auto;
     bottom: calc(env(safe-area-inset-bottom, 0px) + 10px);
     z-index: 45;
-    width: min(calc(100% - 22px), 498px);
+    width: min(calc(100% - 20px), 500px);
     margin: 0;
     transform: translateX(-50%);
-    box-shadow: 0 12px 34px rgba(0,0,0,0.38);
-  }
-  .app-nav-btn {
-    min-height: 44px;
-    padding: 10px 8px;
+    background: var(--surface);
+    box-shadow: var(--shadow-lg);
   }
   .screen-root {
-    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 86px);
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 116px);
   }
-  .entry-actions .cta,
-  .mention-actions button {
-    flex: 1 1 calc(50% - 6px);
+  .entry-actions .cta {
+    flex: 1 1 100%;
   }
   .composer-footer {
     align-items: stretch;
@@ -48,75 +54,29 @@
   .modal {
     max-height: 88dvh;
   }
-  .cal-header {
-    align-items: stretch;
-    display: grid;
-    grid-template-columns: 38px 1fr auto;
-  }
-  .cal-title {
-    text-align: left;
-    justify-items: start;
-  }
-  .cal-title-month {
-    font-size: 18px;
-  }
-  .cal-title-metrics {
-    justify-content: flex-start;
-  }
-  .cal-today {
-    width: 38px;
-    padding: 0;
-    overflow: hidden;
-    color: transparent;
-    position: relative;
-  }
-  .cal-today::before {
-    content: "";
-    position: absolute;
-    width: 16px;
-    height: 16px;
-    border-radius: 4px;
-    border: 2px solid var(--fg);
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-  }
-  .cal-today::after {
-    content: "";
-    position: absolute;
-    width: 8px;
-    height: 2px;
-    background: var(--fg);
-    top: 12px;
-    left: 50%;
-    transform: translateX(-50%);
-  }
 }
 
 @media (min-width: 520px) {
-  body { padding: 18px 0; }
-  .app-shell { border-radius: 12px; overflow: hidden; min-height: calc(100dvh - 36px); }
-  .cal-cell { min-height: 98px; }
+  body {
+    padding: 20px 0;
+  }
+  .app-shell {
+    border-radius: var(--radius);
+    overflow: hidden;
+    min-height: calc(100dvh - 40px);
+  }
+  .cal-cell {
+    min-height: 98px;
+  }
 }
 
 @media (min-width: 760px) {
   .app-header {
-    padding-left: 22px;
-    padding-right: 22px;
+    padding-left: 24px;
+    padding-right: 24px;
   }
   .screen-root {
-    padding: 24px 22px 42px;
-  }
-  .hero-inner {
-    padding: 20px 20px 18px;
-  }
-  .entries-list {
-    gap: 16px;
-  }
-  .entry-card,
-  .composer,
-  .card {
-    padding: 18px;
+    padding: 28px 24px 48px;
   }
   .cal-cell {
     min-height: 110px;
@@ -127,7 +87,7 @@
   }
   .modal {
     border-radius: var(--radius);
-    border: 1px solid var(--border);
-    padding-bottom: 18px;
+    border: 1px solid var(--line);
+    padding-bottom: 24px;
   }
 }
