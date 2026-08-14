@@ -1,8 +1,10 @@
 # Hatırlaf
 
-Hatırlaf is a local-first Turkish voice diary. You record or type diary entries, the backend transcribes audio, extracts people/places/times/events, asks for clarification when references are ambiguous, and shows the resulting life events on a calendar.
+Hatırlaf is a local-first Turkish voice diary. You record yourself or write, and the backend transcribes the audio so you can read your entries back later.
 
-The current repository is a working Django + DRF backend with a mobile-shaped browser client. It is intentionally built close to the future mobile architecture: the frontend talks to the backend through REST APIs, records audio locally, queues uploads offline, and can later be replaced by an Expo/React Native app without rewriting the backend.
+Behind a single feature flag there is a second, larger app: a natural-language pipeline that extracts people, places, times and events from what you said, asks for clarification when a reference is ambiguous, and lays the result out on a calendar. **That pipeline ships switched off.** See [The NLP Switch](#the-nlp-switch).
+
+The repository is a Django + DRF backend with two clients that speak the same REST API: a mobile-shaped browser client under `backend/static/`, and an Expo/React Native app under `mobile/`.
 
 ## Current Status
 
@@ -28,17 +30,21 @@ The most important production gap is security: the API currently allows any call
 
 ## What The App Does
 
-Hatırlaf supports three user workflows:
+With the NLP switch off — the shipped default — the app does three things:
 
 - Record a voice diary entry in Turkish.
-- Type a diary entry manually when audio is not available.
-- Review entries, edit transcripts, re-run processing, delete entries, and inspect extracted calendar events.
+- Type a diary entry instead, when speaking is not an option.
+- Read your entries back, play the audio, and correct the transcribed text.
 
-The browser UI has three main screens:
+The UI is two screens, plus a settings page behind the gear in the header:
 
-- **Ana**: microphone recorder and text composer.
-- **Girişler**: diary entries with transcript editing, audio playback, reprocess, and delete actions.
+- **Ana**: one or two photos to look at while you talk, a large record button, and a box to write in.
+- **Günlüğüm**: every entry, newest first, each with its audio and its transcribed text.
+
+Turn the switch on and two more screens appear:
+
 - **Takvim**: month calendar showing extracted events on their resolved dates.
+- **Özet**: monthly rollup of people, places and moods.
 
 Example:
 
@@ -48,6 +54,58 @@ Recorded on 2026-04-30:
 ```
 
 The calendar should show that event on `2026-04-29`, not merely on the recording day, because `Dün` is resolved relative to the recording timestamp.
+
+## The NLP Switch
+
+Everything that *understands* an entry, as opposed to merely *capturing* it, sits behind one flag:
+
+```python
+# backend/diary_backend/settings.py
+HATIRLAF_NLP_ENABLED = os.environ.get("HATIRLAF_NLP_ENABLED", "0") == "1"
+```
+
+Change the default, or set the variable and leave the code alone:
+
+```bash
+HATIRLAF_NLP_ENABLED=1 scripts/run.sh
+```
+
+That single value moves all of the following at once.
+
+**Off (the default)**
+
+- The pipeline runs `transcribe → archive`. Audio becomes text; the entry is saved.
+- `/api/timeline/`, `/api/calendar/`, `/api/recap/`, `/api/graph/`, `/api/mentions/`, `/api/nodes/` and `/api/edges/` return **404**. They are not merely hidden — they are not served.
+- Session payloads carry no `structured_events`, `mentions`, `mention_count`, `conflict_count`, `eventification_*`, `mood`, `tags`, `processed_text` or `word_timings`. A client cannot display analysis output, because it never receives any.
+- The LLM and the SAVYAR morphology bridge are not preloaded, so several GB of weights stay unloaded.
+- Both clients read `/api/config/` at boot and build their navigation from it: two tabs, no calendar, no reminders.
+
+**On**
+
+- The pipeline runs `transcribe → understand → (eventify)`.
+- The endpoints, the payload fields, the model preloading, and the Takvim/Özet screens all come back.
+
+### Where the switch lives
+
+```text
+backend/diary/pipeline/
+├── flags.py    the switch itself, plus /api/config/'s payload
+├── stages.py   the ordered list of steps, each declaring when it applies
+└── runner.py   threads, re-entrancy, failure bookkeeping
+```
+
+`runner.py` knows nothing about what a stage does. It walks `stages.PIPELINE`, skips the stages whose flag is off, and runs the rest. Adding a step means adding an entry to that list:
+
+```python
+Stage(
+    key="understand",
+    label="Metin analiz ediliyor",
+    run=understand,
+    requires=NLP_ON,   # NLP_ANY | NLP_ON | NLP_OFF
+)
+```
+
+`deferred=True` hands a stage to its own worker after the synchronous chain returns, so a slow model never delays the entry from appearing.
 
 ## Architecture
 
@@ -82,7 +140,14 @@ The app is deliberately backend-centered. The client is replaceable. The future 
 
 Every diary entry becomes a `Session` row.
 
-For audio entries:
+With the NLP switch **off**:
+
+```text
+audio upload -> Whisper transcription -> word timing alignment -> archive
+manual text  -> archive
+```
+
+With the NLP switch **on**:
 
 ```text
 audio upload
@@ -90,21 +155,17 @@ audio upload
   -> word timing alignment
   -> Turkish NLP extraction
   -> conflict detection
-  -> local LLM eventification
+  -> local LLM eventification   (deferred, own worker)
   -> calendar rollup
-```
 
-For text entries:
-
-```text
-manual transcript
+manual text
   -> Turkish NLP extraction
   -> conflict detection
-  -> local LLM eventification
+  -> local LLM eventification   (deferred, own worker)
   -> calendar rollup
 ```
 
-Processing is started by `diary/processing/pipeline.py`. The HTTP upload returns quickly, and the actual work runs in a daemon thread.
+Processing is started by `diary/pipeline/runner.py`. The HTTP upload returns quickly and the work runs in a daemon thread.
 
 ## Backend Data Model
 
@@ -119,7 +180,7 @@ The core models live in `backend/diary/models.py`.
 
 ## Calendar Behavior
 
-The calendar API is implemented in `calendar_view` in `backend/diary/views/api.py`.
+The calendar API is implemented in `calendar_view` in `backend/diary/views/api_analytics.py`. It returns 404 while the NLP switch is off.
 
 Priority order for event display:
 
@@ -239,25 +300,34 @@ The LLM path uses:
 
 No Node build step is required.
 
-Files:
+Always-on files:
 
 - `backend/templates/diary/index.html`
-- `backend/static/js/app.js`
-- `backend/static/js/screens/home.js`
-- `backend/static/js/screens/record.js`
-- `backend/static/js/screens/review.js`
-- `backend/static/js/screens/timeline.js`
-- `backend/static/js/db.js`
-- `backend/static/js/sync.js`
-- `backend/static/css/app.css`
+- `backend/static/js/app.js` — router; builds navigation from `/api/config/`
+- `backend/static/js/config.js` — feature flags
+- `backend/static/js/screens/home.js` — photos, recorder, composer
+- `backend/static/js/screens/entries.js` — the entry log
+- `backend/static/js/screens/settings.js` — text size and the app password
+- `backend/static/js/photos.js` — the photo board
+- `backend/static/js/textsize.js` — reader-controlled type scale
+- `backend/static/js/db.js`, `sync.js`, `audio.js`, `icons.js`
+- `backend/static/css/app.css` and `backend/static/css/modules/`
+
+Loaded but only routable while the NLP switch is on:
+
+- `screens/timeline.js`, `screens/recap.js`, `screens/memories.js`, `screens/review.js`
 
 Browser APIs:
 
 - MediaRecorder for audio capture
-- IndexedDB for offline upload queue
+- IndexedDB for the offline upload queue **and** the home-screen photos
 - Fetch API for REST calls
 
-This frontend is a development and MVP shell. The intended long-term product should be a mobile app.
+### Design
+
+The palette is warm paper with muted sage and clay accents — no dark mode and no saturated colour, chosen to stay readable for people over 40 on a phone in poor light. Base type is 19px, buttons have a 56px minimum touch target, and every control carries a full-sentence explanation in body-sized text rather than a caption.
+
+Readers can scale every font in the app from **Ayarlar → Yazı Boyutu**. It works because each size token is a multiple of a single `--text-scale` custom property, so nothing in the layout has to know about it.
 
 ## Setup
 
@@ -321,6 +391,7 @@ Environment variables:
 
 | Variable | Default | Purpose |
 |---|---:|---|
+| `HATIRLAF_NLP_ENABLED` | `0` | **The switch.** Turns the entire understanding pipeline, its endpoints and its screens on or off |
 | `HATIRLAF_DEBUG` | `1` | Enables Django debug mode and permissive dev settings |
 | `HATIRLAF_SECRET_KEY` | generated | Django secret key; must be set in production |
 | `HATIRLAF_ALLOWED_HOSTS` | empty | Required when debug is off |
@@ -349,7 +420,8 @@ All API routes are under `/api/`.
 
 | Method | Path | Purpose |
 |---|---|---|
-| `GET` | `/health/` | Liveness check |
+| `GET` | `/health/` | Liveness check, model warm-up progress, feature flags |
+| `GET` | `/config/` | Feature flags, used by both clients to build navigation |
 | `POST` | `/sessions/` | Upload audio/text session |
 | `GET` | `/sessions/` | List sessions |
 | `GET` | `/sessions/<id>/` | Session detail |
@@ -357,6 +429,11 @@ All API routes are under `/api/`.
 | `DELETE` | `/sessions/<id>/` | Delete session and audio file |
 | `POST` | `/sessions/<id>/process/` | Re-run processing |
 | `GET` | `/sessions/<id>/audio/` | Stream audio |
+
+The routes below are served **only while `HATIRLAF_NLP_ENABLED=1`**. With the switch off they return 404.
+
+| Method | Path | Purpose |
+|---|---|---|
 | `GET` | `/mentions/?session=<id>` | List mentions |
 | `POST` | `/mentions/<id>/resolve/` | Resolve mention conflict |
 | `GET` | `/nodes/` | List/search graph nodes |
@@ -364,6 +441,7 @@ All API routes are under `/api/`.
 | `GET` | `/edges/` | List graph edges |
 | `GET` | `/timeline/` | Timeline feed |
 | `GET` | `/calendar/?month=YYYY-MM` | Calendar event buckets |
+| `GET` | `/recap/?month=YYYY-MM` | Monthly memory rollup |
 | `GET` | `/graph/` | Compact graph dump |
 
 Manual transcript upload:
@@ -567,14 +645,27 @@ Run the Django test suite:
 ./.venv/bin/python backend/manage.py test diary
 ```
 
+Tests that exercise the understanding pipeline declare it explicitly, because
+it is off by default:
+
+```python
+@override_settings(HATIRLAF_NLP_ENABLED=True)
+class CalendarApiTests(TestCase):
+    ...
+```
+
 Current tests cover:
 
+- both sides of the NLP switch: which endpoints are served, which session
+  fields are serialised, and which stages the pipeline runs
+  (`diary/tests/test_feature_flags.py`)
 - Turkish relative date extraction
 - pronoun/reference detection
 - subject inference from Turkish verb conjugation
 - calendar fallback behavior while eventification is running
 - NLP-only eventification text preservation
 - LLM cache lifecycle cleanup
+- encrypted storage and the privacy lock
 
 Recommended next tests:
 
@@ -604,20 +695,31 @@ hatırlaf/
 │   │   ├── urls.py
 │   │   ├── apps.py
 │   │   ├── views/
-│   │   │   ├── api.py
+│   │   │   ├── api_sessions.py
+│   │   │   ├── api_analytics.py    NLP-only, gated
+│   │   │   ├── api_config.py       feature flags + the gates
 │   │   │   └── web.py
+│   │   ├── pipeline/
+│   │   │   ├── flags.py            the NLP switch
+│   │   │   ├── stages.py           ordered steps, each with its flag
+│   │   │   └── runner.py           threads and failure handling
 │   │   ├── processing/
 │   │   │   ├── transcription.py
 │   │   │   ├── nlp.py
 │   │   │   ├── extractor.py
 │   │   │   ├── conflicts.py
-│   │   │   ├── llm.py
-│   │   │   └── pipeline.py
+│   │   │   └── llm.py
 │   │   └── tests/
 │   ├── static/
-│   │   ├── css/app.css
+│   │   ├── css/app.css + css/modules/
 │   │   └── js/
 │   └── templates/
+├── mobile/                          Expo client, same API and palette
+│   ├── App.js
+│   └── src/
+│       ├── screens/
+│       ├── services/
+│       └── ui/
 ├── scripts/
 │   ├── setup.sh
 │   ├── run.sh
