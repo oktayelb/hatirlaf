@@ -3,17 +3,16 @@
 <html lang="tr">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
-<meta name="theme-color" content="#0b1220" id="theme-color-meta" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#faf6ee" />
 <title>Hatırlaf — Sesli Günlük</title>
 <script>
+  // Restore the reader's chosen text size before first paint, so the app
+  // never flashes at the wrong scale.
   (() => {
     try {
-      const stored = localStorage.getItem("hatirlaf-theme");
-      const preferred = matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
-      const theme = stored || preferred;
-      document.documentElement.dataset.theme = theme;
-      document.documentElement.style.colorScheme = theme;
+      const scale = localStorage.getItem("hatirlaf-text-scale");
+      if (scale) document.documentElement.style.setProperty("--text-scale", scale);
     } catch (_) {}
   })();
 </script>
@@ -24,7 +23,7 @@
   <div class="startup-shell">
     <div class="startup-brand-mark">H</div>
     <div class="startup-kicker">Hatırlaf</div>
-    <h2 class="startup-title">Sesli günlük hazırlanıyor</h2>
+    <h2 class="startup-title">Günlüğün hazırlanıyor</h2>
     <div class="startup-progress-row">
       <div class="startup-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
         <div id="startup-progress-fill" class="startup-progress-fill"></div>
@@ -37,22 +36,20 @@
 <div id="app" class="app-shell">
   <header class="app-header">
     <div class="app-header-row">
-      <button class="app-back" data-action="back" aria-label="Geri" hidden>&#8592;</button>
+      <button class="app-back" data-action="back" aria-label="Geri dön" hidden>&#8592;</button>
       <h1 id="screen-title" class="app-brand">Hatırlaf</h1>
       <div class="app-header-actions">
-        <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Temayı değiştir" title="Temayı değiştir">
-          <span class="theme-toggle-icon" aria-hidden="true"></span>
+        <button class="app-settings-btn" id="settings-btn" type="button" aria-label="Ayarlar" title="Ayarlar">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="3.2"></circle>
+            <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 1 1-4 0v-.09A1.7 1.7 0 0 0 8.9 19.3a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.7 8.9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9.06 4.6 1.7 1.7 0 0 0 10.1 3.04V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.01a1.7 1.7 0 0 0 1.56 1.03H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.56 1.03z"></path>
+          </svg>
         </button>
         <span class="app-online" id="online-dot" title="Çevrimiçi">&bull;</span>
       </div>
     </div>
-    <nav class="app-nav" aria-label="Ana gezinti">
-      <button class="app-nav-btn" data-route="#/home">Ana</button>
-      <button class="app-nav-btn" data-route="#/record">Girişler</button>
-      <button class="app-nav-btn" data-route="#/timeline">Takvim</button>
-      <button class="app-nav-btn" data-route="#/recap">Özet</button>
-      <button class="app-nav-btn" data-route="#/settings">Ayarlar</button>
-    </nav>
+    <nav class="app-nav" id="app-nav" aria-label="Ana gezinti"></nav>
   </header>
 
   <main id="screen-root" class="screen-root" aria-live="polite"></main>

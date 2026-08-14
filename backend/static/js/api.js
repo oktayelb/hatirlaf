@@ -27,6 +27,7 @@ async function request(path, opts = {}) {
 
 export const api = {
   health: () => request("/health/"),
+  config: () => request("/config/"),
   listSessions: () => request("/sessions/"),
   getSession: (id) => request(`/sessions/${id}/`),
   uploadSession: (form) => request("/sessions/", { method: "POST", body: form }),

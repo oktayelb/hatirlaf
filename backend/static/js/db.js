@@ -3,9 +3,10 @@
 // sync when online. Works in any evergreen browser on Linux.
 
 const DB_NAME = "hatirlaf";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE_PENDING = "pendingSessions"; // recorded but not yet uploaded
 const STORE_CACHE = "sessionsCache";     // last server state, for offline view
+const STORE_PHOTOS = "photos";           // the pictures shown while recording
 
 let _dbPromise = null;
 
@@ -21,6 +22,9 @@ function openDB() {
       }
       if (!db.objectStoreNames.contains(STORE_CACHE)) {
         db.createObjectStore(STORE_CACHE, { keyPath: "id" });
+      }
+      if (!db.objectStoreNames.contains(STORE_PHOTOS)) {
+        db.createObjectStore(STORE_PHOTOS, { keyPath: "slot" });
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -94,6 +98,27 @@ export const cacheStore = {
   },
   async clear() {
     return tx(STORE_CACHE, "readwrite", (s) => s.clear());
+  },
+};
+
+// The two picture slots on the home screen. Blobs stay on this device —
+// they are never attached to a session or sent to the server.
+export const photoStore = {
+  async put(slot, blob) {
+    const record = { slot, blob, savedAt: new Date().toISOString() };
+    await tx(STORE_PHOTOS, "readwrite", (s) => s.put(record));
+    return record;
+  },
+  async all() {
+    return tx(STORE_PHOTOS, "readonly", (s) =>
+      new Promise((res) => {
+        const r = s.getAll();
+        r.onsuccess = () => res(r.result || []);
+      })
+    );
+  },
+  async delete(slot) {
+    return tx(STORE_PHOTOS, "readwrite", (s) => s.delete(slot));
   },
 };
 

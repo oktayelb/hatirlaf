@@ -1,84 +1,146 @@
-// Root controller: tiny hash-based router + online indicator + sync kickoff.
+// Root controller: hash router, navigation, boot sequence.
+//
+// The navigation is not hard-coded. It is derived from the server's feature
+// flags at boot, so with the NLP pipeline switched off the app really is
+// two screens — there is no hidden route to stumble into.
 
 import { flush } from "./sync.js";
 import { api } from "./api.js";
+import { loadConfig, nlpEnabled } from "./config.js";
 import { on, toast } from "./events.js";
+import { icon } from "./icons.js";
 import { initReminderTimers } from "./reminders.js";
+import { initTextSize } from "./textsize.js";
 import * as home from "./screens/home.js";
-import * as record from "./screens/record.js";
+import * as entries from "./screens/entries.js";
 import * as recap from "./screens/recap.js";
 import * as memories from "./screens/memories.js";
 import * as review from "./screens/review.js";
 import * as settings from "./screens/settings.js";
 import * as timeline from "./screens/timeline.js";
 
-const TITLES = {
-  home: "Hatırlaf",
-  record: "Girişler",
-  recap: "Özet",
-  memories: "Anılar",
-  review: "İnceleme",
-  timeline: "Takvim",
-  settings: "Ayarlar",
-};
+/* ---------- Screen registry ----------
+   `feature: null` means always available. Anything else names the flag it
+   depends on. */
 
-const routes = [
-  { pattern: /^#\/?$|^#\/home$/, screen: "home", render: home.render },
-  { pattern: /^#\/record$/, screen: "record", render: record.render },
-  { pattern: /^#\/recap$/, screen: "recap", render: recap.render },
+const SCREENS = [
   {
+    name: "home",
+    title: "Hatırlaf",
+    tab: { label: "Ana", icon: "home" },
+    hash: "#/home",
+    pattern: /^#\/?$|^#\/home$/,
+    render: home.render,
+    module: home,
+  },
+  {
+    name: "entries",
+    title: "Günlüğüm",
+    tab: { label: "Günlüğüm", icon: "book" },
+    hash: "#/entries",
+    pattern: /^#\/entries$/,
+    render: entries.render,
+    module: entries,
+  },
+  {
+    name: "timeline",
+    title: "Takvim",
+    tab: { label: "Takvim", icon: "calendar" },
+    hash: "#/timeline",
+    pattern: /^#\/timeline$/,
+    render: timeline.render,
+    module: timeline,
+    feature: "nlp",
+  },
+  {
+    name: "recap",
+    title: "Özet",
+    tab: { label: "Özet", icon: "sparkle" },
+    hash: "#/recap",
+    pattern: /^#\/recap$/,
+    render: recap.render,
+    module: recap,
+    feature: "nlp",
+  },
+  {
+    name: "memories",
+    title: "Anılar",
     pattern: /^#\/memories\/([^/]+)\/(.+)$/,
-    screen: "memories",
     params: ["kind", "label"],
     render: memories.render,
-    title: (params) => decodeURIComponent(params.label || "") || "Anılar",
+    module: memories,
+    feature: "nlp",
+    titleOf: (params) => decodeURIComponent(params.label || "") || "Anılar",
   },
-  { pattern: /^#\/review\/(\d+)$/, screen: "review", params: ["id"], render: review.render },
-  { pattern: /^#\/timeline$/, screen: "timeline", render: timeline.render },
-  { pattern: /^#\/settings$/, screen: "settings", render: settings.render },
+  {
+    name: "review",
+    title: "İnceleme",
+    pattern: /^#\/review\/(\d+)$/,
+    params: ["id"],
+    render: review.render,
+    module: review,
+    feature: "nlp",
+  },
+  {
+    name: "settings",
+    title: "Ayarlar",
+    hash: "#/settings",
+    pattern: /^#\/settings$/,
+    render: settings.render,
+    module: settings,
+  },
 ];
-const MAIN_ROUTE_ORDER = ["home", "record", "timeline", "recap", "settings"];
-const MAIN_ROUTE_HASH = {
-  home: "#/home",
-  record: "#/record",
-  timeline: "#/timeline",
-  recap: "#/recap",
-  settings: "#/settings",
-};
 
 const screenRoot = document.getElementById("screen-root");
 const titleEl = document.getElementById("screen-title");
 const backBtn = document.querySelector(".app-back");
 const onlineDot = document.getElementById("online-dot");
-const themeToggle = document.getElementById("theme-toggle");
-const themeColorMeta = document.getElementById("theme-color-meta");
-const navBtns = Array.from(document.querySelectorAll(".app-nav .app-nav-btn"));
+const navRoot = document.getElementById("app-nav");
+const settingsBtn = document.getElementById("settings-btn");
 const startupScreen = document.getElementById("startup-screen");
 const startupFill = document.getElementById("startup-progress-fill");
 const startupPercent = document.getElementById("startup-percent");
-const THEME_KEY = "hatirlaf-theme";
+
+let available = [];
+let tabOrder = [];
 let currentScreen = "";
-let touchStartX = 0;
-let touchStartY = 0;
-let touchStartTime = 0;
-let touchTracking = false;
 let privacyState = { password_enabled: false, unlocked: true };
 
-backBtn.addEventListener("click", () => history.back());
+/* ---------- Boot ---------- */
 
-themeToggle?.addEventListener("click", () => {
-  const current = document.documentElement.dataset.theme === "light" ? "light" : "dark";
-  applyTheme(current === "light" ? "dark" : "light", { persist: true });
+window.addEventListener("hashchange", route);
+window.addEventListener("DOMContentLoaded", async () => {
+  initTextSize();
+  updateOnline(navigator.onLine);
+  setupSwipeNavigation();
+
+  await waitForStartup();
+  await loadConfig();
+  buildNavigation();
+
+  // Reminders come from extracted calendar events, so they belong to the
+  // NLP layer — a capture-only app must not fire notifications about them.
+  if (nlpEnabled()) initReminderTimers();
+
+  if (!location.hash) location.hash = "#/home";
+  await refreshPrivacyStatus();
+  route();
+
+  if (!isPrivacyLocked()) {
+    flush();
+    if (nlpEnabled()) startEventificationWatcher();
+  }
 });
 
-for (const btn of navBtns) {
-  btn.addEventListener("click", () => {
-    location.hash = btn.dataset.route;
-  });
-}
+backBtn.addEventListener("click", () => history.back());
+settingsBtn.addEventListener("click", () => {
+  location.hash = currentScreen === "settings" ? "#/home" : "#/settings";
+});
 
 on("online-changed", updateOnline);
-on("session-uploaded", () => pollEventificationStatuses());
+on("session-uploaded", () => {
+  if (nlpEnabled()) pollEventificationStatuses();
+});
 on("privacy-locked", () => {
   privacyState = { password_enabled: true, unlocked: false };
   renderPrivacyLock();
@@ -87,189 +149,201 @@ on("privacy-updated", async () => {
   await refreshPrivacyStatus();
 });
 
+function buildNavigation() {
+  available = SCREENS.filter((s) => !s.feature || nlpEnabled());
+  tabOrder = available.filter((s) => s.tab);
+
+  navRoot.innerHTML = "";
+  for (const screen of tabOrder) {
+    const button = document.createElement("button");
+    button.className = "app-nav-btn";
+    button.type = "button";
+    button.dataset.screen = screen.name;
+    button.appendChild(icon(screen.tab.icon, { size: 26 }));
+    button.appendChild(document.createTextNode(screen.tab.label));
+    button.addEventListener("click", () => {
+      location.hash = screen.hash;
+    });
+    navRoot.appendChild(button);
+  }
+}
+
+/* ---------- Routing ---------- */
+
+async function route() {
+  const hash = location.hash || "#/home";
+  const previous = currentScreen;
+
+  for (const screen of SCREENS) {
+    if (typeof screen.module.cleanup === "function") screen.module.cleanup();
+  }
+
+  if (isPrivacyLocked()) {
+    renderPrivacyLock();
+    return;
+  }
+
+  let matched = null;
+  let params = {};
+  for (const screen of available) {
+    const m = hash.match(screen.pattern);
+    if (!m) continue;
+    matched = screen;
+    params = {};
+    (screen.params || []).forEach((p, i) => (params[p] = m[i + 1]));
+    break;
+  }
+  if (!matched) {
+    location.hash = "#/home";
+    return;
+  }
+
+  titleEl.textContent = matched.titleOf ? matched.titleOf(params) : matched.title;
+  currentScreen = matched.name;
+  backBtn.hidden = matched.name === "home";
+  settingsBtn.classList.toggle("active", matched.name === "settings");
+  for (const button of navRoot.querySelectorAll(".app-nav-btn")) {
+    button.classList.toggle("active", button.dataset.screen === matched.name);
+  }
+
+  try {
+    await matched.render(screenRoot, { params });
+    animateRoute(previous, matched.name);
+  } catch (err) {
+    console.error(err);
+    screenRoot.innerHTML = "";
+    const fallback = document.createElement("div");
+    fallback.className = "empty-state";
+    const title = document.createElement("div");
+    title.className = "empty-title";
+    title.textContent = "Bu sayfa açılamadı";
+    const detail = document.createElement("p");
+    detail.textContent = err.message;
+    fallback.append(title, detail);
+    screenRoot.appendChild(fallback);
+  }
+}
+
+function animateRoute(previous, next) {
+  screenRoot.classList.remove("route-enter", "route-forward", "route-back");
+  if (!previous || previous === next) return;
+  const names = tabOrder.map((s) => s.name);
+  const from = names.indexOf(previous);
+  const to = names.indexOf(next);
+  const direction = from >= 0 && to >= 0 && to < from ? "route-back" : "route-forward";
+  screenRoot.classList.add("route-enter", direction);
+  window.requestAnimationFrame(() => {
+    window.setTimeout(() => {
+      screenRoot.classList.remove("route-enter", "route-forward", "route-back");
+    }, 190);
+  });
+}
+
+/* ---------- Swipe between tabs ---------- */
+
+let touchStartX = 0;
+let touchStartY = 0;
+let touchStartTime = 0;
+let touchTracking = false;
+
+function setupSwipeNavigation() {
+  screenRoot.addEventListener(
+    "touchstart",
+    (e) => {
+      if (e.touches.length !== 1 || isInteractiveTarget(e.target)) return;
+      touchStartX = e.touches[0].clientX;
+      touchStartY = e.touches[0].clientY;
+      touchStartTime = performance.now();
+      touchTracking = true;
+    },
+    { passive: true }
+  );
+
+  screenRoot.addEventListener(
+    "touchmove",
+    (e) => {
+      if (!touchTracking || e.touches.length !== 1) return;
+      const dx = e.touches[0].clientX - touchStartX;
+      const dy = e.touches[0].clientY - touchStartY;
+      if (Math.abs(dy) > 32 && Math.abs(dy) > Math.abs(dx)) touchTracking = false;
+    },
+    { passive: true }
+  );
+
+  screenRoot.addEventListener(
+    "touchend",
+    (e) => {
+      if (!touchTracking) return;
+      touchTracking = false;
+      const names = tabOrder.map((s) => s.name);
+      if (!names.includes(currentScreen)) return;
+      const dx = e.changedTouches[0].clientX - touchStartX;
+      const dy = e.changedTouches[0].clientY - touchStartY;
+      const fastEnough = performance.now() - touchStartTime < 520;
+      const horizontal = Math.abs(dx) > 72 && Math.abs(dx) > Math.abs(dy) * 1.35;
+      if (!fastEnough || !horizontal) return;
+      const next = tabOrder[names.indexOf(currentScreen) + (dx < 0 ? 1 : -1)];
+      if (next) location.hash = next.hash;
+    },
+    { passive: true }
+  );
+}
+
+function isInteractiveTarget(target) {
+  return Boolean(
+    target?.closest?.(
+      "button, a, input, textarea, select, audio, .modal, [contenteditable], [role='button']"
+    )
+  );
+}
+
+/* ---------- Connectivity ---------- */
+
 function updateOnline(isOnline) {
   if (isOnline === undefined) isOnline = navigator.onLine;
   onlineDot.classList.toggle("offline", !isOnline);
   onlineDot.title = isOnline ? "Çevrimiçi" : "Çevrimdışı";
 }
 
-async function route() {
-  const hash = location.hash || "#/home";
-  const previousScreen = currentScreen;
-  for (const mod of [home, record, recap, review, settings, timeline]) {
-    if (typeof mod.cleanup === "function") mod.cleanup();
-  }
-  if (isPrivacyLocked()) {
-    renderPrivacyLock();
-    return;
-  }
-  let matched = null;
-  let params = {};
-  for (const r of routes) {
-    const m = hash.match(r.pattern);
-    if (m) {
-      matched = r;
-      params = {};
-      (r.params || []).forEach((p, i) => (params[p] = m[i + 1]));
-      break;
-    }
-  }
-  if (!matched) {
-    location.hash = "#/home";
-    return;
-  }
-  titleEl.textContent = typeof matched.title === "function"
-    ? matched.title(params)
-    : (TITLES[matched.screen] || "Hatırlaf");
-  currentScreen = matched.screen;
-  backBtn.hidden = matched.screen === "home";
-  for (const btn of navBtns) {
-    const btnScreen = (btn.dataset.route || "").replace("#/", "");
-    btn.classList.toggle("active", btnScreen === matched.screen);
-  }
-  try {
-    await matched.render(screenRoot, { params });
-    animateRoute(previousScreen, matched.screen);
-  } catch (err) {
-    console.error(err);
-    screenRoot.innerHTML = "";
-    const fallback = document.createElement("div");
-    fallback.className = "empty-state";
-    fallback.innerHTML =
-      '<div class="empty-title">Ekran yüklenemedi</div>' +
-      '<p class="muted">' + escapeHTML(err.message) + "</p>";
-    screenRoot.appendChild(fallback);
-    toast("Hata: " + err.message);
-  }
-}
-
-function escapeHTML(s) {
-  return String(s || "").replace(/[&<>"']/g, (c) => ({
-    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
-  })[c]);
-}
-
-window.addEventListener("hashchange", route);
-window.addEventListener("DOMContentLoaded", async () => {
-  initTheme();
-  initReminderTimers();
-  if (!location.hash) location.hash = "#/home";
-  updateOnline(navigator.onLine);
-  setupSwipeNavigation();
-  await waitForStartup();
-  await refreshPrivacyStatus();
-  route();
-  if (!isPrivacyLocked()) {
-    flush();
-    startEventificationWatcher();
-  }
-});
-
-function setupSwipeNavigation() {
-  screenRoot.addEventListener("touchstart", (e) => {
-    if (e.touches.length !== 1 || isInteractiveTarget(e.target)) return;
-    const touch = e.touches[0];
-    touchStartX = touch.clientX;
-    touchStartY = touch.clientY;
-    touchStartTime = performance.now();
-    touchTracking = true;
-  }, { passive: true });
-
-  screenRoot.addEventListener("touchmove", (e) => {
-    if (!touchTracking || e.touches.length !== 1) return;
-    const touch = e.touches[0];
-    const dx = touch.clientX - touchStartX;
-    const dy = touch.clientY - touchStartY;
-    if (Math.abs(dy) > 32 && Math.abs(dy) > Math.abs(dx)) {
-      touchTracking = false;
-    }
-  }, { passive: true });
-
-  screenRoot.addEventListener("touchend", (e) => {
-    if (!touchTracking || !MAIN_ROUTE_ORDER.includes(currentScreen)) return;
-    touchTracking = false;
-    const touch = e.changedTouches[0];
-    const dx = touch.clientX - touchStartX;
-    const dy = touch.clientY - touchStartY;
-    const elapsed = performance.now() - touchStartTime;
-    const fastEnough = elapsed < 520;
-    const horizontal = Math.abs(dx) > 72 && Math.abs(dx) > Math.abs(dy) * 1.35;
-    if (!fastEnough || !horizontal) return;
-    goToAdjacentMainRoute(dx < 0 ? 1 : -1);
-  }, { passive: true });
-}
-
-function isInteractiveTarget(target) {
-  return Boolean(target?.closest?.(
-    "button, a, input, textarea, select, audio, .modal, [contenteditable], [role='button']"
-  ));
-}
-
-function goToAdjacentMainRoute(delta) {
-  const index = MAIN_ROUTE_ORDER.indexOf(currentScreen);
-  if (index < 0) return;
-  const next = MAIN_ROUTE_ORDER[index + delta];
-  if (!next) return;
-  location.hash = MAIN_ROUTE_HASH[next];
-}
-
-function animateRoute(previous, next) {
-  screenRoot.classList.remove("route-enter", "route-forward", "route-back");
-  if (!previous || previous === next) return;
-  const prevIndex = MAIN_ROUTE_ORDER.indexOf(previous);
-  const nextIndex = MAIN_ROUTE_ORDER.indexOf(next);
-  const directionClass = prevIndex >= 0 && nextIndex >= 0 && nextIndex < prevIndex
-    ? "route-back"
-    : "route-forward";
-  screenRoot.classList.add("route-enter", directionClass);
-  window.requestAnimationFrame(() => {
-    window.setTimeout(() => {
-      screenRoot.classList.remove("route-enter", "route-forward", "route-back");
-    }, 170);
-  });
-}
+/* ---------- Startup screen ---------- */
 
 async function waitForStartup() {
   if (!startupScreen) return;
-  const minVisibleUntil = performance.now() + 1000;
   let lastProgress = 0;
+  // The splash exists to explain a wait. If there was never a wait — no
+  // models to warm — it should not manufacture one.
+  let sawWaiting = false;
+
   while (true) {
     if (!navigator.onLine) {
-      renderStartup({
-        ready: true,
-        progress: 100,
-        components: [],
-        current: { detail: "Çevrimdışı modda açılıyor." },
-      });
+      renderStartup(100);
       break;
     }
     try {
       const health = await api.health();
-      const startup = health.startup || { ready: true, progress: 100, components: [] };
+      const startup = health.startup || { ready: true, progress: 100 };
       lastProgress = Math.max(lastProgress, Number(startup.progress) || 0);
-      renderStartup({ ...startup, progress: lastProgress });
+      renderStartup(lastProgress);
       if (startup.ready) break;
+      sawWaiting = true;
     } catch (err) {
       console.debug("startup health poll failed", err);
-      renderStartup({
-        ready: false,
-        progress: Math.max(lastProgress, 5),
-      });
+      sawWaiting = true;
+      renderStartup(Math.max(lastProgress, 5));
     }
     await sleep(700);
   }
-  const remaining = minVisibleUntil - performance.now();
-  if (remaining > 0) await sleep(remaining);
-  await sleep(180);
+
+  if (sawWaiting) await sleep(450);
   startupScreen.classList.add("is-done");
   document.body.classList.remove("startup-active");
   setTimeout(() => {
     startupScreen.hidden = true;
-  }, 240);
+  }, 260);
 }
 
-function renderStartup(startup) {
-  const progress = Math.max(0, Math.min(100, Math.round(startup.progress || 0)));
+function renderStartup(value) {
+  const progress = Math.max(0, Math.min(100, Math.round(value || 0)));
   startupFill.style.width = `${progress}%`;
   startupFill.parentElement?.setAttribute("aria-valuenow", String(progress));
   startupPercent.textContent = `${progress}%`;
@@ -278,6 +352,8 @@ function renderStartup(startup) {
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
+
+/* ---------- Privacy lock ---------- */
 
 async function refreshPrivacyStatus() {
   try {
@@ -296,7 +372,10 @@ function renderPrivacyLock() {
   currentScreen = "locked";
   titleEl.textContent = "Kilitli";
   backBtn.hidden = true;
-  for (const btn of navBtns) btn.classList.remove("active");
+  settingsBtn.classList.remove("active");
+  for (const button of navRoot.querySelectorAll(".app-nav-btn")) {
+    button.classList.remove("active");
+  }
   screenRoot.innerHTML = "";
 
   const wrap = document.createElement("section");
@@ -305,37 +384,41 @@ function renderPrivacyLock() {
     <div class="privacy-lock-card">
       <div class="privacy-lock-mark" aria-hidden="true">H</div>
       <div>
-        <h2 class="privacy-lock-title">Hatırlaf kilitli</h2>
-        <p class="privacy-lock-copy">Günlük kayıtlarını, takvimi ve anıları görmek için uygulama parolasını gir.</p>
+        <h2 class="privacy-lock-title">Günlüğün kilitli</h2>
+        <p class="privacy-lock-copy">Kayıtlarını görmek için parolanı yaz.</p>
       </div>
       <form class="privacy-lock-form">
-        <input class="privacy-lock-input" type="password" autocomplete="current-password" placeholder="Parola" aria-label="Parola" />
+        <input class="privacy-lock-input" type="password" autocomplete="current-password"
+               placeholder="Parola" aria-label="Parola" />
         <button class="cta" type="submit">Kilidi Aç</button>
         <div class="privacy-lock-error" role="alert"></div>
       </form>
     </div>
   `;
+
   const form = wrap.querySelector("form");
   const input = wrap.querySelector("input");
   const button = wrap.querySelector("button");
   const error = wrap.querySelector(".privacy-lock-error");
+
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
     error.textContent = "";
     button.setAttribute("disabled", "");
-    button.textContent = "Açılıyor...";
+    button.textContent = "Açılıyor…";
     try {
       privacyState = await api.unlockPrivacy(input.value);
       toast("Kilit açıldı");
       route();
       flush();
-      startEventificationWatcher();
+      if (nlpEnabled()) startEventificationWatcher();
     } catch (err) {
       error.textContent = readApiError(err);
       button.removeAttribute("disabled");
       button.textContent = "Kilidi Aç";
     }
   });
+
   screenRoot.appendChild(wrap);
   setTimeout(() => input.focus(), 0);
 }
@@ -345,59 +428,27 @@ function readApiError(err) {
   const match = raw.match(/\{.*\}$/);
   if (!match) return "Hata: " + raw;
   try {
-    const data = JSON.parse(match[0]);
-    return data.detail || raw;
+    return JSON.parse(match[0]).detail || raw;
   } catch (_) {
     return "Hata: " + raw;
   }
 }
 
-function initTheme() {
-  const stored = readStoredTheme();
-  const preferred = window.matchMedia?.("(prefers-color-scheme: light)")?.matches ? "light" : "dark";
-  applyTheme(stored || preferred);
-}
-
-function applyTheme(theme, { persist = false } = {}) {
-  const normalized = theme === "light" ? "light" : "dark";
-  document.documentElement.dataset.theme = normalized;
-  document.documentElement.style.colorScheme = normalized;
-  if (themeColorMeta) themeColorMeta.content = normalized === "light" ? "#f5f7fb" : "#0b1220";
-  if (themeToggle) {
-    themeToggle.dataset.theme = normalized;
-    themeToggle.setAttribute("aria-label", normalized === "light" ? "Koyu temaya geç" : "Açık temaya geç");
-    themeToggle.title = normalized === "light" ? "Koyu tema" : "Açık tema";
-  }
-  if (persist) writeStoredTheme(normalized);
-}
-
-function readStoredTheme() {
-  try {
-    return localStorage.getItem(THEME_KEY);
-  } catch (_) {
-    return "";
-  }
-}
-
-function writeStoredTheme(theme) {
-  try {
-    localStorage.setItem(THEME_KEY, theme);
-  } catch (_) {}
-}
+/* ---------- Eventification watcher (NLP only) ---------- */
 
 let eventPollStarted = false;
 let eventStatusSnapshot = null;
 
 function startEventificationWatcher() {
-  if (eventPollStarted) return;
+  if (eventPollStarted || !nlpEnabled()) return;
   eventPollStarted = true;
   pollEventificationStatuses({ silent: true });
   setInterval(() => pollEventificationStatuses(), 5000);
 }
 
 async function pollEventificationStatuses(opts = {}) {
-  if (!navigator.onLine) return;
-  if (isPrivacyLocked()) return;
+  if (!nlpEnabled() || !navigator.onLine || isPrivacyLocked()) return;
+
   let sessions = [];
   try {
     const resp = await api.listSessions();
@@ -407,26 +458,17 @@ async function pollEventificationStatuses(opts = {}) {
     return;
   }
 
-  const next = new Map();
-  for (const s of sessions) {
-    next.set(String(s.id), s.eventification_status || "not_started");
-  }
+  const next = new Map(
+    sessions.map((s) => [String(s.id), s.eventification_status || "not_started"])
+  );
 
   if (eventStatusSnapshot && !opts.silent) {
     for (const s of sessions) {
-      const id = String(s.id);
-      const prev = eventStatusSnapshot.get(id);
-      const cur = s.eventification_status || "not_started";
-      if (prev && prev !== "completed" && cur === "completed") {
-        toast("Olaylaştırma tamamlandı. Takvim güncellendi.", { duration: 3200 });
-        if ((location.hash || "").startsWith("#/timeline")) {
-          route();
-        }
-      }
-      if (prev && prev !== "failed" && cur === "failed") {
-        toast("Olaylaştırma tamamlanamadı: " + (s.eventification_detail || ""), {
-          duration: 4200,
-        });
+      const previous = eventStatusSnapshot.get(String(s.id));
+      const current = s.eventification_status || "not_started";
+      if (previous && previous !== "completed" && current === "completed") {
+        toast("Takvim güncellendi.", { duration: 3200 });
+        if ((location.hash || "").startsWith("#/timeline")) route();
       }
     }
   }
