@@ -4,7 +4,7 @@ import { api } from "../services/api";
 import { clearSessionCookie, getApiBase, setApiBase } from "../services/config";
 import { flushQueue, queueCount } from "../services/queue";
 import { Button, Card, Screen } from "../ui/Primitives";
-import { colors } from "../theme";
+import { colors, radius, spacing, type } from "../theme";
 
 export function SettingsScreen({ privacy, onPrivacyChanged, queueSize, onQueueChanged }) {
   const [apiBase, setApiBaseInput] = useState("");
@@ -89,7 +89,7 @@ export function SettingsScreen({ privacy, onPrivacyChanged, queueSize, onQueueCh
           autoCapitalize="none"
           keyboardType="url"
           placeholder="http://192.168.1.10:8001/api"
-          placeholderTextColor={colors.muted}
+          placeholderTextColor={colors.faint}
           style={styles.input}
         />
         <Text style={styles.copy}>
@@ -109,7 +109,7 @@ export function SettingsScreen({ privacy, onPrivacyChanged, queueSize, onQueueCh
             onChangeText={setCurrentPassword}
             secureTextEntry
             placeholder="Mevcut parola"
-            placeholderTextColor={colors.muted}
+            placeholderTextColor={colors.faint}
             style={styles.input}
           />
         ) : null}
@@ -118,7 +118,7 @@ export function SettingsScreen({ privacy, onPrivacyChanged, queueSize, onQueueCh
           onChangeText={setNewPassword}
           secureTextEntry
           placeholder="Yeni parola"
-          placeholderTextColor={colors.muted}
+          placeholderTextColor={colors.faint}
           style={styles.input}
         />
         <TextInput
@@ -126,7 +126,7 @@ export function SettingsScreen({ privacy, onPrivacyChanged, queueSize, onQueueCh
           onChangeText={setConfirmPassword}
           secureTextEntry
           placeholder="Yeni parolayı tekrar yaz"
-          placeholderTextColor={colors.muted}
+          placeholderTextColor={colors.faint}
           style={styles.input}
         />
         <View style={styles.row}>
@@ -157,31 +157,35 @@ export function SettingsScreen({ privacy, onPrivacyChanged, queueSize, onQueueCh
 
 const styles = StyleSheet.create({
   card: {
-    gap: 12,
+    gap: spacing.sm,
   },
   sectionTitle: {
     color: colors.text,
-    fontSize: 17,
-    fontWeight: "900",
+    fontSize: type.lg,
+    fontWeight: "700",
   },
   copy: {
     color: colors.muted,
-    lineHeight: 20,
+    fontSize: type.base,
+    lineHeight: type.base * 1.5,
   },
   input: {
     color: colors.text,
-    backgroundColor: "#101722",
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: 8,
-    minHeight: 44,
-    paddingHorizontal: 12,
+    fontSize: type.base,
+    backgroundColor: colors.surface2,
+    borderColor: colors.lineStrong,
+    borderWidth: 2,
+    borderRadius: radius.sm,
+    minHeight: 56,
+    paddingHorizontal: spacing.md,
   },
   row: {
     flexDirection: "row",
-    gap: 8,
+    gap: spacing.sm,
+    flexWrap: "wrap",
   },
   flex: {
-    flex: 1,
+    flexGrow: 1,
+    flexBasis: 150,
   },
 });

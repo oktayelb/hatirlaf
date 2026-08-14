@@ -1,8 +1,13 @@
+// Günlüğüm — every entry, newest first, with the text it turned into.
+// No analysis, no badges, no pipeline vocabulary.
+
 import React, { useCallback, useEffect, useState } from "react";
 import { FlatList, RefreshControl, StyleSheet, Text, TextInput, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { api } from "../services/api";
+import { nlpEnabled } from "../services/features";
 import { Button, Card, EmptyState, Loading, Screen } from "../ui/Primitives";
-import { colors } from "../theme";
+import { colors, radius, spacing, type } from "../theme";
 
 export function EntriesScreen({ locked }) {
   const [sessions, setSessions] = useState([]);
@@ -36,9 +41,12 @@ export function EntriesScreen({ locked }) {
   }
 
   return (
-    <Screen title="Girişler" subtitle="Kayıtları gözden geçir, transkripti düzelt ve yeniden işle.">
+    <Screen
+      title="Günlüğüm"
+      subtitle="Bugüne kadar kaydettiğin her şey burada. Yazıya çevrilmiş hâllerini okuyup düzeltebilirsin."
+    >
       {loading ? (
-        <Loading />
+        <Loading label="Günlüğün yükleniyor…" />
       ) : (
         <FlatList
           data={sessions}
@@ -46,7 +54,12 @@ export function EntriesScreen({ locked }) {
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} />}
           contentContainerStyle={sessions.length ? styles.list : styles.emptyList}
           renderItem={({ item }) => <EntryCard session={item} onChanged={refresh} />}
-          ListEmptyComponent={<EmptyState title="Henüz giriş yok" text="Ana ekrandan kayıt ekleyebilirsin." />}
+          ListEmptyComponent={
+            <EmptyState
+              title="Henüz hiç kayıt yok"
+              text="Ana sayfaya git, yuvarlak düğmeye basıp konuş ya da oradaki kutuya yaz."
+            />
+          }
         />
       )}
     </Screen>
@@ -56,14 +69,17 @@ export function EntriesScreen({ locked }) {
 function EntryCard({ session, onChanged }) {
   const [text, setText] = useState(session.transcript || "");
   const [saving, setSaving] = useState(false);
+  const hasAudio = Boolean(session.audio_url);
   const changed = text !== (session.transcript || "");
+  const recordedAt = new Date(session.recorded_at);
+  const busy = ["queued", "transcribing", "parsing"].includes(session.status);
+  const failed = session.status === "failed";
 
   async function save() {
     setSaving(true);
     try {
       await api.updateSession(session.id, { transcript: text });
       await onChanged();
-      return true;
     } finally {
       setSaving(false);
     }
@@ -72,9 +88,7 @@ function EntryCard({ session, onChanged }) {
   async function reprocess() {
     setSaving(true);
     try {
-      if (changed) {
-        await api.updateSession(session.id, { transcript: text });
-      }
+      if (changed) await api.updateSession(session.id, { transcript: text });
       await api.reprocess(session.id);
       await onChanged();
     } finally {
@@ -84,26 +98,71 @@ function EntryCard({ session, onChanged }) {
 
   return (
     <Card style={styles.card}>
-      <View style={styles.metaRow}>
-        <Text style={styles.badge}>{session.audio_url ? "Sesli" : "Yazılı"}</Text>
-        <Text style={styles.status}>{session.status_display || session.status}</Text>
+      <View style={styles.head}>
+        <View style={styles.headText}>
+          <Text style={styles.date}>
+            {recordedAt.toLocaleDateString("tr-TR", {
+              weekday: "long",
+              day: "numeric",
+              month: "long",
+              year: "numeric",
+            })}
+          </Text>
+          <Text style={styles.time}>
+            {recordedAt.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}
+          </Text>
+        </View>
+        <View style={[styles.kind, hasAudio ? styles.kindVoice : styles.kindText]}>
+          <Ionicons
+            name={hasAudio ? "mic" : "create-outline"}
+            size={18}
+            color={hasAudio ? colors.accentDeep : colors.muted}
+          />
+          <Text style={[styles.kindLabel, hasAudio && styles.kindLabelVoice]}>
+            {hasAudio ? "Sesli kayıt" : "Yazılı not"}
+          </Text>
+        </View>
       </View>
-      <Text style={styles.date}>{new Date(session.recorded_at).toLocaleString("tr-TR")}</Text>
+
+      {busy || failed ? (
+        <View style={[styles.progress, failed && styles.progressFailed]}>
+          <Text style={styles.progressText}>
+            {failed
+              ? "Bu kayıt yazıya çevrilemedi."
+              : session.status === "queued"
+              ? "Kaydın sırada bekliyor."
+              : "Sesin yazıya çevriliyor."}
+          </Text>
+        </View>
+      ) : null}
+
+      <Text style={styles.label}>
+        {hasAudio ? "Yazıya çevrilmiş hâli — düzeltebilirsin" : "Yazdıkların — düzeltebilirsin"}
+      </Text>
       <TextInput
         value={text}
         onChangeText={setText}
         multiline
-        placeholder="Transkript yok"
-        placeholderTextColor={colors.muted}
+        placeholder={
+          hasAudio
+            ? busy
+              ? "Sesin yazıya çevriliyor, birazdan burada olacak…"
+              : "Bu kayıt için henüz yazı yok."
+            : "Bu not boş."
+        }
+        placeholderTextColor={colors.faint}
         style={styles.input}
       />
+
       <View style={styles.actions}>
         <Button disabled={!changed || saving} onPress={save} style={styles.actionButton}>
           Kaydet
         </Button>
-        <Button disabled={saving} variant="ghost" onPress={reprocess} style={styles.actionButton}>
-          Yeniden işle
-        </Button>
+        {nlpEnabled() ? (
+          <Button disabled={saving} variant="ghost" onPress={reprocess} style={styles.actionButton}>
+            Yeniden işle
+          </Button>
+        ) : null}
       </View>
     </Card>
   );
@@ -111,49 +170,101 @@ function EntryCard({ session, onChanged }) {
 
 const styles = StyleSheet.create({
   list: {
-    gap: 12,
-    paddingBottom: 20,
+    gap: spacing.md,
+    paddingBottom: spacing.lg,
   },
   emptyList: {
     flexGrow: 1,
     justifyContent: "center",
   },
   card: {
-    gap: 10,
+    gap: spacing.sm,
   },
-  metaRow: {
+  head: {
     flexDirection: "row",
-    gap: 8,
-    alignItems: "center",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: spacing.sm,
+    flexWrap: "wrap",
   },
-  badge: {
-    color: colors.accent2,
-    fontWeight: "800",
-    fontSize: 12,
-  },
-  status: {
-    color: colors.muted,
-    fontSize: 12,
+  headText: {
+    flexShrink: 1,
   },
   date: {
+    color: colors.text,
+    fontSize: type.lg,
+    fontWeight: "700",
+    textTransform: "capitalize",
+  },
+  time: {
     color: colors.muted,
-    fontSize: 12,
+    fontSize: type.sm,
+  },
+  kind: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+  },
+  kindVoice: {
+    backgroundColor: colors.accentSoft,
+    borderColor: colors.accent,
+  },
+  kindText: {
+    backgroundColor: colors.surface2,
+    borderColor: colors.lineStrong,
+  },
+  kindLabel: {
+    color: colors.muted,
+    fontSize: type.sm,
+    fontWeight: "600",
+  },
+  kindLabelVoice: {
+    color: colors.accentDeep,
+  },
+  progress: {
+    backgroundColor: colors.goldSoft,
+    borderColor: colors.gold,
+    borderWidth: 1,
+    borderRadius: radius.sm,
+    padding: spacing.md,
+  },
+  progressFailed: {
+    backgroundColor: colors.claySoft,
+    borderColor: colors.clay,
+  },
+  progressText: {
+    color: colors.text,
+    fontSize: type.base,
+    fontWeight: "600",
+  },
+  label: {
+    color: colors.muted,
+    fontSize: type.sm,
+    fontWeight: "600",
   },
   input: {
-    minHeight: 92,
+    minHeight: 150,
     color: colors.text,
-    backgroundColor: "#101722",
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: 8,
-    padding: 10,
+    fontSize: type.md,
+    lineHeight: type.md * 1.6,
+    backgroundColor: colors.surface2,
+    borderColor: colors.lineStrong,
+    borderWidth: 2,
+    borderRadius: radius.sm,
+    padding: spacing.md,
     textAlignVertical: "top",
   },
   actions: {
     flexDirection: "row",
-    gap: 8,
+    gap: spacing.sm,
+    flexWrap: "wrap",
   },
   actionButton: {
-    flex: 1,
+    flexGrow: 1,
+    flexBasis: 150,
   },
 });

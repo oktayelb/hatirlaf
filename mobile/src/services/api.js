@@ -41,6 +41,7 @@ async function request(path, options = {}) {
 
 export const api = {
   health: () => request("/health/"),
+  config: () => request("/config/"),
   privacyStatus: () => request("/privacy/status/"),
   unlockPrivacy: (password) =>
     request("/privacy/unlock/", { method: "POST", body: { password } }),

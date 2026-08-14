@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { Alert, StyleSheet, Text, TextInput } from "react-native";
 import { api } from "../services/api";
 import { Button, Card, Screen } from "../ui/Primitives";
-import { colors } from "../theme";
+import { colors, radius, spacing, type } from "../theme";
 
 export function LockScreen({ onUnlocked }) {
   const [password, setPassword] = useState("");
@@ -21,7 +21,7 @@ export function LockScreen({ onUnlocked }) {
   }
 
   return (
-    <Screen title="Hatırlaf kilitli" subtitle="Günlük verilerini görmek için uygulama parolasını gir.">
+    <Screen title="Günlüğün kilitli" subtitle="Kayıtlarını görmek için parolanı yaz.">
       <Card style={styles.card}>
         <Text style={styles.mark}>H</Text>
         <TextInput
@@ -30,7 +30,7 @@ export function LockScreen({ onUnlocked }) {
           secureTextEntry
           autoFocus
           placeholder="Parola"
-          placeholderTextColor={colors.muted}
+          placeholderTextColor={colors.faint}
           style={styles.input}
         />
         <Button disabled={busy || !password} onPress={unlock}>
@@ -43,28 +43,32 @@ export function LockScreen({ onUnlocked }) {
 
 const styles = StyleSheet.create({
   card: {
-    gap: 16,
+    gap: spacing.md,
     alignItems: "stretch",
   },
   mark: {
-    width: 52,
-    height: 52,
-    borderRadius: 10,
-    backgroundColor: colors.accent,
-    color: "#fff",
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    alignSelf: "center",
+    backgroundColor: colors.accentSoft,
+    borderColor: colors.accent,
+    borderWidth: 2,
+    color: colors.accentDeep,
     textAlign: "center",
     textAlignVertical: "center",
-    lineHeight: 52,
-    fontSize: 26,
-    fontWeight: "900",
+    lineHeight: 68,
+    fontSize: type.xl,
+    fontWeight: "700",
   },
   input: {
     color: colors.text,
-    backgroundColor: "#101722",
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: 8,
-    minHeight: 46,
-    paddingHorizontal: 12,
+    fontSize: type.md,
+    backgroundColor: colors.surface2,
+    borderColor: colors.lineStrong,
+    borderWidth: 2,
+    borderRadius: radius.sm,
+    minHeight: 56,
+    paddingHorizontal: spacing.md,
   },
 });

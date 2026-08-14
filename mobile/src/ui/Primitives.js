@@ -1,17 +1,19 @@
 import React from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
-import { colors } from "../theme";
+import { TAP, colors, radius, spacing, type } from "../theme";
 
 export function Screen({ children, title, subtitle, action }) {
   return (
     <View style={styles.screen}>
-      <View style={styles.header}>
-        <View style={styles.headerText}>
-          <Text style={styles.title}>{title}</Text>
-          {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+      {title ? (
+        <View style={styles.header}>
+          <View style={styles.headerText}>
+            <Text style={styles.title}>{title}</Text>
+            {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+          </View>
+          {action}
         </View>
-        {action}
-      </View>
+      ) : null}
       {children}
     </View>
   );
@@ -24,6 +26,8 @@ export function Card({ children, style }) {
 export function Button({ children, onPress, variant = "primary", disabled = false, style }) {
   return (
     <Pressable
+      accessibilityRole="button"
+      accessibilityState={{ disabled }}
       onPress={disabled ? undefined : onPress}
       style={({ pressed }) => [
         styles.button,
@@ -33,9 +37,14 @@ export function Button({ children, onPress, variant = "primary", disabled = fals
         style,
       ]}
     >
-      <Text style={[styles.buttonText, variant === "ghost" && styles.ghostText]}>{children}</Text>
+      <Text style={[styles.buttonText, styles[`${variant}Text`]]}>{children}</Text>
     </Pressable>
   );
+}
+
+/** The plain-language line that sits under a control and explains it. */
+export function Help({ children }) {
+  return <Text style={styles.help}>{children}</Text>;
 }
 
 export function EmptyState({ title, text }) {
@@ -47,10 +56,10 @@ export function EmptyState({ title, text }) {
   );
 }
 
-export function Loading({ label = "Yükleniyor..." }) {
+export function Loading({ label = "Yükleniyor…" }) {
   return (
     <View style={styles.loading}>
-      <ActivityIndicator color={colors.accent2} />
+      <ActivityIndicator color={colors.accent} />
       <Text style={styles.loadingText}>{label}</Text>
     </View>
   );
@@ -59,56 +68,65 @@ export function Loading({ label = "Yükleniyor..." }) {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    padding: 16,
-    gap: 14,
+    padding: spacing.md,
+    gap: spacing.md,
   },
   header: {
     flexDirection: "row",
     alignItems: "flex-start",
     justifyContent: "space-between",
-    gap: 12,
+    gap: spacing.sm,
   },
   headerText: {
     flex: 1,
   },
   title: {
     color: colors.text,
-    fontSize: 25,
-    fontWeight: "800",
-    letterSpacing: 0,
+    fontSize: type.xl,
+    fontWeight: "700",
   },
   subtitle: {
     color: colors.muted,
-    fontSize: 13,
-    lineHeight: 19,
-    marginTop: 3,
+    fontSize: type.base,
+    lineHeight: type.base * 1.5,
+    marginTop: spacing.xs,
   },
   card: {
-    backgroundColor: colors.panel,
-    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    borderColor: colors.line,
     borderWidth: 1,
-    borderRadius: 10,
-    padding: 14,
+    borderRadius: radius.md,
+    padding: spacing.lg,
   },
   button: {
-    minHeight: 44,
-    borderRadius: 8,
-    paddingHorizontal: 16,
+    minHeight: TAP,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1,
+    borderWidth: 2,
   },
   primary: {
     backgroundColor: colors.accent,
     borderColor: colors.accent,
   },
+  primaryText: {
+    color: colors.accentInk,
+  },
   ghost: {
     backgroundColor: "transparent",
-    borderColor: colors.border,
+    borderColor: colors.lineStrong,
+  },
+  ghostText: {
+    color: colors.accentDeep,
   },
   danger: {
-    backgroundColor: "rgba(239,101,104,0.14)",
-    borderColor: "rgba(239,101,104,0.35)",
+    backgroundColor: colors.claySoft,
+    borderColor: colors.clay,
+  },
+  dangerText: {
+    color: colors.clay,
   },
   disabled: {
     opacity: 0.45,
@@ -117,34 +135,42 @@ const styles = StyleSheet.create({
     transform: [{ translateY: 1 }],
   },
   buttonText: {
-    color: "#fff",
     fontWeight: "700",
-    fontSize: 14,
+    fontSize: type.md,
+    textAlign: "center",
   },
-  ghostText: {
-    color: colors.accent2,
+  help: {
+    color: colors.muted,
+    fontSize: type.sm,
+    lineHeight: type.sm * 1.5,
   },
   empty: {
     alignItems: "center",
-    paddingVertical: 28,
+    paddingVertical: spacing.xl,
+    borderStyle: "dashed",
+    borderWidth: 2,
+    borderColor: colors.lineStrong,
   },
   emptyTitle: {
     color: colors.text,
-    fontWeight: "800",
-    fontSize: 16,
+    fontWeight: "700",
+    fontSize: type.lg,
+    textAlign: "center",
   },
   emptyText: {
     color: colors.muted,
+    fontSize: type.base,
     textAlign: "center",
-    lineHeight: 20,
-    marginTop: 6,
+    lineHeight: type.base * 1.5,
+    marginTop: spacing.xs,
   },
   loading: {
-    padding: 24,
+    padding: spacing.xl,
     alignItems: "center",
-    gap: 10,
+    gap: spacing.sm,
   },
   loadingText: {
     color: colors.muted,
+    fontSize: type.base,
   },
 });
