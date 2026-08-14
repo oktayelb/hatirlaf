@@ -254,17 +254,34 @@ function renderEventCard(ev, closeModal = null) {
         }, [p]))
       )
     : null;
+  const tags = normalizeEventTags(ev);
+  const tagsRow = tags.length
+    ? el("div", { class: "cal-event-tags" }, tags.map((tag) => el("span", { class: "cal-event-tag" }, [tag])))
+    : null;
 
   return el("div", { class: "cal-event-card" }, [
     el("div", { class: "cal-event-header" }, [badge]),
     el("div", { class: "cal-event-body" }, [ev.olay || ""]),
     metaBits.length ? el("div", { class: "cal-event-meta" }, metaBits) : null,
     peopleRow,
+    tagsRow,
     reminderAction(ev),
     ev.session_id
       ? el("button", { class: "cta ghost", style: "margin-top:4px;", onclick: () => go(`#/review/${ev.session_id}`) }, ["Kayda git"])
       : null,
   ].filter(Boolean));
+}
+
+function normalizeEventTags(ev) {
+  return [
+    ev.kategori,
+    ev.ruh_hali,
+    ...((Array.isArray(ev.etiketler) ? ev.etiketler : [])),
+  ]
+    .filter(Boolean)
+    .map((tag) => String(tag).trim())
+    .filter((tag, index, arr) => tag && arr.indexOf(tag) === index)
+    .slice(0, 6);
 }
 
 function reminderAction(ev) {

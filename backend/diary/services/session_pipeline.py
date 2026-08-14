@@ -116,9 +116,13 @@ def mark_eventification_running(session_id: int) -> None:
     )
 
 
-def persist_eventification_result(session: Session, extraction, llm_result: dict) -> None:
+def persist_eventification_result(session: Session, extraction, llm_result: dict, enrichment: dict | None = None) -> None:
     events = llm_result.get("olay_loglari", [])
-    Session.objects.filter(pk=session.pk).update(
+    ai_mood = (enrichment or {}).get("mood") or ""
+    ai_tags = (enrichment or {}).get("tags") or []
+    mood_is_manual = session.mood_source == "manual"
+    tags_are_manual = session.tags_source == "manual"
+    update_data = dict(
         structured_events=events,
         nlp_hints=extraction.to_json(),
         eventification_status=EventificationStatus.COMPLETED,
@@ -128,6 +132,13 @@ def persist_eventification_result(session: Session, extraction, llm_result: dict
         ),
         updated_at=timezone.now(),
     )
+    if not mood_is_manual:
+        update_data["mood"] = ai_mood
+        update_data["mood_source"] = "ai" if ai_mood else ""
+    if not tags_are_manual:
+        update_data["tags"] = _merge_tags(ai_tags)
+        update_data["tags_source"] = "ai" if ai_tags else ""
+    Session.objects.filter(pk=session.pk).update(**update_data)
 
 
 def mark_eventification_failed(session_id: int, detail: str) -> None:
@@ -137,6 +148,21 @@ def mark_eventification_failed(session_id: int, detail: str) -> None:
         eventification_detail=detail[:2000],
         updated_at=timezone.now(),
     )
+
+
+def _merge_tags(*groups: list[str]) -> list[str]:
+    merged = []
+    seen = set()
+    for group in groups:
+        for value in group or []:
+            tag = str(value or "").strip().lower()
+            if not tag or tag in seen:
+                continue
+            seen.add(tag)
+            merged.append(tag[:40])
+            if len(merged) >= 20:
+                return merged
+    return merged
 
 
 def _auto_resolve(mention: Mention, fm) -> None:

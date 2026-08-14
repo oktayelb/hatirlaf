@@ -7,7 +7,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from diary.models import Edge, EncounteredEntity, Mention, MentionType, Node, NodeKind, Session, SessionStatus
-from diary.processing import extractor, nlp
+from diary.processing import extractor, llm, nlp
 from diary.processing.conflicts import detect_conflicts
 from diary.services import session_pipeline
 
@@ -54,12 +54,47 @@ class SessionPipelineServiceTests(TestCase):
                 "backend": "llm",
                 "olay_loglari": [{"baslik": "Buluşma", "tarih": "2026-04-30"}],
             },
+            {
+                "mood": "mutlu",
+                "tags": ["arkadaşlar", "okul"],
+            },
         )
 
         session.refresh_from_db()
         self.assertEqual(session.eventification_status, "completed")
         self.assertEqual(session.structured_events, [{"baslik": "Buluşma", "tarih": "2026-04-30"}])
+        self.assertEqual(session.mood, "mutlu")
+        self.assertEqual(session.tags, ["arkadaşlar", "okul"])
+        self.assertEqual(session.mood_source, "ai")
+        self.assertEqual(session.tags_source, "ai")
         self.assertIn("llm ile 1 olay üretildi", session.eventification_detail)
+
+    def test_persist_eventification_result_preserves_manual_mood_and_tags(self):
+        recorded_at = dt.datetime(2026, 4, 30, 12, 0)
+        session = Session.objects.create(
+            client_uuid="svc-manual-labels",
+            recorded_at=recorded_at,
+            transcript="Okulda sınavım vardı.",
+            status=SessionStatus.COMPLETED,
+            mood="sakin",
+            mood_source="manual",
+            tags=["kişisel"],
+            tags_source="manual",
+        )
+        extraction = extractor.extract(session.transcript, recorded_at)
+
+        session_pipeline.persist_eventification_result(
+            session,
+            extraction,
+            {"backend": "llm", "olay_loglari": []},
+            {"mood": "stresli", "tags": ["okul"]},
+        )
+
+        session.refresh_from_db()
+        self.assertEqual(session.mood, "sakin")
+        self.assertEqual(session.tags, ["kişisel"])
+        self.assertEqual(session.mood_source, "manual")
+        self.assertEqual(session.tags_source, "manual")
 
     def test_reextract_all_endpoint_rebuilds_mentions_from_transcripts(self):
         recorded_at = dt.datetime(2026, 4, 30, 12, 0, tzinfo=dt.timezone.utc)
@@ -152,3 +187,24 @@ class SessionPipelineServiceTests(TestCase):
         mention_surfaces = set(session.mentions.values_list("surface", flat=True))
         self.assertIn("Ahmet", mention_surfaces)
         self.assertNotIn("Eski", mention_surfaces)
+
+    @patch("diary.processing.llm._load_llm", return_value=None)
+    def test_mood_tag_fallback_classifies_school_and_stress(self, _load_llm):
+        recorded_at = dt.datetime(2026, 4, 30, 12, 0, tzinfo=dt.timezone.utc)
+        extraction = extractor.extract("Yarın okulda sınavım var, biraz stresliyim.", recorded_at)
+        events = [
+            {
+                "zaman_dilimi": "Gelecek",
+                "tarih": "2026-05-01",
+                "olay": "Okulda sınavım var.",
+                "kisiler": ["Ben"],
+            }
+        ]
+
+        enrichment = llm.run_mood_tags(extraction, events)
+        enriched_events = llm.merge_mood_tags(events, enrichment)
+
+        self.assertEqual(enrichment["mood"], "stresli")
+        self.assertIn("okul", enrichment["tags"])
+        self.assertEqual(enriched_events[0]["kategori"], "okul")
+        self.assertIn("okul", enriched_events[0]["etiketler"])

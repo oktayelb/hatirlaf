@@ -307,6 +307,24 @@
   border-color: color-mix(in srgb, var(--accent-2) 25%, transparent);
 }
 
+.cal-event-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.cal-event-tag {
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--fg-muted);
+  background: color-mix(in srgb, var(--bg-elev) 70%, transparent);
+  font-size: 11px;
+  font-weight: 650;
+}
+
 .cal-bucket-badge {
   display: inline-flex;
   padding: 3px 10px;

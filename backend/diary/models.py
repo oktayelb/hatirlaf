@@ -154,6 +154,10 @@ class Session(models.Model):
 
     transcript = EncryptedTextField(blank=True, default="")
     processed_text = EncryptedTextField(blank=True, default="")
+    mood = EncryptedTextField(blank=True, default="")
+    tags = EncryptedJSONField(default=list, blank=True)
+    mood_source = models.CharField(max_length=16, blank=True, default="")
+    tags_source = models.CharField(max_length=16, blank=True, default="")
 
     # Whisper word-level timings, stored as a list of {"word","start","end"}.
     word_timings = EncryptedJSONField(default=list, blank=True)

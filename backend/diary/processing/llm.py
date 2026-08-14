@@ -69,6 +69,31 @@ OLAY_LOG_SCHEMA: dict[str, Any] = {
     "required": ["olay_loglari"],
 }
 
+MOOD_TAG_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "mood": {
+            "type": "string",
+            "enum": ["mutlu", "sakin", "stresli", "üzgün", "kızgın", "heyecanlı", "yorgun", "nötr"],
+        },
+        "tags": {"type": "array", "items": {"type": "string"}},
+        "events": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "index": {"type": "integer"},
+                    "category": {"type": "string"},
+                    "mood": {"type": "string"},
+                    "tags": {"type": "array", "items": {"type": "string"}},
+                },
+                "required": ["index", "category", "mood", "tags"],
+            },
+        },
+    },
+    "required": ["mood", "tags", "events"],
+}
+
 
 _lock = threading.Lock()
 _inference_lock = threading.Lock()
@@ -310,6 +335,59 @@ PASS_2_SYSTEM = (
     "- Eksik alanlar için boş string kullan, null kullanma.\n"
 )
 
+MOOD_TAG_SYSTEM = (
+    "Sen Hatırlaf'ın günlük duygu ve etiket sınıflandırıcısısın. "
+    "Kullanıcının metnini ve çıkarılmış olaylarını okuyup kısa, güvenli "
+    "etiketler üreteceksin.\n\n"
+    "KURALLAR:\n"
+    "- Yalnızca metinden anlaşılan kategorileri seç; kanıt yoksa 'diğer' veya 'kişisel' kullan.\n"
+    "- Ana kategoriler: iş, okul, aile, sağlık, arkadaşlar, partner, ev, finans, seyahat, spor, kişisel, diğer.\n"
+    "- Etiketler kısa Türkçe kelimeler olmalı: iş, aile, sağlık, okul gibi. Hashtag işareti kullanma.\n"
+    "- Ruh hali tek kelime olmalı: mutlu, sakin, stresli, üzgün, kızgın, heyecanlı, yorgun veya nötr.\n"
+    "- Birden çok alan varsa en fazla 6 genel etiket döndür.\n"
+    "- Her olay için kategori, ruh hali ve 1-4 etiket döndür.\n"
+    "- Kullanıcının mahrem verisini açıklayan uzun cümleler yazma; sınıflandırma yap.\n"
+    "- Çıkış yalnızca JSON olmalı.\n\n"
+    "GİRDİ BİÇİMİ:\n"
+    "Her satır 'Olay N: olay metni @ paragraf' formatındadır. @ işaretinden "
+    "sonrası orijinal bağlamdır; etiketi olay metni ve paragrafın birlikte "
+    "verdiği kanıta göre seç."
+)
+
+
+TAG_CATEGORY_ALIASES = {
+    "work": "iş",
+    "job": "iş",
+    "office": "iş",
+    "school": "okul",
+    "family": "aile",
+    "health": "sağlık",
+    "friends": "arkadaşlar",
+    "friend": "arkadaşlar",
+    "partner": "partner",
+    "home": "ev",
+    "finance": "finans",
+    "travel": "seyahat",
+    "sport": "spor",
+    "personal": "kişisel",
+    "other": "diğer",
+}
+ALLOWED_TAGS = {
+    "iş",
+    "okul",
+    "aile",
+    "sağlık",
+    "arkadaşlar",
+    "partner",
+    "ev",
+    "finans",
+    "seyahat",
+    "spor",
+    "kişisel",
+    "diğer",
+}
+ALLOWED_MOODS = {"mutlu", "sakin", "stresli", "üzgün", "kızgın", "heyecanlı", "yorgun", "nötr"}
+
 
 def run(extraction: ExtractionResult) -> dict:
     """Return a canonical ``{"olay_loglari": [...]}``.
@@ -403,6 +481,176 @@ def _run_locked(llm, extraction: ExtractionResult, baseline: dict) -> dict:
 
     cleaned = [_sanitize_event(ev, extraction) for ev in cleaned]
     return {"olay_loglari": cleaned, "backend": "llama.cpp"}
+
+
+def run_mood_tags(extraction: ExtractionResult, events: list[dict]) -> dict:
+    """Classify session mood/tags and per-event category tags.
+
+    The LLM path receives one more prompt where each item is formatted as
+    ``event @ paragraph``. If the model is unavailable, a keyword fallback
+    keeps the feature useful and deterministic.
+    """
+    fallback = _fallback_mood_tags(extraction, events)
+    llm = _load_llm()
+    if llm is None:
+        return fallback
+
+    try:
+        with _inference_lock:
+            return _run_mood_tags_locked(llm, extraction, events, fallback)
+    except Exception as exc:
+        logger.exception("Mood/tag LLM inference failed, using fallback: %s", exc)
+        return fallback
+
+
+def _run_mood_tags_locked(llm, extraction: ExtractionResult, events: list[dict], fallback: dict) -> dict:
+    lines = []
+    paragraph = extraction.paragraph.strip()
+    for idx, event in enumerate(events, start=1):
+        text = (event.get("olay") or "").strip()
+        lines.append(f"Olay {idx}: {text} @ {paragraph}")
+    if not lines:
+        lines.append(f"Olay 1: {paragraph} @ {paragraph}")
+
+    response = llm.create_chat_completion(
+        messages=[
+            {"role": "system", "content": MOOD_TAG_SYSTEM},
+            {"role": "user", "content": "\n".join(lines)},
+        ],
+        response_format={"type": "json_object", "schema": MOOD_TAG_SCHEMA},
+        temperature=0.0,
+    )
+    raw = response["choices"][0]["message"]["content"]
+    parsed = json.loads(raw)
+    cleaned = _sanitize_mood_tags(parsed, events)
+    if not cleaned["tags"] and fallback["tags"]:
+        cleaned["tags"] = fallback["tags"]
+    if cleaned["mood"] == "nötr" and fallback["mood"] != "nötr":
+        cleaned["mood"] = fallback["mood"]
+    return cleaned
+
+
+def _sanitize_mood_tags(data: dict, events: list[dict]) -> dict:
+    mood = _clean_mood(data.get("mood"))
+    tags = _clean_tags(data.get("tags") or [])
+    event_map = {}
+    for item in data.get("events") or []:
+        if not isinstance(item, dict):
+            continue
+        try:
+            index = int(item.get("index"))
+        except (TypeError, ValueError):
+            continue
+        if not 1 <= index <= max(len(events), 1):
+            continue
+        category = _clean_tag(item.get("category")) or "diğer"
+        event_tags = _clean_tags([category, *(item.get("tags") or [])])[:4]
+        event_map[index] = {
+            "kategori": event_tags[0] if event_tags else "diğer",
+            "ruh_hali": _clean_mood(item.get("mood")),
+            "etiketler": event_tags or ["diğer"],
+        }
+    event_enrichments = [
+        event_map.get(i, {"kategori": "diğer", "ruh_hali": mood, "etiketler": tags[:3] or ["diğer"]})
+        for i in range(1, len(events) + 1)
+    ]
+    return {"mood": mood, "tags": tags[:6], "event_enrichments": event_enrichments}
+
+
+def _fallback_mood_tags(extraction: ExtractionResult, events: list[dict]) -> dict:
+    source = " ".join(
+        [extraction.paragraph or "", *[(event.get("olay") or "") for event in events]]
+    ).casefold()
+    tags = []
+    keyword_tags = [
+        ("iş", ["iş", "ofis", "toplantı", "mesai", "proje", "müşteri", "şirket", "çalış"]),
+        ("okul", ["okul", "ders", "sınav", "ödev", "kampüs", "öğretmen", "üniversite"]),
+        ("aile", ["anne", "baba", "kardeş", "aile", "çocuk", "kuzen"]),
+        ("sağlık", ["doktor", "hastane", "ilaç", "sağlık", "hasta", "terapi", "spor salonu"]),
+        ("arkadaşlar", ["arkadaş", "dost", "ahmet", "ayşe", "mehmet", "emre"]),
+        ("partner", ["sevgili", "eşim", "partner", "nişanlı"]),
+        ("ev", ["ev", "mutfak", "oda", "apartman"]),
+        ("finans", ["para", "fatura", "banka", "maaş", "borç", "kredi"]),
+        ("seyahat", ["uçak", "otobüs", "tren", "tatil", "seyahat", "yolculuk"]),
+        ("spor", ["spor", "koşu", "maç", "antrenman", "fitness"]),
+    ]
+    for tag, words in keyword_tags:
+        if any(word in source for word in words):
+            tags.append(tag)
+    if not tags:
+        tags.append("kişisel")
+
+    mood = "nötr"
+    mood_keywords = [
+        ("stresli", ["stres", "gergin", "yoğun", "bunaldım", "endişe", "kaygı"]),
+        ("üzgün", ["üzgün", "mutsuz", "kırıldım", "ağladım", "kötü"]),
+        ("kızgın", ["kızgın", "sinir", "öfke", "kavga"]),
+        ("mutlu", ["mutlu", "sevindim", "harika", "güzel", "keyifli"]),
+        ("heyecanlı", ["heyecan", "sabırsız", "bekliyorum"]),
+        ("yorgun", ["yorgun", "uykusuz", "bitkin"]),
+        ("sakin", ["sakin", "rahat", "huzurlu"]),
+    ]
+    for candidate, words in mood_keywords:
+        if any(word in source for word in words):
+            mood = candidate
+            break
+
+    event_enrichments = []
+    for event in events:
+        event_text = f"{event.get('olay', '')} {event.get('lokasyon', '')}".casefold()
+        event_tags = [tag for tag, words in keyword_tags if any(word in event_text for word in words)]
+        if not event_tags:
+            event_tags = tags[:2] or ["kişisel"]
+        event_enrichments.append(
+            {
+                "kategori": event_tags[0],
+                "ruh_hali": mood,
+                "etiketler": _clean_tags(event_tags)[:4],
+            }
+        )
+    return {"mood": mood, "tags": _clean_tags(tags)[:6], "event_enrichments": event_enrichments}
+
+
+def merge_mood_tags(events: list[dict], enrichment: dict) -> list[dict]:
+    enriched = []
+    event_enrichments = enrichment.get("event_enrichments") or []
+    for idx, event in enumerate(events):
+        item = dict(event)
+        extra = event_enrichments[idx] if idx < len(event_enrichments) else {}
+        item["kategori"] = extra.get("kategori") or item.get("kategori") or "diğer"
+        item["ruh_hali"] = extra.get("ruh_hali") or item.get("ruh_hali") or enrichment.get("mood") or "nötr"
+        item["etiketler"] = _clean_tags(extra.get("etiketler") or item.get("etiketler") or [])[:4]
+        if not item["etiketler"]:
+            item["etiketler"] = [item["kategori"]]
+        enriched.append(item)
+    return enriched
+
+
+def _clean_mood(value) -> str:
+    mood = str(value or "").strip().casefold()
+    return mood if mood in ALLOWED_MOODS else "nötr"
+
+
+def _clean_tag(value) -> str:
+    tag = str(value or "").strip().casefold().replace("#", "")
+    tag = TAG_CATEGORY_ALIASES.get(tag, tag)
+    if tag in ALLOWED_TAGS:
+        return tag
+    if not tag or len(tag) > 24:
+        return ""
+    return tag
+
+
+def _clean_tags(values) -> list[str]:
+    cleaned = []
+    seen = set()
+    for value in values or []:
+        tag = _clean_tag(value)
+        if not tag or tag in seen:
+            continue
+        seen.add(tag)
+        cleaned.append(tag)
+    return cleaned
 
 
 def _normalize(event: dict, extraction: ExtractionResult) -> dict:
