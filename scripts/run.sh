@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-cd "$ROOT/backend"
+cd "$ROOT/server"
 
 # shellcheck source=/dev/null
 source "$ROOT/.venv/bin/activate"

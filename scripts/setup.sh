@@ -3,7 +3,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-cd "$ROOT/backend"
+cd "$ROOT/server"
 
 MINIMAL_SETUP="${HATIRLAF_SETUP_MINIMAL:-0}"
 

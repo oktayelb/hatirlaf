@@ -21,7 +21,7 @@ from django.conf import settings
 logger = logging.getLogger(__name__)
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
-_SAVYAR_ROOT = _REPO_ROOT / "savyar"
+_SAVYAR_ROOT = _REPO_ROOT / "vendor" / "savyar"
 _BRIDGE_PATH = _REPO_ROOT / "scripts" / "savyar_ml_bridge.py"
 _DEFAULT_TIMEOUT_SECONDS = 20.0
 

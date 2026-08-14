@@ -14,8 +14,16 @@ Expo/React Native client for the local Hatırlaf Django API.
 
 ## Run
 
+From the repository root:
+
 ```bash
-cd mobile
+make mobile
+```
+
+Or directly:
+
+```bash
+cd clients/mobile
 npm install
 npm run start
 ```

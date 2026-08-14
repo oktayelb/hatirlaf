@@ -8,7 +8,7 @@ memory pages — only runs when the flag is on.
 
 To flip the whole thing, set one value:
 
-    # backend/diary_backend/settings.py
+    # server/config/settings.py
     HATIRLAF_NLP_ENABLED = True
 
 or from the environment, without touching code:

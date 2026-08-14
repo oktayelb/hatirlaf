@@ -4,7 +4,21 @@ Hatırlaf is a local-first Turkish voice diary. You record yourself or write, an
 
 Behind a single feature flag there is a second, larger app: a natural-language pipeline that extracts people, places, times and events from what you said, asks for clarification when a reference is ambiguous, and lays the result out on a calendar. **That pipeline ships switched off.** See [The NLP Switch](#the-nlp-switch).
 
-The repository is a Django + DRF backend with two clients that speak the same REST API: a mobile-shaped browser client under `backend/static/`, and an Expo/React Native app under `mobile/`.
+The repository is a Django + DRF backend with two clients that speak the same REST API: a mobile-shaped browser client under `clients/web/`, and an Expo/React Native app under `clients/mobile/`.
+
+## Quick Start
+
+```bash
+make setup      # virtualenv, dependencies, migrations
+make run        # http://127.0.0.1:8000
+```
+
+Run `make` on its own for the full list of targets. If `make setup` is too
+heavy for your machine — it pulls several GB of model weights — use
+`make setup-minimal` instead and add the models later.
+
+New to the codebase? [Repository Layout](#repository-layout) is the map, and
+`docs/structure.md` is the file-by-file tour.
 
 ## Current Status
 
@@ -60,14 +74,14 @@ The calendar should show that event on `2026-04-29`, not merely on the recording
 Everything that *understands* an entry, as opposed to merely *capturing* it, sits behind one flag:
 
 ```python
-# backend/diary_backend/settings.py
+# server/config/settings.py
 HATIRLAF_NLP_ENABLED = os.environ.get("HATIRLAF_NLP_ENABLED", "0") == "1"
 ```
 
 Change the default, or set the variable and leave the code alone:
 
 ```bash
-HATIRLAF_NLP_ENABLED=1 scripts/run.sh
+make run NLP=1
 ```
 
 That single value moves all of the following at once.
@@ -88,7 +102,7 @@ That single value moves all of the following at once.
 ### Where the switch lives
 
 ```text
-backend/diary/pipeline/
+server/diary/pipeline/
 ├── flags.py    the switch itself, plus /api/config/'s payload
 ├── stages.py   the ordered list of steps, each declaring when it applies
 └── runner.py   threads, re-entrancy, failure bookkeeping
@@ -169,7 +183,7 @@ Processing is started by `diary/pipeline/runner.py`. The HTTP upload returns qui
 
 ## Backend Data Model
 
-The core models live in `backend/diary/models.py`.
+The core models live in `server/diary/models.py`.
 
 - `Session`: one diary entry. Stores audio metadata, transcript, status, `structured_events`, and eventification status.
 - `Mention`: a span in the transcript that references a person, place, time, event, organization, or pronoun.
@@ -180,7 +194,7 @@ The core models live in `backend/diary/models.py`.
 
 ## Calendar Behavior
 
-The calendar API is implemented in `calendar_view` in `backend/diary/views/api_analytics.py`. It returns 404 while the NLP switch is off.
+The calendar API is implemented in `calendar_view` in `server/diary/views/api_analytics.py`. It returns 404 while the NLP switch is off.
 
 Priority order for event display:
 
@@ -200,14 +214,14 @@ This matters because the full LLM eventification step can be slow or unavailable
 
 ### Database
 
-- **SQLite by default**: simple local database at `backend/db.sqlite3`.
+- **SQLite by default**: simple local database at `var/db.sqlite3`.
 - **PostgreSQL supported by env var**: set `HATIRLAF_DATABASE_URL=postgres://...`.
 
 SQLite is fine for local single-user use. PostgreSQL should be used for real deployment.
 
 ### Speech-To-Text
 
-Implemented in `backend/diary/processing/transcription.py`.
+Implemented in `server/diary/processing/transcription.py`.
 
 Supported backends:
 
@@ -234,9 +248,9 @@ The code uses Turkish-specific prompt text, VAD silence skipping, beam search, a
 
 Implemented across:
 
-- `backend/diary/processing/nlp.py`
-- `backend/diary/processing/extractor.py`
-- `backend/diary/processing/conflicts.py`
+- `server/diary/processing/nlp.py`
+- `server/diary/processing/extractor.py`
+- `server/diary/processing/conflicts.py`
 
 Tools and techniques:
 
@@ -273,7 +287,7 @@ NER hints.
 
 ### Local LLM
 
-Implemented in `backend/diary/processing/llm.py`.
+Implemented in `server/diary/processing/llm.py`.
 
 Default model path:
 
@@ -302,16 +316,16 @@ No Node build step is required.
 
 Always-on files:
 
-- `backend/templates/diary/index.html`
-- `backend/static/js/app.js` — router; builds navigation from `/api/config/`
-- `backend/static/js/config.js` — feature flags
-- `backend/static/js/screens/home.js` — photos, recorder, composer
-- `backend/static/js/screens/entries.js` — the entry log
-- `backend/static/js/screens/settings.js` — text size and the app password
-- `backend/static/js/photos.js` — the photo board
-- `backend/static/js/textsize.js` — reader-controlled type scale
-- `backend/static/js/db.js`, `sync.js`, `audio.js`, `icons.js`
-- `backend/static/css/app.css` and `backend/static/css/modules/`
+- `clients/web/templates/diary/index.html`
+- `clients/web/static/js/app.js` — router; builds navigation from `/api/config/`
+- `clients/web/static/js/config.js` — feature flags
+- `clients/web/static/js/screens/home.js` — photos, recorder, composer
+- `clients/web/static/js/screens/entries.js` — the entry log
+- `clients/web/static/js/screens/settings.js` — text size and the app password
+- `clients/web/static/js/photos.js` — the photo board
+- `clients/web/static/js/textsize.js` — reader-controlled type scale
+- `clients/web/static/js/db.js`, `sync.js`, `audio.js`, `icons.js`
+- `clients/web/static/css/app.css` and `clients/web/static/css/modules/`
 
 Loaded but only routable while the NLP switch is on:
 
@@ -339,13 +353,29 @@ Prerequisites:
 - A modern browser
 - Enough RAM for selected models
 
-Create the virtual environment, install Python dependencies, and run migrations:
+Two commands get you a running app:
 
 ```bash
-./scripts/setup.sh
+make setup     # create .venv, install dependencies, run migrations
+make run       # serve on http://127.0.0.1:8000
 ```
 
-By default, `setup.sh` also installs the local ML stack used by the app:
+`make` on its own lists every target. The common ones:
+
+| Command | What it does |
+|---|---|
+| `make setup` | Full install, including the local ML stack. Safe to re-run. |
+| `make setup-minimal` | Same, minus the multi-GB models — no STT, NER or LLM. |
+| `make run` | Migrate, then serve. `make run NLP=1` turns the understanding pipeline on; `make run PORT=9000` moves the port. |
+| `make test` | Backend test suite. |
+| `make seed` | Fill the local database with demo entries. |
+| `make mobile` | Start the Expo dev server for the mobile client. |
+| `make reset` | Delete the local database and recorded audio, after confirming. |
+
+Each target is a thin wrapper over `scripts/*.sh` or `manage.py`, so you can
+always drop down a level and run the underlying command directly.
+
+By default, `make setup` also installs the local ML stack used by the app:
 
 - `faster-whisper`
 - `openai-whisper`
@@ -353,14 +383,13 @@ By default, `setup.sh` also installs the local ML stack used by the app:
 - `torch`
 - `llama-cpp-python`
 
-It also falls back to the main project virtualenv if a dedicated `savyar/.venv`
+It also falls back to the main project virtualenv if a dedicated `vendor/savyar/.venv`
 is not present, so SAVYAR does not need a separate manual bootstrap step.
 
-If you want a lighter install on a constrained machine, you can skip the ML
-stack:
+If you want a lighter install on a constrained machine, skip the ML stack:
 
 ```bash
-HATIRLAF_SETUP_MINIMAL=1 ./scripts/setup.sh
+make setup-minimal
 ```
 
 Optional helper commands are still available if you want to reinstall or swap
@@ -376,7 +405,7 @@ one backend later:
 Run locally:
 
 ```bash
-./scripts/run.sh
+make run
 ```
 
 Open:
@@ -384,6 +413,10 @@ Open:
 ```text
 http://127.0.0.1:8000/
 ```
+
+Everything the app writes at runtime — the SQLite database, uploaded audio, the
+encryption key, collected static files — lands in `var/`. That directory is
+gitignored and disposable: delete it and `make run` builds it again.
 
 ## Configuration
 
@@ -396,8 +429,9 @@ Environment variables:
 | `HATIRLAF_SECRET_KEY` | generated | Django secret key; must be set in production |
 | `HATIRLAF_ALLOWED_HOSTS` | empty | Required when debug is off |
 | `HATIRLAF_DATABASE_URL` | SQLite | Optional PostgreSQL URL |
-| `HATIRLAF_HOST` | `127.0.0.1` | Dev server host used by `scripts/run.sh` |
-| `HATIRLAF_PORT` | `8000` | Dev server port used by `scripts/run.sh` |
+| `HATIRLAF_HOST` | `127.0.0.1` | Dev server host used by `make run` |
+| `HATIRLAF_PORT` | `8000` | Dev server port used by `make run` |
+| `HATIRLAF_VAR_DIR` | `var/` | Where the database, media and keys are written |
 | `HATIRLAF_WHISPER_MODEL` | `large-v3-turbo` | Whisper model size/name |
 | `HATIRLAF_WHISPER_LANG` | `tr` | Transcription language |
 | `HATIRLAF_WHISPER_COMPUTE_TYPE` | `int8_float32` | faster-whisper compute type |
@@ -407,10 +441,10 @@ Environment variables:
 | `HATIRLAF_USE_TURKISH_NER` | `0` | Enables optional Hugging Face Turkish NER |
 | `HATIRLAF_TURKISH_NER_MODEL` | `savasy/bert-base-turkish-ner-cased` | Hugging Face token-classification model id |
 | `HATIRLAF_USE_BERTURK` | `0` | Backwards-compatible alias for `HATIRLAF_USE_TURKISH_NER` |
-| `HATIRLAF_LLM_MODEL_PATH` | repo GGUF path | Local Qwen GGUF file |
+| `HATIRLAF_LLM_MODEL_PATH` | `models/Qwen2.5-7B-Instruct-Q4_K_M.gguf` | Local Qwen GGUF file |
 | `HATIRLAF_LLM_N_CTX` | `4096` | LLM context window |
 | `HATIRLAF_LLM_N_GPU_LAYERS` | `-1` | GPU offload layers for llama.cpp |
-| `HATIRLAF_SETUP_MINIMAL` | `0` | Skip ML installs during `scripts/setup.sh` |
+| `HATIRLAF_SETUP_MINIMAL` | `0` | Skip ML installs during `make setup` |
 | `HATIRLAF_PRELOAD_MODELS` | `1` | Warm-load STT and LLM at startup |
 | `HATIRLAF_SYNC_PROCESSING` | `0` | Run processing inline, mainly for tests |
 
@@ -642,7 +676,7 @@ For a shipped mobile app, privacy should be a product feature, not just an imple
 Run the Django test suite:
 
 ```bash
-./.venv/bin/python backend/manage.py test diary
+make test
 ```
 
 Tests that exercise the understanding pipeline declare it explicitly, because
@@ -678,55 +712,70 @@ Recommended next tests:
 
 ## Repository Layout
 
+Five top-level directories, each with one job.
+
 ```text
 hatırlaf/
-├── backend/
+├── Makefile              the entrypoint — `make` lists everything
+├── README.md
+├── docs/                 written docs and the original project brief
+│   ├── structure.md      file-by-file tour of the tree
+│   └── project-kickoff.pdf
+├── server/               the Django project — the only thing that owns data
 │   ├── manage.py
 │   ├── requirements.txt
-│   ├── db.sqlite3
-│   ├── diary_backend/
-│   │   ├── settings.py
-│   │   ├── urls.py
-│   │   ├── asgi.py
-│   │   └── wsgi.py
-│   ├── diary/
-│   │   ├── models.py
-│   │   ├── serializers.py
-│   │   ├── urls.py
-│   │   ├── apps.py
-│   │   ├── views/
-│   │   │   ├── api_sessions.py
-│   │   │   ├── api_analytics.py    NLP-only, gated
-│   │   │   ├── api_config.py       feature flags + the gates
-│   │   │   └── web.py
-│   │   ├── pipeline/
-│   │   │   ├── flags.py            the NLP switch
-│   │   │   ├── stages.py           ordered steps, each with its flag
-│   │   │   └── runner.py           threads and failure handling
-│   │   ├── processing/
-│   │   │   ├── transcription.py
-│   │   │   ├── nlp.py
-│   │   │   ├── extractor.py
-│   │   │   ├── conflicts.py
-│   │   │   └── llm.py
-│   │   └── tests/
-│   ├── static/
-│   │   ├── css/app.css + css/modules/
-│   │   └── js/
-│   └── templates/
-├── mobile/                          Expo client, same API and palette
-│   ├── App.js
-│   └── src/
-│       ├── screens/
-│       ├── services/
-│       └── ui/
-├── scripts/
-│   ├── setup.sh
-│   ├── run.sh
-│   └── install_whisper.sh
-├── Qwen2.5-7B-Instruct-Q4_K_M.gguf
-└── README.md
+│   ├── config/           project settings, root URLs, WSGI/ASGI
+│   └── diary/            the single Django app
+│       ├── models.py     Session, Mention, Node, Edge
+│       ├── serializers.py
+│       ├── urls.py
+│       ├── views/        one module per API surface
+│       │   ├── api_sessions.py
+│       │   ├── api_analytics.py    NLP-only, gated
+│       │   ├── api_config.py       feature flags + the gates
+│       │   └── web.py              serves the web client's shell
+│       ├── pipeline/     what happens to an entry, and when
+│       │   ├── flags.py            the NLP switch
+│       │   ├── stages.py           ordered steps, each with its flag
+│       │   └── runner.py           threads and failure handling
+│       ├── processing/   the work each stage does
+│       │   ├── transcription.py    Whisper
+│       │   ├── nlp*.py             Turkish morphology, NER, mentions
+│       │   ├── extractor.py        deterministic event pre-pass
+│       │   ├── conflicts.py        ambiguity detection
+│       │   ├── llm.py              local llama.cpp eventification
+│       │   └── savyar_adapter.py   bridge to vendor/savyar
+│       ├── services/     orchestration above the ORM
+│       ├── management/   custom manage.py commands (seed_demo)
+│       ├── migrations/
+│       └── tests/
+├── clients/              two front ends, one REST API
+│   ├── web/              the browser SPA, served by Django
+│   │   ├── templates/    the HTML shell
+│   │   └── static/       css/ and js/, no build step
+│   └── mobile/           the Expo / React Native app
+│       ├── App.js
+│       └── src/          screens/, services/, ui/
+├── vendor/               third-party source checked in, not our code
+│   └── savyar/           Turkish morphological analyser
+├── scripts/              setup.sh, run.sh, install_whisper.sh, and the
+│                         savyar bridge the backend shells out to
+├── models/               large model weights (gitignored)
+│   └── Qwen2.5-7B-Instruct-Q4_K_M.gguf
+└── var/                  everything written at runtime (gitignored)
+    ├── db.sqlite3
+    ├── media/            uploaded audio
+    ├── staticfiles/      collectstatic output
+    └── encryption.key
 ```
+
+The two rules that keep it navigable:
+
+- **`server/config/` is configuration; `server/diary/` is the application.**
+  Nothing about the diary belongs in `config/`, and no Django wiring belongs
+  in `diary/`.
+- **`var/` and `models/` hold no source.** Deleting either loses only data or
+  downloads, never work. That is why neither is committed.
 
 ## Suggested Roadmap
 

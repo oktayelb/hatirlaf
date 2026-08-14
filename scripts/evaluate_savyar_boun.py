@@ -17,8 +17,8 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-BACKEND_ROOT = REPO_ROOT / "backend"
-DEFAULT_CONLLU = REPO_ROOT / "savyar" / "data" / "boun_treebank" / "tr_boun-ud-dev.conllu"
+SERVER_ROOT = REPO_ROOT / "server"
+DEFAULT_CONLLU = REPO_ROOT / "vendor" / "savyar" / "data" / "boun_treebank" / "tr_boun-ud-dev.conllu"
 
 
 @dataclass(frozen=True)
@@ -30,8 +30,8 @@ class VerbExample:
 
 
 def _setup_django() -> None:
-    sys.path.insert(0, str(BACKEND_ROOT))
-    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "diary_backend.settings")
+    sys.path.insert(0, str(SERVER_ROOT))
+    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
     os.environ.setdefault("HATIRLAF_PRELOAD_MODELS", "0")
     import django
 

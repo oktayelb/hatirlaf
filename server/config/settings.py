@@ -14,7 +14,21 @@ from pathlib import Path
 import os
 import secrets
 
+# BASE_DIR is the Django project root (``server/``); everything else in the
+# repository is addressed from REPO_ROOT so the layout stays readable:
+#
+#   <repo>/server/     this Django project
+#   <repo>/clients/    the web SPA and the Expo app
+#   <repo>/vendor/     third-party code checked in (SAVYAR)
+#   <repo>/models/     large model weights, gitignored
+#   <repo>/var/        mutable local state (db, media, keys), gitignored
 BASE_DIR = Path(__file__).resolve().parent.parent
+REPO_ROOT = BASE_DIR.parent
+WEB_CLIENT_DIR = REPO_ROOT / "clients" / "web"
+VENDOR_DIR = REPO_ROOT / "vendor"
+MODELS_DIR = REPO_ROOT / "models"
+VAR_DIR = Path(os.environ.get("HATIRLAF_VAR_DIR") or REPO_ROOT / "var")
+VAR_DIR.mkdir(parents=True, exist_ok=True)
 
 # Dev-friendly secret handling: pull from env if provided, else ephemeral.
 SECRET_KEY = os.environ.get("HATIRLAF_SECRET_KEY") or secrets.token_urlsafe(48)
@@ -47,12 +61,12 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
-ROOT_URLCONF = "diary_backend.urls"
+ROOT_URLCONF = "config.urls"
 
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [BASE_DIR / "templates"],
+        "DIRS": [WEB_CLIENT_DIR / "templates"],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -64,7 +78,7 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = "diary_backend.wsgi.application"
+WSGI_APPLICATION = "config.wsgi.application"
 
 # --- Database ----------------------------------------------------------------
 # The PDF spec calls for PostgreSQL with a relational adjacency list. For
@@ -91,7 +105,7 @@ else:
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.sqlite3",
-            "NAME": BASE_DIR / "db.sqlite3",
+            "NAME": VAR_DIR / "db.sqlite3",
         }
     }
 
@@ -103,16 +117,16 @@ USE_I18N = True
 USE_TZ = True
 
 STATIC_URL = "/static/"
-STATICFILES_DIRS = [BASE_DIR / "static"]
-STATIC_ROOT = BASE_DIR / "staticfiles"
+STATICFILES_DIRS = [WEB_CLIENT_DIR / "static"]
+STATIC_ROOT = VAR_DIR / "staticfiles"
 
 MEDIA_URL = "/media/"
-MEDIA_ROOT = BASE_DIR / "media"
+MEDIA_ROOT = VAR_DIR / "media"
 
 HATIRLAF_ENCRYPTION_KEY = os.environ.get("HATIRLAF_ENCRYPTION_KEY", "")
 HATIRLAF_ENCRYPTION_KEY_FILE = os.environ.get(
     "HATIRLAF_ENCRYPTION_KEY_FILE",
-    str(BASE_DIR / ".hatirlaf_encryption.key"),
+    str(VAR_DIR / "encryption.key"),
 )
 
 STORAGES = {
@@ -205,11 +219,11 @@ HATIRLAF_TURKISH_NER_MODEL = os.environ.get(
 HATIRLAF_USE_SAVYAR = os.environ.get("HATIRLAF_USE_SAVYAR", "0") == "1"
 HATIRLAF_SAVYAR_MODEL_PATH = os.environ.get(
     "HATIRLAF_SAVYAR_MODEL_PATH",
-    str(BASE_DIR.parent / "savyar" / "ml" / "current_best.pt"),
+    str(VENDOR_DIR / "savyar" / "ml" / "current_best.pt"),
 )
 HATIRLAF_SAVYAR_PYTHON = os.environ.get(
     "HATIRLAF_SAVYAR_PYTHON",
-    str(BASE_DIR.parent / "savyar" / ".venv" / "bin" / "python"),
+    str(VENDOR_DIR / "savyar" / ".venv" / "bin" / "python"),
 )
 
 # Local llama.cpp model used for structured event extraction. Leave the
@@ -217,7 +231,7 @@ HATIRLAF_SAVYAR_PYTHON = os.environ.get(
 # gracefully and still produces a calendar of events).
 HATIRLAF_LLM_MODEL_PATH = os.environ.get(
     "HATIRLAF_LLM_MODEL_PATH",
-    str(BASE_DIR.parent / "Qwen2.5-7B-Instruct-Q4_K_M.gguf"),
+    str(MODELS_DIR / "Qwen2.5-7B-Instruct-Q4_K_M.gguf"),
 )
 HATIRLAF_LLM_N_CTX = int(os.environ.get("HATIRLAF_LLM_N_CTX", "4096"))
 HATIRLAF_LLM_N_GPU_LAYERS = int(os.environ.get("HATIRLAF_LLM_N_GPU_LAYERS", "-1"))

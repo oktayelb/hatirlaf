@@ -1,0 +1,20 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Local mutable state: database, uploaded audio, encryption key, collected static.
+# Everything under var/ is disposable — `make reset` recreates it.
+var/
+
+# Large model weights are downloaded, not committed.
+models/
+
+# Environment and editor/tooling local config
+.env
+.env.local
+.DS_Store
+*.log
+.claude/
+.codex
