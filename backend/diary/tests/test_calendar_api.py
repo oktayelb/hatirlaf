@@ -136,6 +136,36 @@ class CalendarApiTests(TestCase):
         self.assertEqual(day_events[0]["saat"], "10:30")
         self.assertEqual(day_events[0]["olay"], "Toplantıya gideceğim.")
 
+    def test_calendar_includes_event_mood_and_tags(self):
+        Session.objects.create(
+            client_uuid="calendar-event-tags",
+            recorded_at=timezone.make_aware(dt.datetime(2026, 4, 30, 8, 15)),
+            status=SessionStatus.COMPLETED,
+            transcript="Yarın okulda sınavım var.",
+            eventification_status=EventificationStatus.COMPLETED,
+            structured_events=[
+                {
+                    "zaman_dilimi": "Gelecek",
+                    "tarih": "2026-05-01",
+                    "saat": "09:00",
+                    "lokasyon": "Okul",
+                    "olay": "Okulda sınavım var.",
+                    "kisiler": ["Ben"],
+                    "kategori": "okul",
+                    "ruh_hali": "stresli",
+                    "etiketler": ["okul", "sınav"],
+                }
+            ],
+        )
+
+        response = self.client.get(reverse("calendar"), {"month": "2026-05"})
+
+        self.assertEqual(response.status_code, 200)
+        event = response.json()["days"]["2026-05-01"][0]
+        self.assertEqual(event["kategori"], "okul")
+        self.assertEqual(event["ruh_hali"], "stresli")
+        self.assertEqual(event["etiketler"], ["okul", "sınav"])
+
     def test_future_events_include_schedulable_reminder_metadata(self):
         Session.objects.create(
             client_uuid="calendar-future-reminder",

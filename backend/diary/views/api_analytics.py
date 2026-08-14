@@ -106,6 +106,9 @@ def calendar_view(request):
                 "lokasyon": _entity_display_label(ev.get("lokasyon", "")),
                 "olay": ev.get("olay", ""),
                 "kisiler": [_entity_display_label(person) for person in ev.get("kisiler", [])],
+                "kategori": ev.get("kategori", ""),
+                "ruh_hali": ev.get("ruh_hali", ""),
+                "etiketler": ev.get("etiketler", []),
             }
             payload["reminder"] = _reminder_payload(session_id=s.id, event=payload)
             days[iso].append(payload)

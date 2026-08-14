@@ -138,6 +138,13 @@ class SessionSerializer(serializers.ModelSerializer):
     mention_count = serializers.SerializerMethodField()
     processing_progress = serializers.SerializerMethodField()
     processing_detail = serializers.SerializerMethodField()
+    mood = serializers.CharField(required=False, allow_blank=True)
+    tags = serializers.ListField(
+        child=serializers.CharField(allow_blank=False, max_length=40),
+        required=False,
+    )
+    word_timings = serializers.JSONField(read_only=True)
+    structured_events = serializers.JSONField(read_only=True)
 
     class Meta:
         model = Session
@@ -153,6 +160,10 @@ class SessionSerializer(serializers.ModelSerializer):
             "status_detail",
             "transcript",
             "processed_text",
+            "mood",
+            "mood_source",
+            "tags",
+            "tags_source",
             "word_timings",
             "structured_events",
             "eventification_status",
@@ -179,9 +190,36 @@ class SessionSerializer(serializers.ModelSerializer):
             "conflict_count",
             "mention_count",
             "audio_url",
+            "mood_source",
+            "tags_source",
             "created_at",
             "updated_at",
         ]
+
+    def validate_tags(self, value):
+        if value in (None, ""):
+            return []
+        if not isinstance(value, list):
+            raise serializers.ValidationError("tags must be a list of strings.")
+        cleaned = []
+        seen = set()
+        for item in value[:20]:
+            tag = str(item or "").strip().lower()
+            if not tag or tag in seen:
+                continue
+            seen.add(tag)
+            cleaned.append(tag[:40])
+        return cleaned
+
+    def validate_mood(self, value):
+        return str(value or "").strip().lower()[:40]
+
+    def update(self, instance, validated_data):
+        if "mood" in validated_data:
+            validated_data["mood_source"] = "manual"
+        if "tags" in validated_data:
+            validated_data["tags_source"] = "manual"
+        return super().update(instance, validated_data)
 
     def get_audio_url(self, obj):
         if obj.audio_file:
