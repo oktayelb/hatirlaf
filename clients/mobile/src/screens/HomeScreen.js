@@ -1,28 +1,241 @@
 // Ana — photos, a microphone, a box to write in. Nothing else.
+//
+// The microphone has two behaviours depending on what the phone can do
+// privately. When Turkish on-device recognition is available we record and
+// transcribe in one pass; otherwise we record audio only. See speech.js for
+// why we never fall back to network recognition.
 
-import React, { useMemo, useState } from "react";
-import { Alert, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Alert,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import {
   RecordingPresets,
   requestRecordingPermissionsAsync,
+  setAudioModeAsync,
   useAudioRecorder,
   useAudioRecorderState,
 } from "expo-audio";
+import { useSpeechRecognitionEvent } from "expo-speech-recognition";
 import { Ionicons } from "@expo/vector-icons";
-import { Pressable } from "react-native";
-import { Button, Card } from "../ui/Primitives";
+import { Button, Card, Help } from "../ui/Primitives";
 import { PhotoBoard } from "../ui/PhotoBoard";
-import { enqueueAudio, enqueueText, flushQueue, queueCount } from "../services/queue";
+import { saveRecording, saveTextEntry } from "../services/entries";
+import {
+  detectCapabilities,
+  downloadTurkishModel,
+  explainMode,
+  requestPermissions,
+  startListening,
+  stopListening,
+} from "../services/speech";
 import { colors, radius, spacing, type } from "../theme";
 
-export function HomeScreen({ onQueueChanged }) {
-  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
-  const recorderState = useAudioRecorderState(recorder);
+export function HomeScreen({ onSaved }) {
+  const [capabilities, setCapabilities] = useState(null);
+  const [recording, setRecording] = useState(false);
+  const [elapsedMs, setElapsedMs] = useState(0);
+  const [liveText, setLiveText] = useState("");
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
-  const [queued, setQueued] = useState(0);
 
-  const recording = recorderState.isRecording;
+  // Refs, not state: the speech events fire outside React's render cycle and
+  // the values have to survive until `end` arrives to be written together.
+  const finalsRef = useRef([]);
+  const audioUriRef = useRef(null);
+  const startedAtRef = useRef(0);
+
+  const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  const audioRecorderState = useAudioRecorderState(audioRecorder);
+
+  const speechMode = capabilities?.mode === "speech";
+
+  useEffect(() => {
+    detectCapabilities().then(setCapabilities).catch(() => setCapabilities({ mode: "audio", reason: "unavailable" }));
+  }, []);
+
+  // One timer for both capture paths, so the display cannot disagree with
+  // itself when the mode changes.
+  useEffect(() => {
+    if (!recording) return undefined;
+    const id = setInterval(() => setElapsedMs(Date.now() - startedAtRef.current), 250);
+    return () => clearInterval(id);
+  }, [recording]);
+
+  // `end` is the only event guaranteed to arrive last — after the final
+  // `result` and after `audioend` has released the file — so the entry is
+  // written there rather than in the stop handler.
+  const finishSpeechCapture = useCallback(async () => {
+    const transcript = finalsRef.current.join(" ").trim();
+    const uri = audioUriRef.current;
+    const durationMs = startedAtRef.current ? Date.now() - startedAtRef.current : 0;
+
+    setRecording(false);
+    // Recognition can end on its own without anything having been captured.
+    if (!uri && !transcript) {
+      resetCapture();
+      return;
+    }
+
+    setBusy(true);
+    try {
+      await saveRecording({ sourceUri: uri, transcript, durationMs, source: "speech" });
+      resetCapture();
+      onSaved?.();
+      Alert.alert(
+        "Kaydedildi",
+        transcript ? "Anlattıkların günlüğüne eklendi." : "Sesin günlüğüne eklendi."
+      );
+    } catch (err) {
+      Alert.alert("Kaydedilemedi", String(err?.message || err));
+    } finally {
+      setBusy(false);
+    }
+  }, [onSaved]);
+
+  useSpeechRecognitionEvent("result", (event) => {
+    const transcript = event.results?.[0]?.transcript ?? "";
+    if (event.isFinal) {
+      if (transcript) finalsRef.current.push(transcript);
+      setLiveText(finalsRef.current.join(" "));
+    } else {
+      setLiveText([...finalsRef.current, transcript].join(" "));
+    }
+  });
+
+  useSpeechRecognitionEvent("audioend", (event) => {
+    audioUriRef.current = event.uri;
+  });
+
+  useSpeechRecognitionEvent("error", (event) => {
+    // `no-speech` just means silence; it is not worth alarming anyone over.
+    // Everything else still falls through to `end`, which keeps the audio.
+    if (event.error === "no-speech") return;
+    Alert.alert("Kayıt sorunu", "Konuşma tanıma durdu. Sesin yine de kaydedildi.");
+  });
+
+  useSpeechRecognitionEvent("end", finishSpeechCapture);
+
+  function resetCapture() {
+    finalsRef.current = [];
+    audioUriRef.current = null;
+    startedAtRef.current = 0;
+    setLiveText("");
+    setElapsedMs(0);
+    setRecording(false);
+  }
+
+  async function start() {
+    if (!capabilities) return;
+    try {
+      if (speechMode) {
+        if (!(await requestPermissions())) {
+          Alert.alert(
+            "Mikrofon izni gerekli",
+            "Konuşarak günlük tutabilmek için mikrofon iznini açman gerekiyor."
+          );
+          return;
+        }
+        finalsRef.current = [];
+        audioUriRef.current = null;
+        startedAtRef.current = Date.now();
+        setLiveText("");
+        setElapsedMs(0);
+        setRecording(true);
+        startListening();
+        return;
+      }
+
+      const permission = await requestRecordingPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert(
+          "Mikrofon izni gerekli",
+          "Konuşarak günlük tutabilmek için mikrofon iznini açman gerekiyor."
+        );
+        return;
+      }
+      // iOS refuses to record until the session allows it. Without this the
+      // recorder throws RecordingDisabledException and the button does nothing.
+      await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
+      await audioRecorder.prepareToRecordAsync();
+      audioRecorder.record();
+      startedAtRef.current = Date.now();
+      setElapsedMs(0);
+      setRecording(true);
+    } catch (err) {
+      setRecording(false);
+      Alert.alert("Kayıt başlatılamadı", String(err?.message || err));
+    }
+  }
+
+  async function stop() {
+    if (speechMode) {
+      // The rest of the work happens in the `end` handler, once the recogniser
+      // has flushed its final result and released the audio file.
+      stopListening();
+      return;
+    }
+
+    setBusy(true);
+    try {
+      await audioRecorder.stop();
+      const durationMs = startedAtRef.current ? Date.now() - startedAtRef.current : 0;
+      if (!audioRecorder.uri) {
+        Alert.alert("Kayıt boş", "Ses kaydedilemedi. Bir daha dener misin?");
+        return;
+      }
+      await saveRecording({ sourceUri: audioRecorder.uri, durationMs, source: "audio" });
+      resetCapture();
+      onSaved?.();
+      Alert.alert("Kaydedildi", "Sesin günlüğüne eklendi.");
+    } catch (err) {
+      Alert.alert("Kaydedilemedi", String(err?.message || err));
+    } finally {
+      setRecording(false);
+      setBusy(false);
+    }
+  }
+
+  async function submitText() {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    setBusy(true);
+    try {
+      await saveTextEntry(trimmed);
+      setText("");
+      onSaved?.();
+      Alert.alert("Kaydedildi", "Yazın günlüğüne eklendi.");
+    } catch (err) {
+      Alert.alert("Kaydedilemedi", String(err?.message || err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function installModel() {
+    setBusy(true);
+    try {
+      const result = await downloadTurkishModel();
+      if (result.status === "download_canceled") return;
+      setCapabilities(await detectCapabilities());
+      if (result.status === "opened_dialog") {
+        Alert.alert(
+          "Dil paketi",
+          "Telefonun indirme ekranını açtı. İndirme bitince buraya dön."
+        );
+      }
+    } catch (_) {
+      Alert.alert("İndirilemedi", "Türkçe dil paketi kurulamadı. Sesin yine de kaydedilir.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   const today = useMemo(
     () =>
@@ -35,64 +248,14 @@ export function HomeScreen({ onQueueChanged }) {
     []
   );
 
+  // The audio-only path has its own duration source; prefer it when it is live.
+  const shownMs = !speechMode && recording ? audioRecorderState.durationMillis || elapsedMs : elapsedMs;
   const elapsed = useMemo(() => {
-    const seconds = Math.floor((recorderState.durationMillis || 0) / 1000);
+    const seconds = Math.floor(shownMs / 1000);
     return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
-  }, [recorderState.durationMillis]);
+  }, [shownMs]);
 
-  async function start() {
-    const permission = await requestRecordingPermissionsAsync();
-    if (!permission.granted) {
-      Alert.alert(
-        "Mikrofon izni gerekli",
-        "Konuşarak günlük tutabilmek için mikrofon iznini açman gerekiyor."
-      );
-      return;
-    }
-    await recorder.prepareToRecordAsync();
-    recorder.record();
-  }
-
-  async function stop() {
-    setBusy(true);
-    try {
-      await recorder.stop();
-      if (!recorder.uri) return;
-      await enqueueAudio({
-        uri: recorder.uri,
-        durationSeconds: Math.round((recorderState.durationMillis || 0) / 1000),
-      });
-      await afterSave("Kaydın günlüğüne eklendi.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function submitText() {
-    const trimmed = text.trim();
-    if (!trimmed) return;
-    setBusy(true);
-    try {
-      await enqueueText(trimmed);
-      setText("");
-      await afterSave("Yazın günlüğüne eklendi.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function afterSave(message) {
-    const result = await flushQueue().catch(() => null);
-    const count = await queueCount();
-    setQueued(count);
-    onQueueChanged?.(count);
-    Alert.alert(
-      "Kaydedildi",
-      result?.uploaded?.length
-        ? message
-        : `${message} İnternet geldiğinde otomatik olarak gönderilecek.`
-    );
-  }
+  const note = capabilities ? explainMode(capabilities) : "";
 
   return (
     <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
@@ -111,18 +274,34 @@ export function HomeScreen({ onQueueChanged }) {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={recording ? "Konuşmayı bitir" : "Konuşmaya başla"}
-          disabled={busy}
+          disabled={busy || !capabilities}
           onPress={recording ? stop : start}
           style={({ pressed }) => [
             styles.mic,
             recording && styles.micRecording,
-            busy && styles.micDisabled,
+            (busy || !capabilities) && styles.micDisabled,
             pressed && styles.micPressed,
           ]}
         >
           <Ionicons name={recording ? "stop" : "mic"} size={52} color={colors.accentInk} />
           <Text style={styles.micLabel}>{recording ? "Bitir" : "Başlat"}</Text>
         </Pressable>
+
+        {speechMode && (recording || liveText) ? (
+          <View style={styles.live}>
+            <Text style={styles.liveText}>
+              {liveText || "Dinliyorum…"}
+            </Text>
+          </View>
+        ) : null}
+
+        {note ? <Help>{note}</Help> : null}
+
+        {capabilities?.canDownloadModel ? (
+          <Button variant="ghost" disabled={busy} onPress={installModel}>
+            Türkçe Dil Paketini Kur
+          </Button>
+        ) : null}
       </Card>
 
       <Card style={styles.composer}>
@@ -140,12 +319,6 @@ export function HomeScreen({ onQueueChanged }) {
           Günlüğüme Kaydet
         </Button>
       </Card>
-
-      {queued ? (
-        <Text style={styles.queue}>
-          {queued} kayıt gönderilmeyi bekliyor. İnternet geldiğinde kendiliğinden gidecek.
-        </Text>
-      ) : null}
     </ScrollView>
   );
 }
@@ -210,6 +383,19 @@ const styles = StyleSheet.create({
     fontSize: type.base,
     fontWeight: "700",
   },
+  live: {
+    alignSelf: "stretch",
+    backgroundColor: colors.surface2,
+    borderColor: colors.lineStrong,
+    borderWidth: 2,
+    borderRadius: radius.sm,
+    padding: spacing.md,
+  },
+  liveText: {
+    color: colors.text,
+    fontSize: type.md,
+    lineHeight: type.md * 1.5,
+  },
   composer: {
     gap: spacing.sm,
   },
@@ -224,10 +410,5 @@ const styles = StyleSheet.create({
     borderRadius: radius.sm,
     padding: spacing.md,
     textAlignVertical: "top",
-  },
-  queue: {
-    color: colors.muted,
-    fontSize: type.sm,
-    textAlign: "center",
   },
 });

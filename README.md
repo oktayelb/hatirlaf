@@ -4,7 +4,12 @@ Hatırlaf is a local-first Turkish voice diary. You record yourself or write, an
 
 Behind a single feature flag there is a second, larger app: a natural-language pipeline that extracts people, places, times and events from what you said, asks for clarification when a reference is ambiguous, and lays the result out on a calendar. **That pipeline ships switched off.** See [The NLP Switch](#the-nlp-switch).
 
-The repository is a Django + DRF backend with two clients that speak the same REST API: a mobile-shaped browser client under `clients/web/`, and an Expo/React Native app under `clients/mobile/`.
+The repository holds two things that no longer share an architecture:
+
+- **`server/` plus `clients/web/`** — a Django + DRF backend and the browser client that speaks its REST API. This is where the NLP and LLM pipeline lives, and where the research side of the project happens.
+- **`clients/mobile/`** — an Expo/React Native app that keeps the entire diary on the phone. It has no server, no account, and no network calls: Turkish speech-to-text runs on-device, entries live in a local SQLite database, and audio never leaves the handset. See [its README](clients/mobile/README.md).
+
+The split is deliberate. The pipeline needs multi-gigabyte models and a machine to run them on; a diary you carry needs neither, and hosting one would mean holding someone's private recordings on a server. The two halves share a palette and a set of ideas, not a data path.
 
 ## Quick Start
 
@@ -29,7 +34,7 @@ It is ready for:
 - Local single-user use on a trusted machine
 - Demoing the full diary pipeline end to end
 - Testing Turkish speech-to-text, NLP extraction, eventification, conflict resolution, and calendar rollups
-- Serving as the backend foundation for a future mobile app
+- Serving as the research half of the project, alongside the standalone mobile app
 
 It is not yet ready for:
 
@@ -92,7 +97,7 @@ That single value moves all of the following at once.
 - `/api/timeline/`, `/api/calendar/`, `/api/recap/`, `/api/graph/`, `/api/mentions/`, `/api/nodes/` and `/api/edges/` return **404**. They are not merely hidden — they are not served.
 - Session payloads carry no `structured_events`, `mentions`, `mention_count`, `conflict_count`, `eventification_*`, `mood`, `tags`, `processed_text` or `word_timings`. A client cannot display analysis output, because it never receives any.
 - The LLM and the SAVYAR morphology bridge are not preloaded, so several GB of weights stay unloaded.
-- Both clients read `/api/config/` at boot and build their navigation from it: two tabs, no calendar, no reminders.
+- The web client reads `/api/config/` at boot and builds its navigation from it: two tabs, no calendar, no reminders. (The mobile app is unaffected — it never had these features, because it has no server.)
 
 **On**
 
@@ -123,10 +128,13 @@ Stage(
 
 ## Architecture
 
+This describes the server side. The mobile client is a separate stack that
+touches none of it — see [Mobile App](#mobile-app).
+
 ```text
-Browser / future mobile client
-  - MediaRecorder today, expo-av later
-  - IndexedDB queue today, expo-sqlite later
+Browser client
+  - MediaRecorder
+  - IndexedDB queue
   - REST API client
         |
         v
@@ -148,7 +156,7 @@ SQLite today / PostgreSQL later
   - structured_events JSON
 ```
 
-The app is deliberately backend-centered. The client is replaceable. The future mobile app should keep the same API contract and replace only the browser-specific pieces.
+The backend is deliberately client-agnostic, and the browser client is replaceable.
 
 ## End-To-End Pipeline
 
@@ -369,7 +377,7 @@ make run       # serve on http://127.0.0.1:8000
 | `make run` | Migrate, then serve. `make run NLP=1` turns the understanding pipeline on; `make run PORT=9000` moves the port. |
 | `make test` | Backend test suite. |
 | `make seed` | Fill the local database with demo entries. |
-| `make mobile` | Start the Expo dev server for the mobile client. |
+| `make mobile` | Start the Expo dev server for the mobile client. Needs a development build — Expo Go cannot run it. |
 | `make reset` | Delete the local database and recorded audio, after confirming. |
 
 Each target is a thin wrapper over `scripts/*.sh` or `manage.py`, so you can
@@ -503,7 +511,7 @@ curl -X POST http://127.0.0.1:8000/api/sessions/42/process/
 
 ### What Is Already In Good Shape
 
-- Backend API is separated from the client and can serve a future mobile app.
+- Backend API is separated from the browser client and could serve other callers.
 - SQLite and PostgreSQL paths already exist.
 - Audio upload, transcript editing, reprocessing, delete cascade, and calendar APIs exist.
 - STT and LLM can run locally without cloud calls.
@@ -581,7 +589,7 @@ Minimum production security baseline:
 - Works with both voice and typed entries.
 - Turkish-specific relative date handling.
 - Calendar remains useful even before the LLM finishes.
-- REST backend is reusable by a future mobile app.
+- REST backend is reusable by other clients.
 - Deterministic fallback keeps the app functional without large model files.
 - Simple deployment story for local demos.
 - Data model can grow into a personal knowledge graph.
@@ -593,64 +601,56 @@ Minimum production security baseline:
 - No multi-user/auth layer yet.
 - Turkish NLP is heuristic in places and will need real-world evaluation.
 - Local LLM output can still be imperfect and needs guardrails.
-- Browser MediaRecorder is not the final mobile recording stack.
 - SQLite is not appropriate for multi-user production.
 - No encrypted storage yet.
-- No packaged mobile app yet.
+- The mobile app is not packaged for either store yet.
 
-## Future Mobile App Plan
+## Mobile App
 
-The future mobile app should be treated as a first-class client of the same backend, not a rewrite of the backend.
+`clients/mobile/` is a standalone Expo app. It does not talk to the backend in
+this repository, and it has no network code at all.
 
-Recommended stack:
+Stack:
 
 - Expo / React Native
-- `expo-av` or the modern Expo audio APIs for recording
-- `expo-file-system` for local audio files
-- `expo-sqlite` for offline queue and cached sessions
-- React Query or a small custom sync layer
-- SecureStore for auth tokens
-- Push notifications later for reminders, not needed for MVP
+- `expo-speech-recognition` — Turkish speech-to-text on the device
+- `expo-sqlite` — the diary itself
+- `expo-file-system` — audio files
+- `expo-audio` — playback
+- `expo-secure-store` + `expo-crypto` — the app password
+- `expo-sharing` — export
 
-Mobile client replacements:
+### Why it has no server
 
-| Current browser piece | Mobile replacement |
+Uploading the audio would mean hosting someone's diary, which brings
+authentication, per-user ownership, HTTPS, private media serving and a privacy
+policy with it — and would make the app useless off the home network. Keeping
+everything on the phone removes all of that, at the cost of the NLP features,
+which cannot run on a handset.
+
+### The privacy rule
+
+`src/services/speech.js` always passes `requiresOnDeviceRecognition: true`.
+Both platforms will otherwise fall back to network recognition, which on
+Android means sending diary audio to Google. When on-device Turkish is
+unavailable, the app records without a transcript rather than going online.
+
+Consequences:
+
+| Situation | Behaviour |
 |---|---|
-| `MediaRecorder` | `expo-av` / Expo audio recording |
-| IndexedDB queue | `expo-sqlite` |
-| Hash router | React Navigation |
-| Static CSS UI | React Native components |
-| Browser fetch | fetch/Axios with auth token |
-| Browser audio player | Expo audio playback |
+| iOS, modern device | Live transcript plus recording |
+| Android 13+ with Turkish model | Live transcript plus recording |
+| Android 13+ without the model | Offers to install it; records meanwhile |
+| Android 12 and below | Recording only — the OS cannot persist recogniser audio |
 
-Backend APIs to keep stable:
+### Known constraints
 
-- `POST /api/sessions/`
-- `GET /api/sessions/`
-- `PATCH /api/sessions/<id>/`
-- `POST /api/sessions/<id>/process/`
-- `GET /api/calendar/?month=YYYY-MM`
-- `GET /api/mentions/?session=<id>`
-- `POST /api/mentions/<id>/resolve/`
-
-Mobile-specific backend work needed:
-
-- Authentication tokens
-- Per-device idempotent upload handling
-- Better upload progress handling
-- File cleanup for abandoned uploads
-- User-specific sync cursors
-- Pagination
-- Conflict resolution UX optimized for touch
-- Offline-first reconciliation rules
-
-Mobile product questions to settle:
-
-- Is all processing self-hosted on the user's computer, or on a private server?
-- Will mobile upload audio to a home server, a cloud VM, or an on-device model?
-- Should transcripts/audio be encrypted before upload?
-- Should the app support multiple devices per user?
-- Should event extraction happen immediately or when the phone is charging/on Wi-Fi?
+- Recordings are 16 kHz 16-bit mono WAV, ~1.9 MB/min. The recogniser will not
+  accept compressed AAC, so there is no transcode-free way to shrink them.
+- The phone is the only copy. Export writes all entry text to one file; bulk
+  audio export is not implemented yet.
+- Native modules mean Expo Go cannot run it — a development build is required.
 
 ## Privacy Model
 
@@ -753,7 +753,7 @@ hatırlaf/
 │   ├── web/              the browser SPA, served by Django
 │   │   ├── templates/    the HTML shell
 │   │   └── static/       css/ and js/, no build step
-│   └── mobile/           the Expo / React Native app
+│   └── mobile/           the standalone Expo app (no server; see its README)
 │       ├── App.js
 │       └── src/          screens/, services/, ui/
 ├── vendor/               third-party source checked in, not our code
@@ -788,14 +788,13 @@ Near term:
 - Add production settings.
 - Add API tests around all session lifecycle endpoints.
 
-Mobile MVP:
+Mobile (`clients/mobile/`, now server-free — see [Mobile App](#mobile-app)):
 
-- Build Expo client against current REST API.
-- Implement local SQLite queue.
-- Add authenticated session upload.
-- Add calendar and entries views.
-- Add conflict review UI.
-- Test offline upload and retry flows.
+- Test on-device Turkish recognition against real speech, on both platforms.
+- Add bulk audio export, so a lost phone is not a lost diary.
+- Replace the generated placeholder icons.
+- Decide whether the diary should be encrypted at rest, not just locked.
+- Ship a build: `eas build --profile preview` for Android, TestFlight for iOS.
 
 Production:
 

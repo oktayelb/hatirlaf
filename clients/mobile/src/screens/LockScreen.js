@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Alert, StyleSheet, Text, TextInput } from "react-native";
-import { api } from "../services/api";
+import { lockStatus, unlock } from "../services/lock";
 import { Button, Card, Screen } from "../ui/Primitives";
 import { colors, radius, spacing, type } from "../theme";
 
@@ -8,13 +8,15 @@ export function LockScreen({ onUnlocked }) {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
 
-  async function unlock() {
+  async function submit() {
     setBusy(true);
     try {
-      const status = await api.unlockPrivacy(password);
-      onUnlocked?.(status);
-    } catch (err) {
-      Alert.alert("Kilit açılamadı", "Parola yanlış ya da sunucuya ulaşılamıyor.");
+      if (await unlock(password)) {
+        setPassword("");
+        onUnlocked?.(await lockStatus());
+      } else {
+        Alert.alert("Kilit açılamadı", "Parola yanlış. Bir daha dener misin?");
+      }
     } finally {
       setBusy(false);
     }
@@ -29,11 +31,12 @@ export function LockScreen({ onUnlocked }) {
           onChangeText={setPassword}
           secureTextEntry
           autoFocus
+          onSubmitEditing={password && !busy ? submit : undefined}
           placeholder="Parola"
           placeholderTextColor={colors.faint}
           style={styles.input}
         />
-        <Button disabled={busy || !password} onPress={unlock}>
+        <Button disabled={busy || !password} onPress={submit}>
           Kilidi Aç
         </Button>
       </Card>

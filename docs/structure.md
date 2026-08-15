@@ -159,15 +159,23 @@ is no build step.
 
 ### `clients/mobile/`
 
-The Expo / React Native client, same API and palette as the web client.
-`make mobile` starts it.
+The Expo / React Native client. Unlike the web client it does **not** talk to
+the server: the diary lives entirely on the phone, and speech-to-text runs
+on-device. It shares the palette and nothing else. `make mobile` starts the
+dev server, but the app needs a development build — see its README.
 
-- `App.js` — root component and navigation.
-- `src/screens/` — Home, Entries, Calendar, Recap, Settings, Lock.
-- `src/services/` — `api.js`, `config.js`, `features.js`, `queue.js`,
-  `background.js`, `photos.js`, `reminders.js`.
+- `App.js` — root component and navigation. Two tabs, plus Ayarlar.
+- `src/screens/` — Home, Entries, Settings, Lock.
+- `src/services/`
+  - `db.js` / `entries.js` — the local SQLite diary and its audio files.
+  - `speech.js` — on-device Turkish STT, and the capability detection that
+    keeps it from ever falling back to network recognition.
+  - `lock.js` — the app password, in SecureStore.
+  - `backup.js` — export via the system share sheet.
+  - `photos.js` — the device-local photo board.
 - `src/ui/` — `Primitives.js` and `PhotoBoard.js`.
 - `src/theme.js` — the shared palette.
+- `eas.json` — build profiles. `preview` produces an installable APK.
 
 ## `vendor/savyar/`
 

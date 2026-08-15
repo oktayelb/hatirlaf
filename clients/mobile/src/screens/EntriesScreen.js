@@ -1,22 +1,35 @@
-// Günlüğüm — every entry, newest first, with the text it turned into.
+// Günlüğüm — every entry, newest first, with its audio and its text.
 // No analysis, no badges, no pipeline vocabulary.
 
 import React, { useCallback, useEffect, useState } from "react";
-import { FlatList, RefreshControl, StyleSheet, Text, TextInput, View } from "react-native";
-import { api } from "../services/api";
-import { nlpEnabled } from "../services/features";
+import {
+  Alert,
+  FlatList,
+  Pressable,
+  RefreshControl,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
+import { setAudioModeAsync, useAudioPlayer, useAudioPlayerStatus } from "expo-audio";
+import { Ionicons } from "@expo/vector-icons";
+import { deleteEntry, listEntries, updateTranscript } from "../services/entries";
+import { shareEntry } from "../services/backup";
 import { Button, Card, EmptyState, Loading, Screen } from "../ui/Primitives";
 import { colors, radius, spacing, type } from "../theme";
 
-export function EntriesScreen({ locked }) {
-  const [sessions, setSessions] = useState([]);
+export function EntriesScreen({ locked, reloadKey }) {
+  const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  // Only one recording plays at a time; the cards read this to pause
+  // themselves when another one takes over.
+  const [playingId, setPlayingId] = useState(null);
 
   const load = useCallback(async () => {
     if (locked) return;
-    const data = await api.listSessions();
-    setSessions(Array.isArray(data) ? data : data.results || []);
+    setEntries(await listEntries());
   }, [locked]);
 
   useEffect(() => {
@@ -28,7 +41,7 @@ export function EntriesScreen({ locked }) {
     return () => {
       cancelled = true;
     };
-  }, [load]);
+  }, [load, reloadKey]);
 
   async function refresh() {
     setRefreshing(true);
@@ -45,11 +58,18 @@ export function EntriesScreen({ locked }) {
         <Loading label="Günlüğün yükleniyor…" />
       ) : (
         <FlatList
-          data={sessions}
+          data={entries}
           keyExtractor={(item) => String(item.id)}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} />}
-          contentContainerStyle={sessions.length ? styles.list : styles.emptyList}
-          renderItem={({ item }) => <EntryCard session={item} onChanged={refresh} />}
+          contentContainerStyle={entries.length ? styles.list : styles.emptyList}
+          renderItem={({ item }) => (
+            <EntryCard
+              entry={item}
+              playingId={playingId}
+              onPlay={setPlayingId}
+              onChanged={refresh}
+            />
+          )}
           ListEmptyComponent={
             <EmptyState
               title="Henüz hiç kayıt yok"
@@ -62,35 +82,70 @@ export function EntriesScreen({ locked }) {
   );
 }
 
-function EntryCard({ session, onChanged }) {
-  const [text, setText] = useState(session.transcript || "");
+function EntryCard({ entry, playingId, onPlay, onChanged }) {
+  const [text, setText] = useState(entry.transcript || "");
   const [saving, setSaving] = useState(false);
-  const hasAudio = Boolean(session.audio_url);
-  const changed = text !== (session.transcript || "");
-  const recordedAt = new Date(session.recorded_at);
-  const busy = ["queued", "transcribing", "parsing"].includes(session.status);
-  const failed = session.status === "failed";
+  const hasAudio = Boolean(entry.audio_path);
+  const changed = text !== (entry.transcript || "");
+  const recordedAt = new Date(entry.recorded_at);
+
+  const player = useAudioPlayer(hasAudio ? { uri: entry.audio_path } : null);
+  const status = useAudioPlayerStatus(player);
+  const isActive = playingId === entry.id;
+
+  // Another card started playing, so this one steps aside.
+  useEffect(() => {
+    if (!isActive && status.playing) player.pause();
+  }, [isActive, player, status.playing]);
+
+  useEffect(() => {
+    if (status.didJustFinish) {
+      onPlay(null);
+      player.seekTo(0);
+    }
+  }, [status.didJustFinish, player, onPlay]);
+
+  async function toggle() {
+    if (!hasAudio) return;
+    if (status.playing) {
+      player.pause();
+      onPlay(null);
+      return;
+    }
+    // Recording leaves the iOS session in playAndRecord, which routes playback
+    // to the earpiece. Handing it back to playback puts it on the speaker.
+    await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true }).catch(() => {});
+    onPlay(entry.id);
+    player.play();
+  }
 
   async function save() {
     setSaving(true);
     try {
-      await api.updateSession(session.id, { transcript: text });
+      await updateTranscript(entry.id, text);
       await onChanged();
     } finally {
       setSaving(false);
     }
   }
 
-  async function reprocess() {
-    setSaving(true);
-    try {
-      if (changed) await api.updateSession(session.id, { transcript: text });
-      await api.reprocess(session.id);
-      await onChanged();
-    } finally {
-      setSaving(false);
-    }
+  function confirmDelete() {
+    Alert.alert("Bu kaydı sil", "Kayıt ve sesi telefondan tamamen silinecek. Geri alınamaz.", [
+      { text: "Vazgeç", style: "cancel" },
+      {
+        text: "Sil",
+        style: "destructive",
+        onPress: async () => {
+          if (status.playing) player.pause();
+          await deleteEntry(entry.id);
+          await onChanged();
+        },
+      },
+    ]);
   }
+
+  const position = formatClock(status.currentTime);
+  const total = formatClock(status.duration || entry.duration_ms / 1000);
 
   return (
     <Card style={styles.card}>
@@ -110,16 +165,29 @@ function EntryCard({ session, onChanged }) {
         </View>
       </View>
 
-      {busy || failed ? (
-        <View style={[styles.progress, failed && styles.progressFailed]}>
-          <Text style={styles.progressText}>
-            {failed
-              ? "Bu kayıt yazıya çevrilemedi."
-              : session.status === "queued"
-              ? "Kaydın sırada bekliyor."
-              : "Sesin yazıya çevriliyor."}
-          </Text>
-        </View>
+      {hasAudio ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={status.playing ? "Sesi durdur" : "Sesi dinle"}
+          onPress={toggle}
+          style={({ pressed }) => [styles.player, pressed && styles.playerPressed]}
+        >
+          <View style={styles.playIcon}>
+            <Ionicons
+              name={status.playing ? "pause" : "play"}
+              size={30}
+              color={colors.accentInk}
+            />
+          </View>
+          <View style={styles.playerText}>
+            <Text style={styles.playerLabel}>
+              {status.playing ? "Çalıyor" : "Sesini dinle"}
+            </Text>
+            <Text style={styles.playerTime}>
+              {position} / {total}
+            </Text>
+          </View>
+        </Pressable>
       ) : null}
 
       <TextInput
@@ -128,11 +196,7 @@ function EntryCard({ session, onChanged }) {
         multiline
         accessibilityLabel={hasAudio ? "Yazıya çevrilmiş hâli" : "Yazdıkların"}
         placeholder={
-          hasAudio
-            ? busy
-              ? "Sesin yazıya çevriliyor, birazdan burada olacak…"
-              : "Bu kayıt için henüz yazı yok."
-            : "Bu not boş."
+          hasAudio ? "Bu kayıt için yazı yok. İstersen buraya kendin yazabilirsin." : "Bu not boş."
         }
         placeholderTextColor={colors.faint}
         style={styles.input}
@@ -142,14 +206,25 @@ function EntryCard({ session, onChanged }) {
         <Button disabled={!changed || saving} onPress={save} style={styles.actionButton}>
           Kaydet
         </Button>
-        {nlpEnabled() ? (
-          <Button disabled={saving} variant="ghost" onPress={reprocess} style={styles.actionButton}>
-            Yeniden işle
-          </Button>
-        ) : null}
+        <Button
+          disabled={saving}
+          variant="ghost"
+          onPress={() => shareEntry(entry).catch(() => {})}
+          style={styles.actionButton}
+        >
+          Paylaş
+        </Button>
+        <Button disabled={saving} variant="danger" onPress={confirmDelete} style={styles.actionButton}>
+          Sil
+        </Button>
       </View>
     </Card>
   );
+}
+
+function formatClock(seconds) {
+  const total = Math.max(0, Math.floor(seconds || 0));
+  return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
 }
 
 const styles = StyleSheet.create({
@@ -184,21 +259,40 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontSize: type.sm,
   },
-  progress: {
-    backgroundColor: colors.goldSoft,
-    borderColor: colors.gold,
-    borderWidth: 1,
+  player: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    backgroundColor: colors.accentSoft,
+    borderColor: colors.accent,
+    borderWidth: 2,
     borderRadius: radius.sm,
-    padding: spacing.md,
+    padding: spacing.sm,
+    minHeight: 72,
   },
-  progressFailed: {
-    backgroundColor: colors.claySoft,
-    borderColor: colors.clay,
+  playerPressed: {
+    transform: [{ translateY: 1 }],
   },
-  progressText: {
-    color: colors.text,
-    fontSize: type.base,
-    fontWeight: "600",
+  playIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: colors.accent,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  playerText: {
+    flex: 1,
+  },
+  playerLabel: {
+    color: colors.accentDeep,
+    fontSize: type.md,
+    fontWeight: "700",
+  },
+  playerTime: {
+    color: colors.muted,
+    fontSize: type.sm,
+    fontVariant: ["tabular-nums"],
   },
   input: {
     minHeight: 150,
@@ -219,6 +313,6 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     flexGrow: 1,
-    flexBasis: 150,
+    flexBasis: 110,
   },
 });

@@ -1,48 +1,71 @@
 # Hatırlaf Mobile
 
-Expo/React Native client for the local Hatırlaf Django API.
+Expo/React Native client. **Everything stays on the phone** — there is no
+server, no account, and no network call anywhere in this client.
 
 ## What it includes
 
-- Native audio recording with `expo-audio`
-- Offline upload queue for text and audio entries
-- Retry sync on app foreground and registered background task
-- SecureStore-backed API base URL and session cookie storage
-- Calendar agenda and monthly recap views
-- Settings screen for server URL, app password, and manual sync
-- Local notifications scheduled for future calendar events
+- Turkish speech-to-text that runs on the device, never over the network
+- Audio recording saved to the phone's own storage
+- A local SQLite diary, with playback and editable text
+- App password held in the iOS keychain / Android keystore
+- Export to a text file via the system share sheet
+
+## The privacy rule
+
+`src/services/speech.js` always sets `requiresOnDeviceRecognition: true`. Both
+platforms will silently fall back to network recognition otherwise, which on
+Android means sending diary audio to Google. When on-device Turkish is not
+available the app records audio without a transcript rather than going online.
+
+That has consequences worth knowing:
+
+| Situation | What happens |
+|---|---|
+| iOS, modern device | Live Turkish transcript plus the recording |
+| Android 13+, Turkish model installed | Live Turkish transcript plus the recording |
+| Android 13+, model missing | Ayarlar offers to install it; recording works meanwhile |
+| Android 12 and below | Recording only — the OS cannot persist audio from the recogniser |
+
+## Storage
+
+Recordings are 16 kHz 16-bit mono WAV, roughly **1.9 MB per minute**. Ayarlar
+shows the running total. The format is fixed by the speech recogniser: it will
+not accept the compressed AAC that `expo-audio` produces, so there is no
+"record compressed, transcribe later" path without a transcoder.
+
+Because the phone is the only copy, **Ayarlar → Günlüğümü Dışa Aktar** writes
+every entry's text to one file and hands it to the share sheet. Audio is shared
+one entry at a time from Günlüğüm; there is no bulk audio archive yet.
 
 ## Run
 
-From the repository root:
+This client uses native modules, so **Expo Go will not run it**. You need a
+development build.
 
 ```bash
-make mobile
-```
+# once, to get a build onto a device
+npx eas-cli build --profile development --platform android
 
-Or directly:
-
-```bash
-cd clients/mobile
+# then, day to day
 npm install
-npm run start
+npm start
 ```
 
-For a physical phone, set the API server in **Ayarlar** to your computer LAN address:
-
-```text
-http://YOUR_COMPUTER_IP:8001/api
-```
-
-`127.0.0.1` only works inside the simulator/emulator or on the same machine.
-
-## Backend
-
-Run Django with:
+Building locally instead of on EAS needs the Android SDK (and JDK 17 or 21 —
+newer JDKs are not yet supported by the Android Gradle Plugin):
 
 ```bash
-cd backend
-HATIRLAF_PRELOAD_MODELS=0 ../.venv/bin/python manage.py runserver 0.0.0.0:8001 --noreload
+npx expo run:android
 ```
 
-Using `0.0.0.0` lets devices on the same network reach the development server.
+## Before publishing
+
+`ios.bundleIdentifier` and `android.package` in `app.json` are currently
+`com.oktayelb.hatirlaf`. Change them if you are publishing under a different
+account. The icons in `assets/` are generated placeholders.
+
+## Relationship to the server
+
+The Django app in `server/` is no longer part of this client. It remains the
+desktop/research side of the project, where the NLP and LLM pipeline runs.
