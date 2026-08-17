@@ -44,7 +44,8 @@
           "microphonePermission": "Hatırlaf sesli günlük kayıtlarını oluşturmak için mikrofona ihtiyaç duyar.",
           "speechRecognitionPermission": "Konuştuklarını yazıya çevirmek için kullanılır. Çeviri telefonun içinde yapılır, sesin hiçbir yere gönderilmez.",
           "androidSpeechServicePackages": [
-            "com.google.android.as"
+            "com.google.android.as",
+            "com.google.android.googlequicksearchbox"
           ]
         }
       ],
@@ -53,7 +54,9 @@
         {
           "photosPermission": "Konuşurken bakmak istediğin fotoğrafları seçebilmen için fotoğraflarına erişir."
         }
-      ]
+      ],
+      "expo-font",
+      "expo-asset"
     ],
     "backgroundColor": "#f4efe4"
   }

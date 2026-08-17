@@ -24,8 +24,31 @@ That has consequences worth knowing:
 |---|---|
 | iOS, modern device | Live Turkish transcript plus the recording |
 | Android 13+, Turkish model installed | Live Turkish transcript plus the recording |
-| Android 13+, model missing | Ayarlar offers to install it; recording works meanwhile |
+| Android 13+, model missing | Ana offers to install it; recording works meanwhile |
+| Android 13+, recogniser refuses to start | The session continues as a plain recording; nothing spoken is lost |
 | Android 12 and below | Recording only — the OS cannot persist audio from the recogniser |
+
+## Capability detection on Android
+
+Android has two recognisers and they answer different questions. Because this
+app sets `requiresOnDeviceRecognition`, the library builds its session with
+`createOnDeviceSpeechRecognizer()`, which does not go through the device's
+default recognition service at all. So `speech.js` deliberately does **not**
+gate on `isRecognitionAvailable()` on Android: a phone can answer "no default
+recogniser" and still transcribe Turkish offline perfectly well.
+
+For the same reason `getSupportedLocales()` is asked with no service package
+first. Naming `com.google.android.as` sends the call down a package-resolution
+path that throws outright on devices where the on-device recogniser is not
+published under that name, and the old code read that throw as "Turkish is not
+installed" — which silently cost the transcript on every such device. The
+package query is now only a fallback.
+
+When the probe cannot answer either way, the app tries to transcribe anyway.
+If the recogniser then fails, the `end` handler drops the same session to a
+plain `expo-audio` recording rather than leaving the user with a button that
+did nothing. Guessing wrong that way costs a few seconds; guessing wrong the
+other way costs every transcript on the device.
 
 ## Storage
 
@@ -41,13 +64,25 @@ one entry at a time from Günlüğüm; there is no bulk audio archive yet.
 ## Run
 
 This client uses native modules, so **Expo Go will not run it**. You need a
-development build.
+real build.
+
+To put the app on your own phone, build the `preview` profile — a standalone
+release APK you install and use without a computer attached:
 
 ```bash
-# once, to get a build onto a device
-npx eas-cli build --profile development --platform android
+npx eas-cli login
+npx eas-cli init                                    # once, links the project
+npx eas-cli build --profile preview --platform android
+```
 
-# then, day to day
+EAS prints a URL and a QR code when it finishes; open it on the phone and
+install the `.apk`. Signing keys are generated and held by EAS.
+
+For day-to-day development, build the `development` profile instead and run
+Metro against it:
+
+```bash
+npx eas-cli build --profile development --platform android
 npm install
 npm start
 ```
@@ -58,6 +93,11 @@ newer JDKs are not yet supported by the Android Gradle Plugin):
 ```bash
 npx expo run:android
 ```
+
+`android/` and `ios/` are generated, not committed. `expo prebuild` writes
+them from `app.json`; both `expo run:` and EAS do it for you. If you run
+prebuild by hand, note that it also rewrites the `android`/`ios` scripts in
+`package.json` to the bare-workflow versions — put those back.
 
 ## Before publishing
 

@@ -8,6 +8,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
+  AppState,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -28,14 +30,20 @@ import { Button, Card, Help } from "../ui/Primitives";
 import { PhotoBoard } from "../ui/PhotoBoard";
 import { saveRecording, saveTextEntry } from "../services/entries";
 import {
+  abortListening,
   detectCapabilities,
   downloadTurkishModel,
   explainMode,
+  isFatalSpeechError,
   requestPermissions,
   startListening,
   stopListening,
 } from "../services/speech";
 import { colors, radius, spacing, type } from "../theme";
+
+// How long to wait for the recogniser's `end` event after asking it to stop.
+// Android flushes a final result first, which takes a beat on a cold model.
+const STOP_TIMEOUT_MS = 5000;
 
 export function HomeScreen({ onSaved }) {
   const [capabilities, setCapabilities] = useState(null);
@@ -50,15 +58,38 @@ export function HomeScreen({ onSaved }) {
   const finalsRef = useRef([]);
   const audioUriRef = useRef(null);
   const startedAtRef = useRef(0);
+  // Set by the error handler when the recogniser gives up mid-session, read by
+  // the `end` handler to decide whether to keep going as a plain recording.
+  const speechFailedRef = useRef(false);
+  const stopWatchdogRef = useRef(null);
 
   const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const audioRecorderState = useAudioRecorderState(audioRecorder);
 
   const speechMode = capabilities?.mode === "speech";
 
-  useEffect(() => {
-    detectCapabilities().then(setCapabilities).catch(() => setCapabilities({ mode: "audio", reason: "unavailable" }));
+  const refreshCapabilities = useCallback(async () => {
+    try {
+      setCapabilities(await detectCapabilities());
+    } catch (_) {
+      setCapabilities({ mode: "audio", canDownloadModel: false, reason: "unavailable" });
+    }
   }, []);
+
+  useEffect(() => {
+    refreshCapabilities();
+  }, [refreshCapabilities]);
+
+  // Installing the Turkish model sends the user out to a system screen — on
+  // Android 13 the download even resolves before it has finished. Re-asking on
+  // the way back is the only way the answer stops being stale without a
+  // restart. Never while recording: detection talks to the same recogniser.
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "active" && !recording) refreshCapabilities();
+    });
+    return () => sub.remove();
+  }, [recording, refreshCapabilities]);
 
   // One timer for both capture paths, so the display cannot disagree with
   // itself when the mode changes.
@@ -68,13 +99,59 @@ export function HomeScreen({ onSaved }) {
     return () => clearInterval(id);
   }, [recording]);
 
+  // Recording without transcription — the plain expo-audio path. Used when the
+  // phone cannot transcribe privately, and as the landing spot when the
+  // recogniser fails part-way through a session.
+  const startAudioRecording = useCallback(async () => {
+    // iOS refuses to record until the session allows it. Without this the
+    // recorder throws RecordingDisabledException and the button does nothing.
+    await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
+    await audioRecorder.prepareToRecordAsync();
+    audioRecorder.record();
+  }, [audioRecorder]);
+
+  const clearStopWatchdog = useCallback(() => {
+    if (stopWatchdogRef.current) {
+      clearTimeout(stopWatchdogRef.current);
+      stopWatchdogRef.current = null;
+    }
+  }, []);
+
   // `end` is the only event guaranteed to arrive last — after the final
   // `result` and after `audioend` has released the file — so the entry is
   // written there rather than in the stop handler.
+  //
+  // The captured values are read and cleared in one step at the top, which is
+  // what makes a second call — the stop watchdog racing a late `end` — see an
+  // empty session and return instead of writing the entry twice.
   const finishSpeechCapture = useCallback(async () => {
+    clearStopWatchdog();
     const transcript = finalsRef.current.join(" ").trim();
     const uri = audioUriRef.current;
     const durationMs = startedAtRef.current ? Date.now() - startedAtRef.current : 0;
+    const failed = speechFailedRef.current;
+    finalsRef.current = [];
+    audioUriRef.current = null;
+    speechFailedRef.current = false;
+
+    // The recogniser gave up before capturing anything. Rather than hand back
+    // a button that did nothing, carry the same session on as a plain
+    // recording and remember that this phone will not transcribe.
+    if (failed && !uri && !transcript) {
+      try {
+        await startAudioRecording();
+        setCapabilities((current) => ({
+          ...(current || {}),
+          mode: "audio",
+          canDownloadModel: Platform.OS === "android",
+          reason: "speech_failed",
+        }));
+        setLiveText("");
+        return;
+      } catch (_) {
+        // Nothing was captured either way; fall through to the ordinary reset.
+      }
+    }
 
     setRecording(false);
     // Recognition can end on its own without anything having been captured.
@@ -97,7 +174,9 @@ export function HomeScreen({ onSaved }) {
     } finally {
       setBusy(false);
     }
-  }, [onSaved]);
+  }, [clearStopWatchdog, onSaved, startAudioRecording]);
+
+  useEffect(() => clearStopWatchdog, [clearStopWatchdog]);
 
   useSpeechRecognitionEvent("result", (event) => {
     const transcript = event.results?.[0]?.transcript ?? "";
@@ -114,9 +193,26 @@ export function HomeScreen({ onSaved }) {
   });
 
   useSpeechRecognitionEvent("error", (event) => {
-    // `no-speech` just means silence; it is not worth alarming anyone over.
-    // Everything else still falls through to `end`, which keeps the audio.
-    if (event.error === "no-speech") return;
+    // `no-speech` and `speech-timeout` just mean silence; not worth alarming
+    // anyone over. Everything falls through to `end`, which keeps the audio.
+    if (event.error === "no-speech" || event.error === "speech-timeout") return;
+
+    if (event.error === "not-allowed") {
+      Alert.alert(
+        "Mikrofon izni gerekli",
+        "Konuşarak günlük tutabilmek için mikrofon iznini açman gerekiyor."
+      );
+      return;
+    }
+
+    // The recogniser cannot run on this phone. `end` handles the consequences:
+    // it saves whatever audio was captured, or drops to a plain recording so
+    // the user can keep talking.
+    if (isFatalSpeechError(event.error)) {
+      speechFailedRef.current = true;
+      return;
+    }
+
     Alert.alert("Kayıt sorunu", "Konuşma tanıma durdu. Sesin yine de kaydedildi.");
   });
 
@@ -125,6 +221,7 @@ export function HomeScreen({ onSaved }) {
   function resetCapture() {
     finalsRef.current = [];
     audioUriRef.current = null;
+    speechFailedRef.current = false;
     startedAtRef.current = 0;
     setLiveText("");
     setElapsedMs(0);
@@ -144,6 +241,7 @@ export function HomeScreen({ onSaved }) {
         }
         finalsRef.current = [];
         audioUriRef.current = null;
+        speechFailedRef.current = false;
         startedAtRef.current = Date.now();
         setLiveText("");
         setElapsedMs(0);
@@ -160,11 +258,7 @@ export function HomeScreen({ onSaved }) {
         );
         return;
       }
-      // iOS refuses to record until the session allows it. Without this the
-      // recorder throws RecordingDisabledException and the button does nothing.
-      await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
-      await audioRecorder.prepareToRecordAsync();
-      audioRecorder.record();
+      await startAudioRecording();
       startedAtRef.current = Date.now();
       setElapsedMs(0);
       setRecording(true);
@@ -177,8 +271,16 @@ export function HomeScreen({ onSaved }) {
   async function stop() {
     if (speechMode) {
       // The rest of the work happens in the `end` handler, once the recogniser
-      // has flushed its final result and released the audio file.
+      // has flushed its final result and released the audio file. If `end`
+      // never arrives — the session already ended, or the recogniser wedged —
+      // force the issue, so the button cannot stay stuck on "Bitir".
       stopListening();
+      clearStopWatchdog();
+      stopWatchdogRef.current = setTimeout(() => {
+        stopWatchdogRef.current = null;
+        abortListening();
+        finishSpeechCapture();
+      }, STOP_TIMEOUT_MS);
       return;
     }
 
@@ -223,7 +325,11 @@ export function HomeScreen({ onSaved }) {
     try {
       const result = await downloadTurkishModel();
       if (result.status === "download_canceled") return;
-      setCapabilities(await detectCapabilities());
+      // On Android 14+ the promise waits for the download, so re-detecting now
+      // is meaningful. On Android 13 it resolves the moment the system dialog
+      // opens and the real answer only arrives once the user comes back — the
+      // AppState listener above picks that up.
+      await refreshCapabilities();
       if (result.status === "opened_dialog") {
         Alert.alert(
           "Dil paketi",
