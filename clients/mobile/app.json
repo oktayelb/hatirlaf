@@ -27,7 +27,8 @@
     "android": {
       "package": "com.oktayelb.hatirlaf",
       "permissions": [
-        "RECORD_AUDIO"
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS"
       ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
@@ -58,6 +59,12 @@
       "expo-font",
       "expo-asset"
     ],
-    "backgroundColor": "#f4efe4"
+    "backgroundColor": "#f4efe4",
+    "extra": {
+      "eas": {
+        "projectId": "2acafe63-38f8-40bd-8a74-f57a6d876ab7"
+      }
+    },
+    "owner": "oktayelb"
   }
 }
