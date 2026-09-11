@@ -28,13 +28,19 @@ import { useSpeechRecognitionEvent } from "expo-speech-recognition";
 import { Ionicons } from "@expo/vector-icons";
 import { Button, Card, Help } from "../ui/Primitives";
 import { PhotoBoard } from "../ui/PhotoBoard";
-import { saveRecording, saveTextEntry } from "../services/entries";
+import {
+  discardRecording,
+  hasUsableAudio,
+  saveRecording,
+  saveTextEntry,
+} from "../services/entries";
 import {
   abortListening,
   detectCapabilities,
   downloadTurkishModel,
   explainMode,
   isFatalSpeechError,
+  isMissingModelError,
   requestPermissions,
   startListening,
   stopListening,
@@ -44,6 +50,11 @@ import { colors, radius, spacing, type } from "../theme";
 // How long to wait for the recogniser's `end` event after asking it to stop.
 // Android flushes a final result first, which takes a beat on a cold model.
 const STOP_TIMEOUT_MS = 5000;
+
+// Android 14 downloads the language pack in the background; 13 opens a system
+// dialog instead, which is not a thing to spring on someone who has not asked
+// for anything yet. There the download waits until a recording needs it.
+const SILENT_MODEL_DOWNLOAD = Platform.OS === "android" && Number(Platform.Version) >= 34;
 
 export function HomeScreen({ onSaved }) {
   const [capabilities, setCapabilities] = useState(null);
@@ -58,10 +69,13 @@ export function HomeScreen({ onSaved }) {
   const finalsRef = useRef([]);
   const audioUriRef = useRef(null);
   const startedAtRef = useRef(0);
-  // Set by the error handler when the recogniser gives up mid-session, read by
-  // the `end` handler to decide whether to keep going as a plain recording.
-  const speechFailedRef = useRef(false);
+  // Set by the error handler to the recogniser's own error code when it gives
+  // up mid-session, read by the `end` handler to decide what to do about it.
+  const speechFailureRef = useRef(null);
   const stopWatchdogRef = useRef(null);
+  // The model download is asked for at most once per app run, so a phone that
+  // cannot install it does not nag on every recording.
+  const modelRequestedRef = useRef(false);
 
   const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const audioRecorderState = useAudioRecorderState(audioRecorder);
@@ -117,6 +131,66 @@ export function HomeScreen({ onSaved }) {
     }
   }, []);
 
+  // Android keeps Turkish speech recognition behind a separate download and
+  // the user should not have to know that. Ask for it as soon as we learn it
+  // is missing, rather than parking the answer behind a button.
+  const installModelQuietly = useCallback(async () => {
+    if (modelRequestedRef.current || Platform.OS !== "android") return;
+    modelRequestedRef.current = true;
+    try {
+      const result = await downloadTurkishModel();
+      if (result.status === "download_canceled") return;
+      if (result.status === "download_success") {
+        await refreshCapabilities();
+        Alert.alert(
+          "Türkçe hazır",
+          "Dil paketi kuruldu. Bundan sonra konuştuklarını yazıya çevirebilirim."
+        );
+        return;
+      }
+      // Android 13 resolves the moment the system dialog opens; the real
+      // answer arrives when the user comes back, which the AppState listener
+      // above picks up.
+      Alert.alert(
+        "Türkçe dil paketi",
+        "Konuştuklarını yazıya çevirebilmem için telefonun indirme ekranını açtım. İndirme bitince buraya dön."
+      );
+    } catch (_) {
+      // Nothing to do: the recording is still kept, and Ana explains why
+      // there is no transcript.
+    }
+  }, [refreshCapabilities]);
+
+  // Detection can tell us the model is missing before anything is recorded.
+  useEffect(() => {
+    if (capabilities?.reason === "model_missing" && SILENT_MODEL_DOWNLOAD) {
+      installModelQuietly();
+    }
+  }, [capabilities?.reason, installModelQuietly]);
+
+  // What a fatal recogniser error means for the rest of the session. This runs
+  // whether or not audio came back: `persist: true` writes the file before
+  // recognition is attempted, so gating it on "nothing was captured" — as it
+  // was — meant the failure was swallowed on every single session, leaving
+  // silent transcript-less entries and no explanation on screen.
+  const noteSpeechFailure = useCallback(
+    (code) => {
+      const missingModel = Platform.OS === "android" && isMissingModelError(code);
+      setCapabilities((current) => ({
+        ...(current || {}),
+        mode: "audio",
+        canDownloadModel: Platform.OS === "android",
+        reason: missingModel ? "model_missing" : "speech_failed",
+        errorCode: code,
+      }));
+      // A missing model is the one failure the app can repair by itself, and
+      // by now the user has asked for a transcript by tapping the microphone,
+      // so the system dialog is no longer an interruption out of nowhere.
+      if (missingModel) installModelQuietly();
+    },
+    [installModelQuietly]
+  );
+
   // `end` is the only event guaranteed to arrive last — after the final
   // `result` and after `audioend` has released the file — so the entry is
   // written there rather than in the stop handler.
@@ -129,23 +203,29 @@ export function HomeScreen({ onSaved }) {
     const transcript = finalsRef.current.join(" ").trim();
     const uri = audioUriRef.current;
     const durationMs = startedAtRef.current ? Date.now() - startedAtRef.current : 0;
-    const failed = speechFailedRef.current;
+    const failure = speechFailureRef.current;
     finalsRef.current = [];
     audioUriRef.current = null;
-    speechFailedRef.current = false;
+    speechFailureRef.current = null;
 
-    // The recogniser gave up before capturing anything. Rather than hand back
-    // a button that did nothing, carry the same session on as a plain
-    // recording and remember that this phone will not transcribe.
-    if (failed && !uri && !transcript) {
+    if (failure) noteSpeechFailure(failure);
+
+    // A session the recogniser refused still leaves a file behind, containing
+    // nothing. Saving it fills Günlüğüm with silent, textless rows that look
+    // like the app is losing recordings. The file is asked directly rather
+    // than trusting the elapsed clock: a recogniser can hold a session open
+    // for a minute and never write a sample into it.
+    const keepAudio = await hasUsableAudio(uri);
+    const worthKeeping = Boolean(transcript) || keepAudio;
+
+    // The recogniser gave up before anything was said. Rather than hand back a
+    // button that did nothing, carry the same session on as a plain recording.
+    if (failure && !worthKeeping) {
+      await discardRecording(uri);
       try {
         await startAudioRecording();
-        setCapabilities((current) => ({
-          ...(current || {}),
-          mode: "audio",
-          canDownloadModel: Platform.OS === "android",
-          reason: "speech_failed",
-        }));
+        startedAtRef.current = Date.now();
+        setElapsedMs(0);
         setLiveText("");
         return;
       } catch (_) {
@@ -155,14 +235,25 @@ export function HomeScreen({ onSaved }) {
 
     setRecording(false);
     // Recognition can end on its own without anything having been captured.
-    if (!uri && !transcript) {
+    if (!worthKeeping) {
+      await discardRecording(uri);
       resetCapture();
       return;
     }
 
+    // Words but no audio: the recogniser heard us and wrote nothing. Keep the
+    // text and drop the file, so the entry does not offer a play button that
+    // plays silence.
+    if (!keepAudio) await discardRecording(uri);
+
     setBusy(true);
     try {
-      await saveRecording({ sourceUri: uri, transcript, durationMs, source: "speech" });
+      await saveRecording({
+        sourceUri: keepAudio ? uri : null,
+        transcript,
+        durationMs: keepAudio ? durationMs : 0,
+        source: "speech",
+      });
       resetCapture();
       onSaved?.();
       Alert.alert(
@@ -174,7 +265,7 @@ export function HomeScreen({ onSaved }) {
     } finally {
       setBusy(false);
     }
-  }, [clearStopWatchdog, onSaved, startAudioRecording]);
+  }, [clearStopWatchdog, noteSpeechFailure, onSaved, startAudioRecording]);
 
   useEffect(() => clearStopWatchdog, [clearStopWatchdog]);
 
@@ -209,7 +300,7 @@ export function HomeScreen({ onSaved }) {
     // it saves whatever audio was captured, or drops to a plain recording so
     // the user can keep talking.
     if (isFatalSpeechError(event.error)) {
-      speechFailedRef.current = true;
+      speechFailureRef.current = event.error;
       return;
     }
 
@@ -221,7 +312,7 @@ export function HomeScreen({ onSaved }) {
   function resetCapture() {
     finalsRef.current = [];
     audioUriRef.current = null;
-    speechFailedRef.current = false;
+    speechFailureRef.current = null;
     startedAtRef.current = 0;
     setLiveText("");
     setElapsedMs(0);
@@ -241,7 +332,7 @@ export function HomeScreen({ onSaved }) {
         }
         finalsRef.current = [];
         audioUriRef.current = null;
-        speechFailedRef.current = false;
+        speechFailureRef.current = null;
         startedAtRef.current = Date.now();
         setLiveText("");
         setElapsedMs(0);
@@ -320,24 +411,13 @@ export function HomeScreen({ onSaved }) {
     }
   }
 
+  // The button, for when the automatic attempt was declined or never ran. An
+  // explicit press always tries again, whatever happened earlier.
   async function installModel() {
+    modelRequestedRef.current = false;
     setBusy(true);
     try {
-      const result = await downloadTurkishModel();
-      if (result.status === "download_canceled") return;
-      // On Android 14+ the promise waits for the download, so re-detecting now
-      // is meaningful. On Android 13 it resolves the moment the system dialog
-      // opens and the real answer only arrives once the user comes back — the
-      // AppState listener above picks that up.
-      await refreshCapabilities();
-      if (result.status === "opened_dialog") {
-        Alert.alert(
-          "Dil paketi",
-          "Telefonun indirme ekranını açtı. İndirme bitince buraya dön."
-        );
-      }
-    } catch (_) {
-      Alert.alert("İndirilemedi", "Türkçe dil paketi kurulamadı. Sesin yine de kaydedilir.");
+      await installModelQuietly();
     } finally {
       setBusy(false);
     }

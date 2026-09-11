@@ -24,7 +24,7 @@ That has consequences worth knowing:
 |---|---|
 | iOS, modern device | Live Turkish transcript plus the recording |
 | Android 13+, Turkish model installed | Live Turkish transcript plus the recording |
-| Android 13+, model missing | Ana offers to install it; recording works meanwhile |
+| Android 13+, model missing | The app fetches the language pack itself; recording works meanwhile |
 | Android 13+, recogniser refuses to start | The session continues as a plain recording; nothing spoken is lost |
 | Android 12 and below | Recording only — the OS cannot persist audio from the recogniser |
 
@@ -49,6 +49,34 @@ If the recogniser then fails, the `end` handler drops the same session to a
 plain `expo-audio` recording rather than leaving the user with a button that
 did nothing. Guessing wrong that way costs a few seconds; guessing wrong the
 other way costs every transcript on the device.
+
+## When the recogniser refuses
+
+`recordingOptions.persist` makes the recogniser create its WAV file *before*
+it tries to recognise anything, so every session — including one that dies on
+its first frame — leaves a file behind. Two rules follow from that, and both
+were once wrong:
+
+- A fatal recogniser error is acted on **whether or not audio came back**.
+  Keying the fallback on "nothing was captured" meant the persisted file
+  suppressed it every time: the phone went on failing silently, entries were
+  saved with no text, and Ana never said why.
+- A session with no transcript **and no audio in the file** is discarded, file
+  and all. The test is the file's own size (`hasUsableAudio`), not the elapsed
+  clock — a recogniser can hold a session open for a minute and never write a
+  sample into it, and wall-clock time would call that a valid recording.
+
+Android reports a missing offline model as `language-not-supported`
+(`ERROR_LANGUAGE_UNAVAILABLE`: *"Requested language is supported, but not yet
+downloaded"*). That is the one failure the app can repair by itself, so it
+triggers `androidTriggerOfflineModelDownload` rather than giving up on
+transcription — on Android 14+ as soon as detection reports the model missing,
+on Android 13 only after a recording needs it, because there the call opens a
+system dialog. Once per app run either way; the button retries.
+
+Any other fatal code shows up in the note under the microphone. A release
+build has no console, and that string is the only thing the phone can tell you
+about why it refused.
 
 ## Storage
 

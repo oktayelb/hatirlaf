@@ -11,7 +11,7 @@
 
 .entry-card {
   background: var(--surface);
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-strong);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
   padding: 20px;
@@ -31,6 +31,7 @@
   font-size: var(--fs-lg);
   font-weight: 600;
   text-transform: capitalize;
+  color: var(--ink);
 }
 .entry-time {
   color: var(--ink-2);
@@ -47,7 +48,7 @@
    plain Turkish — no pipeline vocabulary. */
 .entry-progress {
   background: var(--gold-soft);
-  border: 1px solid var(--gold);
+  border: 1px solid color-mix(in srgb, var(--gold) 56%, var(--line));
   border-radius: var(--radius-sm);
   padding: 14px 16px;
   display: grid;
@@ -66,7 +67,7 @@
   color: var(--ink);
 }
 .entry-progress-bar {
-  height: 10px;
+  height: 12px;
   border-radius: var(--radius-pill);
   background: var(--surface);
   overflow: hidden;
@@ -98,6 +99,7 @@
 .entry-transcript:focus {
   border-color: var(--accent);
   background: var(--surface);
+  box-shadow: 0 0 0 4px rgba(31, 120, 180, 0.12);
   outline: none;
 }
 .entry-transcript::placeholder {

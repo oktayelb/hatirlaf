@@ -185,15 +185,15 @@
 .cal-cell.bucket-now .cal-day-count { background: var(--ok); }
 .cal-cell.bucket-future .cal-day-count { background: var(--warn); }
 .cal-cell.bucket-past {
-  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 16%, transparent), transparent 62%), var(--bg-elev);
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-elev));
   border-color: color-mix(in srgb, var(--accent) 18%, transparent);
 }
 .cal-cell.bucket-now {
-  background: linear-gradient(180deg, color-mix(in srgb, var(--ok) 22%, transparent), transparent 62%), var(--bg-elev);
+  background: color-mix(in srgb, var(--ok) 10%, var(--bg-elev));
   border-color: color-mix(in srgb, var(--ok) 24%, transparent);
 }
 .cal-cell.bucket-future {
-  background: linear-gradient(180deg, color-mix(in srgb, var(--warn) 20%, transparent), transparent 62%), var(--bg-elev);
+  background: color-mix(in srgb, var(--warn) 10%, var(--bg-elev));
   border-color: color-mix(in srgb, var(--warn) 24%, transparent);
 }
 
@@ -247,7 +247,7 @@
 .cal-empty {
   text-align: center;
   padding: 24px 12px;
-  border: 1px dashed var(--border);
+  border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--bg-elev-2);
 }

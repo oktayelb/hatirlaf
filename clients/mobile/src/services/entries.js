@@ -89,6 +89,31 @@ export async function saveRecording({ sourceUri, transcript = "", durationMs = 0
   return id;
 }
 
+// A WAV the recogniser opened but never wrote samples into. Both platforms are
+// asked for 16 kHz 16-bit mono — 32 kB of audio per second — so a file this
+// small holds under half a second whatever the wall clock claimed. Asking the
+// file is the only honest test: a recogniser can hold a session open for a
+// minute and put nothing in it.
+const MIN_AUDIO_BYTES = 16000;
+
+/** Whether a finished recording actually contains anything. */
+export async function hasUsableAudio(uri) {
+  if (!uri) return false;
+  const info = await FileSystem.getInfoAsync(uri, { size: true }).catch(() => null);
+  return Boolean(info?.exists) && (info.size || 0) >= MIN_AUDIO_BYTES;
+}
+
+/**
+ * Throw away audio we have decided not to keep. The recogniser creates its
+ * file before it tries to recognise anything, so a session that dies on its
+ * first frame still leaves one behind — an empty WAV that no row will ever
+ * point at.
+ */
+export async function discardRecording(uri) {
+  if (!uri) return;
+  await FileSystem.deleteAsync(uri, { idempotent: true }).catch(() => {});
+}
+
 export async function updateTranscript(id, transcript) {
   const database = await db();
   await database.runAsync(

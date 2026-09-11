@@ -9,7 +9,7 @@
   justify-content: center;
   padding: max(28px, env(safe-area-inset-top, 0px)) 24px
     max(28px, env(safe-area-inset-bottom, 0px));
-  background: linear-gradient(180deg, var(--paper-2), var(--paper) 55%);
+  background: var(--paper);
   transition: opacity 240ms ease, visibility 240ms ease;
 }
 .startup-screen.is-done {

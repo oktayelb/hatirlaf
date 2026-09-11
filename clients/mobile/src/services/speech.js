@@ -85,7 +85,7 @@ export async function detectCapabilities() {
 }
 
 /** "installed" | "missing" | "unknown" */
-async function turkishModelState() {
+export async function turkishModelState() {
   // Ask the recogniser we actually use first. With no service package named,
   // `getSupportedLocales` goes through `createOnDeviceSpeechRecognizer()` —
   // the same object `start()` builds. Naming `com.google.android.as` instead
@@ -120,6 +120,15 @@ async function installedTurkish(servicePackage) {
 /** Whether a recogniser error means we should fall back to plain recording. */
 export function isFatalSpeechError(code) {
   return FATAL_ERRORS.has(code);
+}
+
+/**
+ * The one fatal error the app can do something about. Android raises it when
+ * the recogniser has no offline model for `LOCALE`, which a download fixes —
+ * so it must not be treated like a phone that simply cannot transcribe.
+ */
+export function isMissingModelError(code) {
+  return code === "language-not-supported";
 }
 
 /** Opens the system flow that installs the Turkish model. Android 13+ only. */
@@ -177,9 +186,17 @@ export function explainMode(capabilities) {
     case "no_on_device":
       return "Bu telefon konuşmayı internete göndermeden çeviremiyor. Günlüğün telefonda kalsın diye sesin yalnızca kaydedilir.";
     case "model_missing":
-      return "Türkçe dil paketi kurulu değil. Kurarsan konuştuklarını internete hiç bağlanmadan yazıya çevirebilirim.";
-    case "speech_failed":
-      return "Konuşma tanıma bu telefonda çalışmadı, o yüzden sesin yalnızca kaydediliyor. Türkçe dil paketini kurmayı deneyebilirsin.";
+      // The app now asks for this download itself, but the user can still be
+      // looking at a dialog they declined, or at an Android 13 that never
+      // opened one — so the button stays and the copy has to fit both.
+      return "Türkçe dil paketi telefonda yok. Kurulana kadar sesin yalnızca kaydediliyor; aşağıdan kurabilirsin.";
+    case "speech_failed": {
+      const base =
+        "Konuşma tanıma bu telefonda çalışmadı, o yüzden sesin yalnızca kaydediliyor. Türkçe dil paketini kurmayı deneyebilirsin.";
+      // There is no console in a release build, so the recogniser's own code
+      // is the only clue anyone gets about why this phone refused.
+      return capabilities.errorCode ? `${base} (${capabilities.errorCode})` : base;
+    }
     default:
       return "";
   }

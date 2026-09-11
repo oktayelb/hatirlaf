@@ -65,9 +65,7 @@
   padding: 18px;
   border-radius: var(--radius);
   border: 1px solid rgba(47, 167, 160, 0.3);
-  background:
-    linear-gradient(135deg, rgba(47, 167, 160, 0.18), rgba(255, 182, 72, 0.08)),
-    var(--bg-elev);
+  background: color-mix(in srgb, var(--accent) 7%, var(--bg-elev));
 }
 
 .recap-hero.empty {

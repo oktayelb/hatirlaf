@@ -1,7 +1,7 @@
 /* ---------- Greeting ---------- */
 
 .greeting {
-  margin: 0 0 20px;
+  margin: 0 0 22px;
 }
 .greeting-date {
   color: var(--ink-2);
@@ -11,6 +11,12 @@
 .greeting-title {
   margin: 6px 0 0;
   font-size: var(--fs-2xl);
+  color: var(--ink);
+}
+
+.home-workspace {
+  display: grid;
+  gap: 16px;
 }
 
 /* ---------- Photo frame ----------
@@ -18,7 +24,12 @@
    Stored on this device only; they are never uploaded. */
 
 .photo-board {
-  margin-bottom: 24px;
+  margin-bottom: 0;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  padding: 16px;
+  box-shadow: var(--shadow);
 }
 .photo-frames {
   display: grid;
@@ -35,8 +46,8 @@
   position: relative;
   display: block;
   width: 100%;
-  padding: 12px;
-  background: linear-gradient(160deg, #c9a878, #a9835a 55%, #8d6a45);
+  padding: 8px;
+  background: #d9edf9;
   border-radius: var(--radius);
   box-shadow: var(--shadow-lg);
   border: 0;
@@ -54,7 +65,7 @@
      stack has to opt into block layout or the mat collapses. */
   display: block;
   background: var(--surface);
-  border: 2px solid transparent;
+  border: 2px solid rgba(255, 255, 255, 0.72);
   border-radius: 6px;
   padding: 12px;
   transition: border-color 140ms ease;
@@ -81,7 +92,7 @@
 .photo-frame.is-empty {
   background: var(--surface-2);
   box-shadow: none;
-  border: 2px dashed var(--line-strong);
+  border: 1px solid var(--line-strong);
   padding: 10px 14px;
 }
 .photo-frame.is-empty:hover {
@@ -111,8 +122,8 @@
   margin-top: 10px;
   font-size: var(--fs-sm);
   font-weight: 600;
-  color: #4a3720;
-  background: rgba(255, 253, 248, 0.85);
+  color: var(--accent-deep);
+  background: rgba(255, 255, 255, 0.9);
   border-radius: var(--radius-pill);
   padding: 4px 12px;
   display: inline-block;
@@ -135,33 +146,36 @@
 
 .recorder {
   background: var(--surface);
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-strong);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
-  padding: 28px 20px 24px;
-  margin-bottom: 24px;
+  padding: 20px;
+  margin-bottom: 0;
   text-align: center;
+  position: relative;
+  overflow: hidden;
 }
 .recorder-title {
+  position: relative;
   margin: 0;
-  font-size: var(--fs-xl);
+  font-size: var(--fs-lg);
 }
 
 .recorder-stage {
   position: relative;
   display: grid;
   place-items: center;
-  margin: 22px 0 6px;
+  margin: 14px 0 6px;
   /* Room above the microphone for the running timer. */
   padding-top: 44px;
-  min-height: 200px;
+  min-height: 174px;
 }
 .recorder-level {
   position: absolute;
   width: 168px;
   height: 168px;
   border-radius: 50%;
-  background: var(--clay-soft);
+  background: rgba(31, 120, 180, 0.13);
   opacity: 0;
   transition: transform 110ms ease-out, opacity 160ms ease;
   pointer-events: none;
@@ -177,17 +191,17 @@
 
 .recorder-mic {
   position: relative;
-  width: 152px;
-  height: 152px;
+  width: 132px;
+  height: 132px;
   border-radius: 50%;
-  border: 4px solid var(--accent-deep);
+  border: 3px solid var(--accent-deep);
   background: var(--accent);
   color: var(--accent-ink);
   display: grid;
   place-items: center;
   gap: 6px;
   cursor: pointer;
-  box-shadow: var(--shadow-lg);
+  box-shadow: none;
   transition: background 150ms ease, border-color 150ms ease, transform 100ms ease;
   touch-action: manipulation;
 }
@@ -236,14 +250,14 @@
 
 .composer {
   background: var(--surface);
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-strong);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
-  padding: 24px 20px;
+  padding: 20px;
 }
 .composer-title {
   margin: 0 0 16px;
-  font-size: var(--fs-xl);
+  font-size: var(--fs-lg);
 }
 .composer-field {
   width: 100%;
@@ -258,13 +272,14 @@
   line-height: 1.65;
   resize: vertical;
 }
-.composer-field::placeholder {
-  color: var(--ink-3);
-}
 .composer-field:focus {
   border-color: var(--accent);
   background: var(--surface);
+  box-shadow: 0 0 0 4px rgba(31, 120, 180, 0.12);
   outline: none;
+}
+.composer-field::placeholder {
+  color: var(--ink-3);
 }
 .composer-footer {
   display: flex;
@@ -282,4 +297,20 @@
 .composer-footer .cta {
   width: auto;
   flex: 1 1 200px;
+}
+
+@media (min-width: 720px) {
+  .home-workspace {
+    grid-template-columns: minmax(220px, 0.85fr) minmax(300px, 1.15fr);
+    align-items: start;
+  }
+  .photo-board {
+    grid-row: span 2;
+  }
+  .photo-frames.is-pair {
+    grid-template-columns: 1fr;
+  }
+  .composer {
+    min-height: 100%;
+  }
 }

@@ -17,16 +17,20 @@ export async function render(root) {
   cleanup();
   root.innerHTML = "";
 
+  root.classList.add("home-screen");
   root.appendChild(greeting());
 
-  board = photoBoard();
-  root.appendChild(board.element);
+  const workspace = el("div", { class: "home-workspace" });
 
-  root.appendChild(recorderPanel());
-  root.appendChild(composerPanel());
+  board = photoBoard();
+  workspace.appendChild(board.element);
+  workspace.appendChild(recorderPanel());
+  workspace.appendChild(composerPanel());
+  root.appendChild(workspace);
 }
 
 export function cleanup() {
+  document.getElementById("screen-root")?.classList.remove("home-screen");
   if (board) {
     board.cleanup();
     board = null;

@@ -10,9 +10,7 @@
   padding: 18px;
   border-radius: var(--radius);
   border: 1px solid rgba(47, 167, 160, 0.28);
-  background:
-    linear-gradient(135deg, rgba(47, 167, 160, 0.16), rgba(112, 208, 200, 0.06)),
-    var(--bg-elev);
+  background: color-mix(in srgb, var(--accent) 7%, var(--bg-elev));
 }
 
 .memory-page-kicker {

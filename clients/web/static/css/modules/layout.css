@@ -8,7 +8,8 @@
   background: var(--header-bg);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid rgba(183, 207, 223, 0.72);
+  box-shadow: none;
 }
 
 .app-header-row {
@@ -35,15 +36,17 @@
   display: none;
 }
 .app-back:hover {
-  background: var(--surface-2);
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent-deep);
 }
 
 .app-brand {
   flex: 1;
   margin: 0;
   font-family: var(--font-display);
-  font-size: var(--fs-lg);
-  font-weight: 600;
+  font-size: var(--fs-xl);
+  font-weight: 700;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -69,11 +72,15 @@
   display: grid;
   place-items: center;
   cursor: pointer;
-  transition: background 130ms ease, color 130ms ease;
+  transition: background 130ms ease, border-color 130ms ease, color 130ms ease, transform 90ms ease;
 }
 .app-settings-btn:hover {
-  background: var(--surface-2);
-  color: var(--ink);
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent-deep);
+}
+.app-settings-btn:active {
+  transform: translateY(1px);
 }
 .app-settings-btn.active {
   background: var(--accent-soft);
@@ -105,12 +112,12 @@
   display: grid;
   grid-auto-flow: column;
   grid-auto-columns: 1fr;
-  gap: 8px;
+  gap: 6px;
   margin-top: 14px;
-  padding: 6px;
-  background: var(--surface-2);
+  padding: 5px;
+  background: #e7f2f9;
   border-radius: var(--radius);
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-strong);
 }
 
 .app-nav-btn {
@@ -118,14 +125,14 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 4px;
+  gap: 3px;
   background: transparent;
   color: var(--ink-2);
   border: 2px solid transparent;
   border-radius: var(--radius-sm);
-  padding: 10px 6px;
+  padding: 8px 6px;
   min-height: var(--tap);
-  font-size: var(--fs-md);
+  font-size: var(--fs-base);
   font-weight: 600;
   cursor: pointer;
   transition: background 130ms ease, color 130ms ease, border-color 130ms ease;
@@ -136,14 +143,14 @@
   height: 26px;
 }
 .app-nav-btn:hover {
-  color: var(--ink);
+  color: var(--accent-deep);
   background: var(--surface);
 }
 .app-nav-btn.active {
   background: var(--surface);
   color: var(--accent-deep);
   border-color: var(--accent);
-  box-shadow: var(--shadow);
+  box-shadow: none;
 }
 
 /* ---------- Screen canvas ---------- */
@@ -237,6 +244,7 @@
   border-color: var(--accent);
   outline: none;
   background: var(--surface);
+  box-shadow: 0 0 0 4px rgba(31, 120, 180, 0.12);
 }
 .privacy-lock-error {
   color: var(--clay);
