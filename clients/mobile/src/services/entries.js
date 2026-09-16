@@ -61,7 +61,14 @@ export async function saveTextEntry(transcript) {
  * documentDirectory first and only then write the row, so a row never
  * references audio that has already evaporated.
  */
-export async function saveRecording({ sourceUri, transcript = "", durationMs = 0, source = "speech" }) {
+export async function saveRecording({
+  sourceUri,
+  transcript = "",
+  durationMs = 0,
+  source = "speech",
+  sampleRate = 0,
+  channels = 0,
+}) {
   const now = new Date().toISOString();
   const id = newId();
   let storedPath = null;
@@ -82,11 +89,67 @@ export async function saveRecording({ sourceUri, transcript = "", durationMs = 0
   const database = await db();
   await database.runAsync(
     `INSERT INTO entries
-       (id, recorded_at, transcript, audio_path, duration_ms, source, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    [id, now, String(transcript || "").trim(), storedPath, Math.round(durationMs), source, now, now]
+       (id, recorded_at, transcript, audio_path, duration_ms, source,
+        sample_rate, channels, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      id,
+      now,
+      String(transcript || "").trim(),
+      storedPath,
+      Math.round(durationMs),
+      source,
+      Math.round(sampleRate) || 0,
+      Math.round(channels) || 0,
+      now,
+      now,
+    ]
   );
   return id;
+}
+
+// What the recorders of each era produced, for rows that predate the two
+// columns above. The speech path has always asked the recogniser for 16 kHz
+// mono; the audio-only fallback used expo-audio's HIGH_QUALITY preset, which
+// is 44.1 kHz stereo AAC. Guessing wrong does not corrupt anything — the
+// recogniser is simply handed a stream it cannot make words out of.
+const LEGACY_SPEECH_FORMAT = { sampleRate: 16000, channels: 1 };
+const LEGACY_AUDIO_FORMAT = { sampleRate: 44100, channels: 2 };
+
+/** The shape of an entry's audio, for handing back to the recogniser. */
+export function audioFormat(row) {
+  if (row?.sample_rate > 0 && row?.channels > 0) {
+    return { sampleRate: row.sample_rate, channels: row.channels };
+  }
+  if (row?.source === "speech") return LEGACY_SPEECH_FORMAT;
+  if (String(row?.audio_path || "").toLowerCase().endsWith(".wav")) {
+    return LEGACY_SPEECH_FORMAT;
+  }
+  return LEGACY_AUDIO_FORMAT;
+}
+
+/**
+ * Entries that kept their audio but never got words — what the Ayarlar
+ * backfill works through once the Turkish pack is finally installed. Oldest
+ * first, so a run that is interrupted has still cleared the backlog's tail.
+ */
+export async function listUntranscribed() {
+  const database = await db();
+  return database.getAllAsync(
+    `SELECT id, recorded_at, audio_path, duration_ms, source, sample_rate, channels
+       FROM entries
+      WHERE audio_path IS NOT NULL AND TRIM(transcript) = ''
+      ORDER BY recorded_at ASC`
+  );
+}
+
+export async function countUntranscribed() {
+  const database = await db();
+  const row = await database.getFirstAsync(
+    `SELECT COUNT(*) AS n FROM entries
+      WHERE audio_path IS NOT NULL AND TRIM(transcript) = ''`
+  );
+  return row?.n ?? 0;
 }
 
 // A WAV the recogniser opened but never wrote samples into. Both platforms are

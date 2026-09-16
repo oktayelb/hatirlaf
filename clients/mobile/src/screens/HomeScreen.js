@@ -8,8 +8,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
-  AppState,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -18,7 +16,8 @@ import {
   View,
 } from "react-native";
 import {
-  RecordingPresets,
+  AudioQuality,
+  IOSOutputFormat,
   requestRecordingPermissionsAsync,
   setAudioModeAsync,
   useAudioRecorder,
@@ -35,47 +34,69 @@ import {
   saveTextEntry,
 } from "../services/entries";
 import {
-  DOWNLOAD,
-  DOWNLOAD_RUNS_IN_BACKGROUND,
+  SPEECH_CHANNELS,
+  SPEECH_SAMPLE_RATE,
   abortListening,
-  detectCapabilities,
-  downloadTurkishModel,
   explainDownload,
   explainMode,
   forgetTurkishMissing,
   isFatalSpeechError,
-  isMissingModelError,
   needsManualInstall,
-  openSpeechSettings,
   requestPermissions,
-  rememberTurkishMissing,
   startListening,
   stopListening,
 } from "../services/speech";
+import { useTurkishModel } from "../services/useTurkishModel";
 import { colors, radius, spacing, type } from "../theme";
 
 // How long to wait for the recogniser's `end` event after asking it to stop.
 // Android flushes a final result first, which takes a beat on a cold model.
 const STOP_TIMEOUT_MS = 5000;
 
-// Android 14 downloads the language pack in the background; 13 opens a system
-// screen instead, which is not a thing to spring on someone who has not asked
-// for anything yet. There the download waits until a recording needs it.
-const SILENT_MODEL_DOWNLOAD = DOWNLOAD_RUNS_IN_BACKGROUND;
+// What the audio-only fallback records in.
+//
+// Deliberately not expo-audio's HIGH_QUALITY preset, which is 44.1 kHz stereo:
+// these are exactly the recordings the Ayarlar backfill has to hand back to
+// the recogniser once the Turkish pack arrives, and the on-device recogniser
+// wants 16 kHz mono — the same shape the speech path already produces. It is
+// also less than half the storage, for speech that carries nothing above
+// 8 kHz anyway.
+const VOICE_RECORDING = {
+  extension: ".m4a",
+  sampleRate: SPEECH_SAMPLE_RATE,
+  numberOfChannels: SPEECH_CHANNELS,
+  bitRate: 64000,
+  android: {
+    outputFormat: "mpeg4",
+    audioEncoder: "aac",
+  },
+  ios: {
+    outputFormat: IOSOutputFormat.MPEG4AAC,
+    audioQuality: AudioQuality.MAX,
+    linearPCMBitDepth: 16,
+    linearPCMIsBigEndian: false,
+    linearPCMIsFloat: false,
+  },
+};
 
 export function HomeScreen({ onSaved }) {
-  const [capabilities, setCapabilities] = useState(null);
   const [recording, setRecording] = useState(false);
   const [elapsedMs, setElapsedMs] = useState(0);
   const [liveText, setLiveText] = useState("");
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
-  // How the last request for the Turkish pack went: `{ status, code? }`, or
-  // `{ status: "working" }` while one is in flight. Kept on the card rather
-  // than shown as an alert — the automatic attempt is not something the user
-  // asked for, and the failure one *is* about arrives in the middle of saving
-  // an entry, where a second stacked dialog is the last thing anyone needs.
-  const [modelDownload, setModelDownload] = useState(null);
+
+  // Shared with Ayarlar, which offers the same download from a calmer place.
+  // Detection is held off while the microphone is live: it talks to the same
+  // recogniser the recording is using.
+  const {
+    capabilities,
+    download: modelDownload,
+    install: installModel,
+    openSettings,
+    reportSpeechFailure,
+    clearDownload,
+  } = useTurkishModel({ canRefresh: !recording });
 
   // Refs, not state: the speech events fire outside React's render cycle and
   // the values have to survive until `end` arrives to be written together.
@@ -86,37 +107,11 @@ export function HomeScreen({ onSaved }) {
   // up mid-session, read by the `end` handler to decide what to do about it.
   const speechFailureRef = useRef(null);
   const stopWatchdogRef = useRef(null);
-  // The model download is asked for at most once per app run, so a phone that
-  // cannot install it does not nag on every recording.
-  const modelRequestedRef = useRef(false);
 
-  const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  const audioRecorder = useAudioRecorder(VOICE_RECORDING);
   const audioRecorderState = useAudioRecorderState(audioRecorder);
 
   const speechMode = capabilities?.mode === "speech";
-
-  const refreshCapabilities = useCallback(async () => {
-    try {
-      setCapabilities(await detectCapabilities());
-    } catch (_) {
-      setCapabilities({ mode: "audio", canDownloadModel: false, reason: "unavailable" });
-    }
-  }, []);
-
-  useEffect(() => {
-    refreshCapabilities();
-  }, [refreshCapabilities]);
-
-  // Installing the Turkish model sends the user out to a system screen — on
-  // Android 13 the download even resolves before it has finished. Re-asking on
-  // the way back is the only way the answer stops being stale without a
-  // restart. Never while recording: detection talks to the same recogniser.
-  useEffect(() => {
-    const sub = AppState.addEventListener("change", (state) => {
-      if (state === "active" && !recording) refreshCapabilities();
-    });
-    return () => sub.remove();
-  }, [recording, refreshCapabilities]);
 
   // One timer for both capture paths, so the display cannot disagree with
   // itself when the mode changes.
@@ -144,82 +139,6 @@ export function HomeScreen({ onSaved }) {
     }
   }, []);
 
-  // Android keeps Turkish speech recognition behind a separate download and
-  // the user should not have to know that. Ask for it as soon as we learn it
-  // is missing, rather than parking the answer behind a button.
-  //
-  // Every outcome the trigger can produce is now answered on screen. The old
-  // code read the commonest one — Android queueing the download for later —
-  // as a cancellation and returned without a word, which is why agreeing to
-  // the download appeared to do nothing and the same offer kept coming back.
-  const installModel = useCallback(
-    async ({ userAsked = false } = {}) => {
-      if (Platform.OS !== "android") return;
-      // Automatic attempts happen once per app run, so a phone that cannot
-      // install the pack does not nag on every recording. A press always tries.
-      if (!userAsked && modelRequestedRef.current) return;
-      modelRequestedRef.current = true;
-
-      setModelDownload({ status: "working" });
-      const result = await downloadTurkishModel({ userAsked });
-      setModelDownload(result);
-
-      // Only a confirmed success is worth re-detecting for: the other outcomes
-      // resolve later, out in the system, and the AppState listener above picks
-      // those up when the user comes back.
-      if (result.status === DOWNLOAD.INSTALLED) await refreshCapabilities();
-    },
-    [refreshCapabilities]
-  );
-
-  // Detection can tell us the model is missing before anything is recorded.
-  useEffect(() => {
-    const unproven =
-      capabilities?.reason === "model_missing" || capabilities?.reason === "model_unproven";
-    if (unproven && SILENT_MODEL_DOWNLOAD) installModel();
-  }, [capabilities?.reason, installModel]);
-
-  // The phone's own speech settings, for when its recogniser will not take the
-  // request. Without this there is no way out of a failed download at all.
-  const openSettings = useCallback(async () => {
-    if (!(await openSpeechSettings())) {
-      Alert.alert(
-        "Ayarlar açılamadı",
-        "Telefonun ayarlarında \u201cSes girişi\u201d ya da \u201cKonuşma tanıma\u201d bölümünden Türkçe dil paketini kurabilirsin."
-      );
-    }
-  }, []);
-
-  // What a fatal recogniser error means for the rest of the session. This runs
-  // whether or not audio came back: `persist: true` writes the file before
-  // recognition is attempted, so gating it on "nothing was captured" — as it
-  // was — meant the failure was swallowed on every single session, leaving
-  // silent transcript-less entries and no explanation on screen.
-  const noteSpeechFailure = useCallback(
-    (code) => {
-      const missingModel = Platform.OS === "android" && isMissingModelError(code);
-      setCapabilities((current) => ({
-        ...(current || {}),
-        mode: "audio",
-        canDownloadModel: Platform.OS === "android",
-        reason: missingModel ? "model_missing" : "speech_failed",
-        errorCode: code,
-      }));
-      if (!missingModel) return;
-      // The recogniser has just contradicted whatever `getSupportedLocales`
-      // claimed, and its answer is the one worth keeping: written down here,
-      // it survives the capability refresh that happens on every return to the
-      // app, so the install button stays on screen instead of vanishing the
-      // moment the recording ends.
-      rememberTurkishMissing();
-      // A missing model is the one failure the app can repair by itself, and
-      // by now the user has asked for a transcript by tapping the microphone,
-      // so the system screen is no longer an interruption out of nowhere.
-      installModel();
-    },
-    [installModel]
-  );
-
   // `end` is the only event guaranteed to arrive last — after the final
   // `result` and after `audioend` has released the file — so the entry is
   // written there rather than in the stop handler.
@@ -237,7 +156,7 @@ export function HomeScreen({ onSaved }) {
     audioUriRef.current = null;
     speechFailureRef.current = null;
 
-    if (failure) noteSpeechFailure(failure);
+    if (failure) reportSpeechFailure(failure);
     // Proof the pack is there, whatever the probe or an older verdict says.
     else if (transcript) forgetTurkishMissing();
 
@@ -284,6 +203,8 @@ export function HomeScreen({ onSaved }) {
         transcript,
         durationMs: keepAudio ? durationMs : 0,
         source: "speech",
+        sampleRate: SPEECH_SAMPLE_RATE,
+        channels: SPEECH_CHANNELS,
       });
       resetCapture();
       onSaved?.();
@@ -296,7 +217,7 @@ export function HomeScreen({ onSaved }) {
     } finally {
       setBusy(false);
     }
-  }, [clearStopWatchdog, noteSpeechFailure, onSaved, startAudioRecording]);
+  }, [clearStopWatchdog, onSaved, reportSpeechFailure, startAudioRecording]);
 
   useEffect(() => clearStopWatchdog, [clearStopWatchdog]);
 
@@ -354,7 +275,7 @@ export function HomeScreen({ onSaved }) {
     if (!capabilities) return;
     // Last run's download report has been read by now; a fresh recording is a
     // clean card.
-    setModelDownload(null);
+    clearDownload();
     try {
       if (speechMode) {
         if (!(await requestPermissions())) {
@@ -417,7 +338,13 @@ export function HomeScreen({ onSaved }) {
         Alert.alert("Kayıt boş", "Ses kaydedilemedi. Bir daha dener misin?");
         return;
       }
-      await saveRecording({ sourceUri: audioRecorder.uri, durationMs, source: "audio" });
+      await saveRecording({
+        sourceUri: audioRecorder.uri,
+        durationMs,
+        source: "audio",
+        sampleRate: VOICE_RECORDING.sampleRate,
+        channels: VOICE_RECORDING.numberOfChannels,
+      });
       resetCapture();
       onSaved?.();
       Alert.alert("Kaydedildi", "Sesin günlüğüne eklendi.");

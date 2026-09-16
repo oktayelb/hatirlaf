@@ -323,6 +323,100 @@ export function stopListening() {
   ExpoSpeechRecognitionModule.stop();
 }
 
+/** The shape the speech path records in, and what a backfill should assume. */
+export const SPEECH_SAMPLE_RATE = 16000;
+export const SPEECH_CHANNELS = 1;
+
+// A file the recogniser never answers about would wedge a whole backfill, so
+// every attempt is bounded. The native streamer paces itself at ~15 ms per
+// 4 KiB of decoded PCM — comfortably faster than real time — which is why
+// twice the clip's own length plus a floor is generous rather than tight.
+const FILE_TIMEOUT_FLOOR_MS = 45000;
+
+/**
+ * Transcribe audio already on disk, rather than a live microphone.
+ *
+ * Android streams the file through `MediaCodec`, so any format the phone can
+ * decode works — but it decodes to the file's *own* sample rate and channel
+ * count, and the recogniser has to be told which those are. Hand it the wrong
+ * numbers and it hears a stream at the wrong speed and finds no words in it,
+ * which is why entries carry their format rather than the caller guessing.
+ *
+ * Never throws, and never leaves a listener behind: a backfill runs this once
+ * per entry and the subscriptions would otherwise pile up across the run.
+ */
+export function transcribeAudioFile({ uri, sampleRate, channels, durationMs = 0 }) {
+  return new Promise((resolve) => {
+    const finals = [];
+    const subscriptions = [];
+    let errorCode = null;
+    let timer = null;
+    let settled = false;
+
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      for (const subscription of subscriptions) {
+        try {
+          subscription.remove();
+        } catch (_) {
+          // An already-removed subscription is not a problem worth raising.
+        }
+      }
+      const transcript = finals.join(" ").replace(/\s+/g, " ").trim();
+      resolve({ transcript, error: transcript ? null : errorCode });
+    };
+
+    subscriptions.push(
+      ExpoSpeechRecognitionModule.addListener("result", (event) => {
+        if (!event.isFinal) return;
+        const text = event.results?.[0]?.transcript ?? "";
+        if (text) finals.push(text);
+      })
+    );
+
+    subscriptions.push(
+      ExpoSpeechRecognitionModule.addListener("error", (event) => {
+        // A recording of somebody not saying anything is an ordinary outcome
+        // for a diary, not a failure to report back to the user.
+        if (event.error === "no-speech" || event.error === "speech-timeout") return;
+        errorCode = event.error;
+      })
+    );
+
+    // `end` arrives after the last final result on every path, including the
+    // error ones, so it is the only place this needs to settle.
+    subscriptions.push(ExpoSpeechRecognitionModule.addListener("end", finish));
+
+    timer = setTimeout(
+      () => {
+        abortListening();
+        finish();
+      },
+      Math.max(FILE_TIMEOUT_FLOOR_MS, durationMs * 2)
+    );
+
+    try {
+      ExpoSpeechRecognitionModule.start({
+        lang: LOCALE,
+        interimResults: false,
+        continuous: true,
+        requiresOnDeviceRecognition: true,
+        addsPunctuation: true,
+        audioSource: {
+          uri,
+          sampleRate: sampleRate || SPEECH_SAMPLE_RATE,
+          audioChannels: channels || SPEECH_CHANNELS,
+        },
+      });
+    } catch (err) {
+      errorCode = String(err?.message || err);
+      finish();
+    }
+  });
+}
+
 export function abortListening() {
   try {
     ExpoSpeechRecognitionModule.abort();

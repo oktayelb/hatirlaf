@@ -39,6 +39,30 @@ async function migrate(database) {
     CREATE INDEX IF NOT EXISTS entries_recorded_at
       ON entries (recorded_at DESC);
   `);
+
+  await addColumns(database);
+}
+
+// Added after the first release, so they arrive by ALTER rather than in the
+// CREATE above — a phone that already has the diary must keep it.
+//
+// The recogniser needs to be told the shape of any audio it is asked to read
+// back from a file, and it has no way to work that out for itself. Recording
+// it at capture time is what lets the Ayarlar backfill transcribe an old entry
+// without guessing. Rows written before this carry 0, which entries.audioFormat
+// reads as "whatever that era's recorder produced".
+const ADDED_COLUMNS = [
+  ["sample_rate", "INTEGER NOT NULL DEFAULT 0"],
+  ["channels", "INTEGER NOT NULL DEFAULT 0"],
+];
+
+async function addColumns(database) {
+  const existing = await database.getAllAsync(`PRAGMA table_info(entries)`);
+  const have = new Set(existing.map((column) => column.name));
+  for (const [name, definition] of ADDED_COLUMNS) {
+    if (have.has(name)) continue;
+    await database.execAsync(`ALTER TABLE entries ADD COLUMN ${name} ${definition}`);
+  }
 }
 
 /** Drops the handle so the next db() call reopens. Used after a wipe. */
