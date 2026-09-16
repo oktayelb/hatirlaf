@@ -6,7 +6,8 @@
 // always true and we would rather record without a transcript than transcribe
 // off-device. Everything here is capability detection in service of that.
 
-import { Platform } from "react-native";
+import { Linking, Platform } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { ExpoSpeechRecognitionModule } from "expo-speech-recognition";
 
 export const LOCALE = "tr-TR";
@@ -15,6 +16,16 @@ export const LOCALE = "tr-TR";
 // as a fallback probe — see `turkishModelState` for why it is not the first
 // thing we ask.
 const ANDROID_ON_DEVICE_PACKAGE = "com.google.android.as";
+
+// Android 13 is the first version that can be asked for a language pack at
+// all, and the first that can persist audio, so the two gates coincide.
+const ANDROID_API = Platform.OS === "android" ? Number(Platform.Version) : 0;
+const CAN_TRIGGER_DOWNLOAD = ANDROID_API >= 33;
+
+// Android 14 added the progress listener. Below it the trigger opens a system
+// screen and tells us nothing, which is not something to spring on someone who
+// has not asked for it — see the auto-install gate in HomeScreen.
+export const DOWNLOAD_RUNS_IN_BACKGROUND = ANDROID_API >= 34;
 
 // Errors that mean the recogniser will not run at all on this device right
 // now. The home screen answers these by dropping to a plain recording rather
@@ -29,6 +40,55 @@ const FATAL_ERRORS = new Set([
   "service-not-allowed",
   "unknown",
 ]);
+
+// What the recogniser itself last said about Turkish, kept across restarts.
+//
+// `getSupportedLocales` is a probe, and on plenty of phones it lists tr-TR as
+// installed for a recogniser that then refuses the language outright. When the
+// two disagree, the one that actually tried to transcribe is right. Without
+// remembering that, every capability refresh — and there is one on every
+// return to the app — believed the probe again and hid the install button, so
+// the only moment it was ever visible was the few seconds between the
+// recogniser failing and the next refresh. That is the "button only appears
+// while recording" bug.
+const MISSING_KEY = "stt.turkish.missing";
+let missingVerdict = null;
+let verdictLoaded = false;
+
+async function turkishReportedMissing() {
+  if (verdictLoaded) return missingVerdict;
+  try {
+    missingVerdict = (await AsyncStorage.getItem(MISSING_KEY)) === "1";
+  } catch (_) {
+    missingVerdict = false;
+  }
+  verdictLoaded = true;
+  return missingVerdict;
+}
+
+/** The recogniser refused Turkish. Remember it past this app run. */
+export async function rememberTurkishMissing() {
+  verdictLoaded = true;
+  if (missingVerdict === true) return;
+  missingVerdict = true;
+  try {
+    await AsyncStorage.setItem(MISSING_KEY, "1");
+  } catch (_) {
+    // A verdict we cannot write is only a verdict we forget on restart.
+  }
+}
+
+/** Turkish demonstrably works. Clears any stale verdict above. */
+export async function forgetTurkishMissing() {
+  verdictLoaded = true;
+  if (missingVerdict === false) return;
+  missingVerdict = false;
+  try {
+    await AsyncStorage.removeItem(MISSING_KEY);
+  } catch (_) {
+    // Same.
+  }
+}
 
 /**
  * What this device can actually do, in the order the UI cares about.
@@ -62,25 +122,42 @@ export async function detectCapabilities() {
   // `createOnDeviceSpeechRecognizer()`, which bypasses the default service
   // entirely, so a device can answer "no" here and still transcribe Turkish
   // offline perfectly well. iOS has no such split.
-  if (Platform.OS !== "android" && !ExpoSpeechRecognitionModule.isRecognitionAvailable()) {
-    return { ...base, reason: "unavailable" };
-  }
-
-  if (Platform.OS === "android") {
-    // iOS reports on-device support truthfully; Android needs the language
-    // pack to actually be present, which is a separate question.
-    const state = await turkishModelState();
-    if (state === "missing") {
-      return { ...base, canDownloadModel: true, reason: "model_missing" };
+  if (Platform.OS !== "android") {
+    if (!ExpoSpeechRecognitionModule.isRecognitionAvailable()) {
+      return { ...base, reason: "unavailable" };
     }
-    // "unknown" means the probe could not answer, not that Turkish is absent.
-    // Try to transcribe anyway and let `start()` be the judge — a failure
-    // there falls back to a plain recording, so nothing is lost by trying,
-    // whereas refusing up front silently costs every transcript on devices
-    // whose recogniser does not answer capability queries.
-    return { ...base, mode: "speech", canDownloadModel: state === "unknown" };
+    // iOS reports on-device support truthfully and installs its own models.
+    return { ...base, mode: "speech" };
   }
 
+  const [state, reportedMissing] = await Promise.all([
+    turkishModelState(),
+    turkishReportedMissing(),
+  ]);
+
+  // The probe is certain: no transcript to be had, and a download to offer.
+  if (state === "missing") {
+    return { ...base, canDownloadModel: CAN_TRIGGER_DOWNLOAD, reason: "model_missing" };
+  }
+
+  // The probe says Turkish is there (or cannot say) but the recogniser refused
+  // it last time. Show the install button — that is the part the old code got
+  // wrong — yet still attempt a transcript, because that attempt is the only
+  // thing that can ever clear a stale verdict: a pack installed from the
+  // system settings does not announce itself, and a phone parked in audio-only
+  // forever is worse than a second of failing over on each recording.
+  if (reportedMissing) {
+    return {
+      ...base,
+      mode: "speech",
+      canDownloadModel: CAN_TRIGGER_DOWNLOAD,
+      reason: "model_unproven",
+    };
+  }
+
+  // "unknown" means the probe could not answer, not that Turkish is absent.
+  // Try to transcribe and let `start()` be the judge — a failure there falls
+  // back to a plain recording and is remembered, so nothing is lost by trying.
   return { ...base, mode: "speech" };
 }
 
@@ -131,9 +208,87 @@ export function isMissingModelError(code) {
   return code === "language-not-supported";
 }
 
-/** Opens the system flow that installs the Turkish model. Android 13+ only. */
-export async function downloadTurkishModel() {
-  return ExpoSpeechRecognitionModule.androidTriggerOfflineModelDownload({ locale: LOCALE });
+/**
+ * Outcomes of asking for the language pack, which the UI has to tell apart.
+ *
+ * The library's own three statuses collapse into something misleading: its
+ * `download_canceled` is what the Android 14 listener reports from
+ * `onScheduled`, which means the opposite of cancelled — the system accepted
+ * the request and will run the download in the background, typically once the
+ * phone is on Wi-Fi. Reading that as a refusal is why the old code went
+ * silent, changed nothing, and then offered the same button again.
+ */
+export const DOWNLOAD = {
+  INSTALLED: "installed", // Finished. Turkish is on the phone now.
+  SCHEDULED: "scheduled", // Queued by Android; it lands in its own time.
+  OPENED: "opened", // Android 13 opened its own screen; outcome unknown.
+  RUNNING: "running", // One from earlier this run has not reported back.
+  UNSUPPORTED: "unsupported", // Too old to be asked at all.
+  FAILED: "failed", // The recogniser refused; `code` says how.
+};
+
+// A scheduled download never reports back, so the native module's own
+// in-flight flag stays set for the rest of the process and rejects every later
+// call with `download_in_progress`. Mirroring it here lets automatic attempts
+// skip a call we know will be refused, while an explicit press still tries.
+let downloadInFlight = false;
+
+/**
+ * Ask Android for the Turkish pack. Never throws: every outcome comes back as
+ * a `DOWNLOAD` status the home screen can say something honest about.
+ */
+export async function downloadTurkishModel({ userAsked = false } = {}) {
+  if (!CAN_TRIGGER_DOWNLOAD) return { status: DOWNLOAD.UNSUPPORTED };
+  if (downloadInFlight && !userAsked) return { status: DOWNLOAD.RUNNING };
+
+  downloadInFlight = true;
+  try {
+    const result = await ExpoSpeechRecognitionModule.androidTriggerOfflineModelDownload({
+      locale: LOCALE,
+    });
+
+    if (result?.status === "download_success") {
+      downloadInFlight = false;
+      await forgetTurkishMissing();
+      return { status: DOWNLOAD.INSTALLED };
+    }
+
+    // `onScheduled`, despite what the library calls it. Stays in flight.
+    if (result?.status === "download_canceled") {
+      return { status: DOWNLOAD.SCHEDULED };
+    }
+
+    // Android 13: the system screen is open and the real answer arrives when
+    // the user comes back, which the home screen re-detects. Nothing is
+    // pending natively on this path.
+    downloadInFlight = false;
+    return { status: DOWNLOAD.OPENED };
+  } catch (err) {
+    const code = String(err?.code || err?.message || "");
+    if (code.includes("download_in_progress")) return { status: DOWNLOAD.RUNNING };
+    downloadInFlight = false;
+    if (code.includes("not_supported")) return { status: DOWNLOAD.UNSUPPORTED };
+    return { status: DOWNLOAD.FAILED, code };
+  }
+}
+
+// The way in by hand, for phones whose recogniser will not take the request.
+// Ordered from the screen that actually lists downloadable voice languages to
+// the one every phone has.
+const SETTINGS_INTENTS = ["android.settings.VOICE_INPUT_SETTINGS", "android.settings.SETTINGS"];
+
+/** Opens the phone's own speech settings. Returns false if none would open. */
+export async function openSpeechSettings() {
+  if (Platform.OS !== "android") return false;
+  for (const action of SETTINGS_INTENTS) {
+    try {
+      await Linking.sendIntent(action);
+      return true;
+    } catch (_) {
+      // Not every phone ships every one of these screens.
+    }
+  }
+  return false;
 }
 
 export async function requestPermissions() {
@@ -186,10 +341,11 @@ export function explainMode(capabilities) {
     case "no_on_device":
       return "Bu telefon konuşmayı internete göndermeden çeviremiyor. Günlüğün telefonda kalsın diye sesin yalnızca kaydedilir.";
     case "model_missing":
-      // The app now asks for this download itself, but the user can still be
-      // looking at a dialog they declined, or at an Android 13 that never
-      // opened one — so the button stays and the copy has to fit both.
       return "Türkçe dil paketi telefonda yok. Kurulana kadar sesin yalnızca kaydediliyor; aşağıdan kurabilirsin.";
+    case "model_unproven":
+      // The probe and the recogniser disagree. We try anyway, so the copy has
+      // to promise a transcript without depending on one.
+      return "Geçen sefer Türkçe dil paketi bulunamadı. Yine de deneyeceğim; olmazsa sesin yalnızca kaydedilir. Aşağıdan kurabilirsin.";
     case "speech_failed": {
       const base =
         "Konuşma tanıma bu telefonda çalışmadı, o yüzden sesin yalnızca kaydediliyor. Türkçe dil paketini kurmayı deneyebilirsin.";
@@ -200,4 +356,38 @@ export function explainMode(capabilities) {
     default:
       return "";
   }
+}
+
+/** Turkish copy for what came back from asking for the language pack. */
+export function explainDownload(download) {
+  if (!download) return "";
+  switch (download.status) {
+    case "working":
+      return "Türkçe dil paketi isteniyor…";
+    case DOWNLOAD.INSTALLED:
+      return "Türkçe dil paketi kuruldu. Artık konuştuklarını yazıya çevirebilirim.";
+    case DOWNLOAD.SCHEDULED:
+      return "Telefon indirmeyi sıraya aldı; kendi zamanında, çoğunlukla Wi-Fi'deyken indirir. Wi-Fi'ye bağlı kal, birkaç dakika sonra uygulamayı kapatıp yeniden aç.";
+    case DOWNLOAD.RUNNING:
+      return "İndirme sürüyor. Bitmesini bekle, sonra uygulamayı kapatıp yeniden aç. Beklemek istemiyorsan telefonun ayarlarından da kurabilirsin.";
+    case DOWNLOAD.OPENED:
+      return "Telefonun indirme ekranını açtım. İndirme bitince buraya dön.";
+    case DOWNLOAD.UNSUPPORTED:
+      return "Bu telefon dil paketini uygulamanın içinden indiremiyor. Telefonun ayarlarından kurman gerekiyor.";
+    case DOWNLOAD.FAILED:
+      return `Telefon dil paketini indiremedi${download.code ? ` (${download.code})` : ""}. Telefonun ayarlarından elle kurmayı deneyebilirsin.`;
+    default:
+      return "";
+  }
+}
+
+/**
+ * Whether to offer the manual way in. Anything short of a confirmed install
+ * counts — including the Android 13 "opened the system screen" answer, which
+ * is a guess: the trigger resolves whether or not a screen ever appeared, and
+ * on the phones where none does, the settings route is the only way through.
+ */
+export function needsManualInstall(download) {
+  if (!download) return false;
+  return download.status !== "working" && download.status !== DOWNLOAD.INSTALLED;
 }

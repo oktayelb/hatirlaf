@@ -35,13 +35,20 @@ import {
   saveTextEntry,
 } from "../services/entries";
 import {
+  DOWNLOAD,
+  DOWNLOAD_RUNS_IN_BACKGROUND,
   abortListening,
   detectCapabilities,
   downloadTurkishModel,
+  explainDownload,
   explainMode,
+  forgetTurkishMissing,
   isFatalSpeechError,
   isMissingModelError,
+  needsManualInstall,
+  openSpeechSettings,
   requestPermissions,
+  rememberTurkishMissing,
   startListening,
   stopListening,
 } from "../services/speech";
@@ -52,9 +59,9 @@ import { colors, radius, spacing, type } from "../theme";
 const STOP_TIMEOUT_MS = 5000;
 
 // Android 14 downloads the language pack in the background; 13 opens a system
-// dialog instead, which is not a thing to spring on someone who has not asked
+// screen instead, which is not a thing to spring on someone who has not asked
 // for anything yet. There the download waits until a recording needs it.
-const SILENT_MODEL_DOWNLOAD = Platform.OS === "android" && Number(Platform.Version) >= 34;
+const SILENT_MODEL_DOWNLOAD = DOWNLOAD_RUNS_IN_BACKGROUND;
 
 export function HomeScreen({ onSaved }) {
   const [capabilities, setCapabilities] = useState(null);
@@ -63,6 +70,12 @@ export function HomeScreen({ onSaved }) {
   const [liveText, setLiveText] = useState("");
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
+  // How the last request for the Turkish pack went: `{ status, code? }`, or
+  // `{ status: "working" }` while one is in flight. Kept on the card rather
+  // than shown as an alert — the automatic attempt is not something the user
+  // asked for, and the failure one *is* about arrives in the middle of saving
+  // an entry, where a second stacked dialog is the last thing anyone needs.
+  const [modelDownload, setModelDownload] = useState(null);
 
   // Refs, not state: the speech events fire outside React's render cycle and
   // the values have to survive until `end` arrives to be written together.
@@ -134,39 +147,48 @@ export function HomeScreen({ onSaved }) {
   // Android keeps Turkish speech recognition behind a separate download and
   // the user should not have to know that. Ask for it as soon as we learn it
   // is missing, rather than parking the answer behind a button.
-  const installModelQuietly = useCallback(async () => {
-    if (modelRequestedRef.current || Platform.OS !== "android") return;
-    modelRequestedRef.current = true;
-    try {
-      const result = await downloadTurkishModel();
-      if (result.status === "download_canceled") return;
-      if (result.status === "download_success") {
-        await refreshCapabilities();
-        Alert.alert(
-          "Türkçe hazır",
-          "Dil paketi kuruldu. Bundan sonra konuştuklarını yazıya çevirebilirim."
-        );
-        return;
-      }
-      // Android 13 resolves the moment the system dialog opens; the real
-      // answer arrives when the user comes back, which the AppState listener
-      // above picks up.
-      Alert.alert(
-        "Türkçe dil paketi",
-        "Konuştuklarını yazıya çevirebilmem için telefonun indirme ekranını açtım. İndirme bitince buraya dön."
-      );
-    } catch (_) {
-      // Nothing to do: the recording is still kept, and Ana explains why
-      // there is no transcript.
-    }
-  }, [refreshCapabilities]);
+  //
+  // Every outcome the trigger can produce is now answered on screen. The old
+  // code read the commonest one — Android queueing the download for later —
+  // as a cancellation and returned without a word, which is why agreeing to
+  // the download appeared to do nothing and the same offer kept coming back.
+  const installModel = useCallback(
+    async ({ userAsked = false } = {}) => {
+      if (Platform.OS !== "android") return;
+      // Automatic attempts happen once per app run, so a phone that cannot
+      // install the pack does not nag on every recording. A press always tries.
+      if (!userAsked && modelRequestedRef.current) return;
+      modelRequestedRef.current = true;
+
+      setModelDownload({ status: "working" });
+      const result = await downloadTurkishModel({ userAsked });
+      setModelDownload(result);
+
+      // Only a confirmed success is worth re-detecting for: the other outcomes
+      // resolve later, out in the system, and the AppState listener above picks
+      // those up when the user comes back.
+      if (result.status === DOWNLOAD.INSTALLED) await refreshCapabilities();
+    },
+    [refreshCapabilities]
+  );
 
   // Detection can tell us the model is missing before anything is recorded.
   useEffect(() => {
-    if (capabilities?.reason === "model_missing" && SILENT_MODEL_DOWNLOAD) {
-      installModelQuietly();
+    const unproven =
+      capabilities?.reason === "model_missing" || capabilities?.reason === "model_unproven";
+    if (unproven && SILENT_MODEL_DOWNLOAD) installModel();
+  }, [capabilities?.reason, installModel]);
+
+  // The phone's own speech settings, for when its recogniser will not take the
+  // request. Without this there is no way out of a failed download at all.
+  const openSettings = useCallback(async () => {
+    if (!(await openSpeechSettings())) {
+      Alert.alert(
+        "Ayarlar açılamadı",
+        "Telefonun ayarlarında \u201cSes girişi\u201d ya da \u201cKonuşma tanıma\u201d bölümünden Türkçe dil paketini kurabilirsin."
+      );
     }
-  }, [capabilities?.reason, installModelQuietly]);
+  }, []);
 
   // What a fatal recogniser error means for the rest of the session. This runs
   // whether or not audio came back: `persist: true` writes the file before
@@ -183,12 +205,19 @@ export function HomeScreen({ onSaved }) {
         reason: missingModel ? "model_missing" : "speech_failed",
         errorCode: code,
       }));
+      if (!missingModel) return;
+      // The recogniser has just contradicted whatever `getSupportedLocales`
+      // claimed, and its answer is the one worth keeping: written down here,
+      // it survives the capability refresh that happens on every return to the
+      // app, so the install button stays on screen instead of vanishing the
+      // moment the recording ends.
+      rememberTurkishMissing();
       // A missing model is the one failure the app can repair by itself, and
       // by now the user has asked for a transcript by tapping the microphone,
-      // so the system dialog is no longer an interruption out of nowhere.
-      if (missingModel) installModelQuietly();
+      // so the system screen is no longer an interruption out of nowhere.
+      installModel();
     },
-    [installModelQuietly]
+    [installModel]
   );
 
   // `end` is the only event guaranteed to arrive last — after the final
@@ -209,6 +238,8 @@ export function HomeScreen({ onSaved }) {
     speechFailureRef.current = null;
 
     if (failure) noteSpeechFailure(failure);
+    // Proof the pack is there, whatever the probe or an older verdict says.
+    else if (transcript) forgetTurkishMissing();
 
     // A session the recogniser refused still leaves a file behind, containing
     // nothing. Saving it fills Günlüğüm with silent, textless rows that look
@@ -321,6 +352,9 @@ export function HomeScreen({ onSaved }) {
 
   async function start() {
     if (!capabilities) return;
+    // Last run's download report has been read by now; a fresh recording is a
+    // clean card.
+    setModelDownload(null);
     try {
       if (speechMode) {
         if (!(await requestPermissions())) {
@@ -411,18 +445,6 @@ export function HomeScreen({ onSaved }) {
     }
   }
 
-  // The button, for when the automatic attempt was declined or never ran. An
-  // explicit press always tries again, whatever happened earlier.
-  async function installModel() {
-    modelRequestedRef.current = false;
-    setBusy(true);
-    try {
-      await installModelQuietly();
-    } finally {
-      setBusy(false);
-    }
-  }
-
   const today = useMemo(
     () =>
       new Date().toLocaleDateString("tr-TR", {
@@ -442,6 +464,11 @@ export function HomeScreen({ onSaved }) {
   }, [shownMs]);
 
   const note = capabilities ? explainMode(capabilities) : "";
+  const downloadNote = explainDownload(modelDownload);
+  const downloading = modelDownload?.status === "working";
+  // Hidden while recording: this is a thing to decide before you start talking,
+  // not a button that appears under your thumb halfway through a sentence.
+  const showInstall = Boolean(capabilities?.canDownloadModel) && !recording;
 
   return (
     <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
@@ -483,10 +510,23 @@ export function HomeScreen({ onSaved }) {
 
         {note ? <Help>{note}</Help> : null}
 
-        {capabilities?.canDownloadModel ? (
-          <Button variant="ghost" disabled={busy} onPress={installModel}>
-            Türkçe Dil Paketini Kur
-          </Button>
+        {downloadNote ? <Help>{downloadNote}</Help> : null}
+
+        {showInstall ? (
+          <View style={styles.install}>
+            <Button
+              variant="ghost"
+              disabled={downloading}
+              onPress={() => installModel({ userAsked: true })}
+            >
+              {downloading ? "İsteniyor…" : "Türkçe Dil Paketini Kur"}
+            </Button>
+            {needsManualInstall(modelDownload) ? (
+              <Button variant="ghost" onPress={openSettings}>
+                Telefon Ayarlarından Kur
+              </Button>
+            ) : null}
+          </View>
         ) : null}
       </Card>
 
@@ -568,6 +608,10 @@ const styles = StyleSheet.create({
     color: colors.accentInk,
     fontSize: type.base,
     fontWeight: "700",
+  },
+  install: {
+    alignSelf: "stretch",
+    gap: spacing.sm,
   },
   live: {
     alignSelf: "stretch",
