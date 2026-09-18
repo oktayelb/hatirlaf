@@ -1,0 +1,43 @@
+name: hatirla
+description: "Sesli hatira defteri - buyuklerimizin hayat hikayeleri"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.12.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+
+  # Ses kaydi ve calma
+  record: ^7.1.1
+  just_audio: ^0.10.6
+  audio_session: ^0.2.4
+
+  # Cihaz uzerinde konusmadan yaziya cevirme (Whisper)
+  whisper_ggml: ^2.6.0
+
+  # Fotograf
+  image_picker: ^1.2.3
+
+  # Dosya / izin / paylasim
+  path_provider: ^2.1.6
+  share_plus: ^13.3.0
+  shared_preferences: ^2.5.5
+
+  # Yardimci
+  intl: ^0.20.2
+  uuid: ^4.6.0
+  cupertino_icons: ^1.0.8
+  wakelock_plus: ^1.8.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true

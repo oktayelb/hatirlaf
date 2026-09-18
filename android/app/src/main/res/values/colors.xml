@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Uygulama simgesinin arka plan rengi (kiremit) -->
+    <color name="ic_launcher_background">#A8461B</color>
+    <!-- Acilis ekrani: sicak kagit rengi. Beyaz parlamasi goz yoruyor. -->
+    <color name="launch_background">#FBF3E7</color>
+</resources>
