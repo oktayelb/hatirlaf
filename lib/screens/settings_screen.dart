@@ -1,0 +1,420 @@
+import 'dart:io';
+
+import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
+
+import '../models/memory.dart';
+import '../services/permissions.dart';
+import '../services/store.dart';
+import '../services/whisper_model_manager.dart';
+import '../theme.dart';
+import '../utils/format.dart';
+import '../widgets/common.dart';
+import 'help_screen.dart';
+
+/// Ayarlar.
+///
+/// Bilerek kisa tutuldu: yasli kullanicinin buradaki hicbir seye dokunmak
+/// zorunda kalmamasi hedef. Ekran daha cok "cocugu/torunu bir kez ayarlasin"
+/// diye var.
+class SettingsScreen extends StatefulWidget {
+  const SettingsScreen({super.key});
+
+  @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
+  int? _kullanilanYer;
+  bool _paylasiliyor = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _yerHesapla();
+  }
+
+  Future<void> _yerHesapla() async {
+    int toplam = 0;
+    try {
+      final Directory dir = MemoryStore.instance.memoriesDir;
+      if (dir.existsSync()) {
+        await for (final FileSystemEntity e
+            in dir.list(recursive: true, followLinks: false)) {
+          if (e is File) toplam += await e.length();
+        }
+      }
+    } catch (_) {
+      // Yer hesabi bilgi amacli; hata olursa gostermeyiz.
+    }
+    if (mounted) setState(() => _kullanilanYer = toplam);
+  }
+
+  Future<void> _tumYazilariPaylas() async {
+    final List<Memory> hatiralar = MemoryStore.instance.memories;
+    if (hatiralar.isEmpty) {
+      await bilgiGoster(
+        context,
+        baslik: 'Henüz hatıra yok',
+        mesaj: 'Paylaşılacak bir hatıra bulunmuyor.',
+      );
+      return;
+    }
+
+    setState(() => _paylasiliyor = true);
+    try {
+      final StringBuffer sb = StringBuffer()
+        ..writeln('HATIRA DEFTERİ')
+        ..writeln('${hatiralar.length} hatıra')
+        ..writeln('');
+
+      // Eskiden yeniye: defter gibi okunsun.
+      for (final Memory m in hatiralar.reversed) {
+        sb
+          ..writeln('────────────────────')
+          ..writeln(m.title)
+          ..writeln(Bicim.uzunTarih(m.createdAt));
+        if (m.question != null) sb.writeln('Soru: ${m.question}');
+        sb.writeln('');
+        sb.writeln(
+          m.hasTranscript ? m.transcript : '(Bu hatıranın yazısı yok.)',
+        );
+        sb.writeln('');
+      }
+      sb.writeln('— hatırlaf uygulamasıyla hazırlandı');
+
+      final Directory gecici = Directory.systemTemp;
+      final File dosya = File('${gecici.path}/hatira_defteri.txt');
+      await dosya.writeAsString(sb.toString());
+
+      await SharePlus.instance.share(
+        ShareParams(
+          files: <XFile>[XFile(dosya.path)],
+          subject: 'Hatıra Defteri',
+          text: 'Anlatılan hatıraların yazıya dökülmüş hâli.',
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      kisaMesaj(context, 'Paylaşılamadı. Tekrar deneyin.');
+    } finally {
+      if (mounted) setState(() => _paylasiliyor = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Ayarlar')),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.all(HatirlaSizes.gutter),
+          children: <Widget>[
+            const BolumBasligi('Yardım', ikon: Icons.help_outline_rounded),
+            const SizedBox(height: 14),
+            CerceveliButon(
+              yazi: 'Nasıl Kullanılır?',
+              ikon: Icons.menu_book_rounded,
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(builder: (_) => const HelpScreen()),
+              ),
+            ),
+            const SizedBox(height: 30),
+
+            const BolumBasligi('Yazıya Çevirme', ikon: Icons.edit_note_rounded),
+            const SizedBox(height: 14),
+            const _ModelBolumu(),
+            const SizedBox(height: 30),
+
+            const BolumBasligi('Hatıra Defteri',
+                ikon: Icons.auto_stories_rounded),
+            const SizedBox(height: 14),
+            ListenableBuilder(
+              listenable: MemoryStore.instance,
+              builder: (BuildContext context, _) => _BilgiKutusu(
+                satirlar: <(String, String)>[
+                  ('Hatıra sayısı', '${MemoryStore.instance.memories.length}'),
+                  (
+                    'Kapladığı yer',
+                    _kullanilanYer == null
+                        ? 'hesaplanıyor…'
+                        : Bicim.boyut(_kullanilanYer!)
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+            CerceveliButon(
+              yazi: _paylasiliyor ? 'Hazırlanıyor…' : 'Tüm Yazıları Paylaş',
+              ikon: Icons.ios_share_rounded,
+              onPressed: _paylasiliyor ? null : _tumYazilariPaylas,
+            ),
+            const SizedBox(height: 30),
+
+            const BolumBasligi('İzinler', ikon: Icons.lock_open_rounded),
+            const SizedBox(height: 14),
+            CerceveliButon(
+              yazi: 'Telefon Ayarlarını Aç',
+              ikon: Icons.settings_rounded,
+              onPressed: () => Izinler.ayarlariAc(),
+            ),
+            const SizedBox(height: 10),
+            const Text(
+              'Mikrofon ve kamera izinlerini buradan açıp kapatabilirsiniz.',
+              style: TextStyle(fontSize: 19, color: HatirlaColors.inkSoft),
+            ),
+            const SizedBox(height: 34),
+
+            const Center(
+              child: Text(
+                'hatırlaf • sürüm 1.0\nSesiniz telefonunuzdan dışarı çıkmaz.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                    fontSize: 18, height: 1.5, color: HatirlaColors.inkSoft),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Model indirme / kalite secimi.
+class _ModelBolumu extends StatelessWidget {
+  const _ModelBolumu();
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: WhisperModelManager.instance,
+      builder: (BuildContext context, _) {
+        final WhisperModelManager mm = WhisperModelManager.instance;
+        final bool hazir = mm.durum == IndirmeDurumu.hazir;
+        final bool iniyor = mm.durum == IndirmeDurumu.iniyor;
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: hazir ? const Color(0xFFE6F2E8) : const Color(0xFFFFF4DB),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(
+                  color: hazir
+                      ? HatirlaColors.confirm
+                      : const Color(0xFFD9A400),
+                  width: 2,
+                ),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Icon(
+                    hazir
+                        ? Icons.check_circle_rounded
+                        : Icons.cloud_download_rounded,
+                    size: 32,
+                    color: hazir
+                        ? HatirlaColors.confirm
+                        : const Color(0xFF8A6800),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      hazir
+                          ? 'Paket telefonda. Konuşmalar internetsiz olarak '
+                              'yazıya çevriliyor.'
+                          : 'Paket indirilmedi. İndirilene kadar ses kayıtları '
+                              'yazıya çevrilmez.',
+                      style: const TextStyle(fontSize: 20, height: 1.4),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (iniyor) ...<Widget>[
+              const SizedBox(height: 16),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: LinearProgressIndicator(
+                  value: mm.ilerleme,
+                  minHeight: 18,
+                  backgroundColor: HatirlaColors.paperDark,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                '%${((mm.ilerleme ?? 0) * 100).toStringAsFixed(0)}  •  '
+                '${Bicim.boyut(mm.inenBayt)} / ${Bicim.boyut(mm.toplamBayt)}',
+                style: const TextStyle(fontSize: 21, height: 1.4),
+              ),
+              const SizedBox(height: 12),
+              CerceveliButon(
+                yazi: 'İndirmeyi Durdur',
+                ikon: Icons.stop_rounded,
+                renk: HatirlaColors.record,
+                onPressed: mm.iptalEt,
+              ),
+            ] else if (!hazir) ...<Widget>[
+              if (mm.hata != null) ...<Widget>[
+                const SizedBox(height: 14),
+                Text(
+                  mm.hata!,
+                  style: const TextStyle(
+                      fontSize: 20, height: 1.4, color: HatirlaColors.record),
+                ),
+              ],
+              const SizedBox(height: 14),
+              BuyukButon(
+                yazi: 'Paketi İndir',
+                altYazi: 'Yaklaşık ${mm.kalite.yaklasikMb} MB',
+                ikon: Icons.cloud_download_rounded,
+                onPressed: () => mm.download(),
+              ),
+            ],
+            const SizedBox(height: 24),
+            Text(
+              'Yazıya çevirme kalitesi',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 12),
+            for (final SesKalitesi q in SesKalitesi.values)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: _KaliteSecenegi(
+                  kalite: q,
+                  secili: mm.kalite == q,
+                  onTap: iniyor
+                      ? null
+                      : () async {
+                          await mm.setKalite(q);
+                          if (!context.mounted) return;
+                          if (!await mm.isReady()) {
+                            if (!context.mounted) return;
+                            final bool indir = await onayIste(
+                              context,
+                              baslik: '${q.baslik} kalite paketi',
+                              mesaj: 'Bu kalite için ${q.yaklasikMb} MB’lık '
+                                  'yeni bir paket inmesi gerekiyor. '
+                                  'Şimdi indirelim mi?',
+                              evetYazi: 'İndir',
+                              evetIkon: Icons.cloud_download_rounded,
+                            );
+                            if (indir) await mm.download();
+                          }
+                        },
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _KaliteSecenegi extends StatelessWidget {
+  const _KaliteSecenegi({
+    required this.kalite,
+    required this.secili,
+    required this.onTap,
+  });
+
+  final SesKalitesi kalite;
+  final bool secili;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: secili ? HatirlaColors.primarySoft : HatirlaColors.card,
+      borderRadius: BorderRadius.circular(18),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(18),
+        child: Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: secili ? HatirlaColors.primary : HatirlaColors.line,
+              width: secili ? 3 : 2,
+            ),
+          ),
+          child: Row(
+            children: <Widget>[
+              Icon(
+                secili
+                    ? Icons.radio_button_checked_rounded
+                    : Icons.radio_button_unchecked_rounded,
+                size: 34,
+                color: secili ? HatirlaColors.primary : HatirlaColors.inkSoft,
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      '${kalite.baslik}  (${kalite.yaklasikMb} MB)',
+                      style: const TextStyle(
+                          fontSize: 22, fontWeight: FontWeight.w700),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      kalite.aciklama,
+                      style: const TextStyle(
+                          fontSize: 19,
+                          height: 1.35,
+                          color: HatirlaColors.inkSoft),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _BilgiKutusu extends StatelessWidget {
+  const _BilgiKutusu({required this.satirlar});
+
+  final List<(String, String)> satirlar;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
+      decoration: BoxDecoration(
+        color: HatirlaColors.card,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: HatirlaColors.line, width: 2),
+      ),
+      child: Column(
+        children: <Widget>[
+          for (final (String ad, String deger) satir in satirlar)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              child: Row(
+                children: <Widget>[
+                  Expanded(
+                    child: Text(satir.$1,
+                        style: const TextStyle(fontSize: 21)),
+                  ),
+                  Text(
+                    satir.$2,
+                    style: const TextStyle(
+                        fontSize: 21, fontWeight: FontWeight.w700),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
