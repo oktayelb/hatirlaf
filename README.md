@@ -1,809 +1,351 @@
-# Hatırlaf
+# hatırlaf
 
-Hatırlaf is a local-first Turkish voice diary. You record yourself or write, and the backend transcribes the audio so you can read your entries back later.
+Büyüklerimizin hayat hikâyelerini kendi sesleriyle saklamak için yapılmış
+bir sesli hatıra defteri.
 
-Behind a single feature flag there is a second, larger app: a natural-language pipeline that extracts people, places, times and events from what you said, asks for clarification when a reference is ambiguous, and lays the result out on a calendar. **That pipeline ships switched off.** See [The NLP Switch](#the-nlp-switch).
+Yaşlı bir kullanıcı telefonu eline alır, kırmızı düğmeye basar ve anlatır.
+Uygulama hem sesi kaydeder hem de **telefonun içinde**, internetsiz olarak
+konuşmayı yazıya döker. Çocukları ve torunları yıllar sonra hem sesi
+dinleyebilir hem de yazısını okuyabilir.
 
-The repository is a Django + DRF backend with two clients that speak the same REST API: a mobile-shaped browser client under `clients/web/`, and an Expo/React Native app under `clients/mobile/`.
+---
 
-## Quick Start
+## Neler var
 
-```bash
-make setup      # virtualenv, dependencies, migrations
-make run        # http://127.0.0.1:8000
-```
-
-Run `make` on its own for the full list of targets. If `make setup` is too
-heavy for your machine — it pulls several GB of model weights — use
-`make setup-minimal` instead and add the models later.
-
-New to the codebase? [Repository Layout](#repository-layout) is the map, and
-`docs/structure.md` is the file-by-file tour.
-
-## Current Status
-
-This is an MVP/reference implementation, not a production-ready consumer deployment.
-
-It is ready for:
-
-- Local single-user use on a trusted machine
-- Demoing the full diary pipeline end to end
-- Testing Turkish speech-to-text, NLP extraction, eventification, conflict resolution, and calendar rollups
-- Serving as the backend foundation for a future mobile app
-
-It is not yet ready for:
-
-- Public internet deployment without authentication and authorization
-- Multi-user accounts
-- Production-grade background processing
-- Encrypted at-rest storage
-- App Store / Play Store release
-- Operational monitoring, backups, and privacy/compliance review
-
-The most important production gap is security: the API currently allows any caller to read/write data when they can reach the server. Treat the current app as local/private only.
-
-## What The App Does
-
-With the NLP switch off — the shipped default — the app does three things:
-
-- Record a voice diary entry in Turkish.
-- Type a diary entry instead, when speaking is not an option.
-- Read your entries back, play the audio, and correct the transcribed text.
-
-The UI is two screens, plus a settings page behind the gear in the header:
-
-- **Ana**: one or two photos to look at while you talk, a large record button, and a box to write in.
-- **Günlüğüm**: every entry, newest first, each with its audio and its transcribed text.
-
-Turn the switch on and two more screens appear:
-
-- **Takvim**: month calendar showing extracted events on their resolved dates.
-- **Özet**: monthly rollup of people, places and moods.
-
-Example:
-
-```text
-Recorded on 2026-04-30:
-"Dün işteydim, bugün ise erken kalktım ve okula gitmeyi düşünüyorum."
-```
-
-The calendar should show that event on `2026-04-29`, not merely on the recording day, because `Dün` is resolved relative to the recording timestamp.
-
-## The NLP Switch
-
-Everything that *understands* an entry, as opposed to merely *capturing* it, sits behind one flag:
-
-```python
-# server/config/settings.py
-HATIRLAF_NLP_ENABLED = os.environ.get("HATIRLAF_NLP_ENABLED", "0") == "1"
-```
-
-Change the default, or set the variable and leave the code alone:
-
-```bash
-make run NLP=1
-```
-
-That single value moves all of the following at once.
-
-**Off (the default)**
-
-- The pipeline runs `transcribe → archive`. Audio becomes text; the entry is saved.
-- `/api/timeline/`, `/api/calendar/`, `/api/recap/`, `/api/graph/`, `/api/mentions/`, `/api/nodes/` and `/api/edges/` return **404**. They are not merely hidden — they are not served.
-- Session payloads carry no `structured_events`, `mentions`, `mention_count`, `conflict_count`, `eventification_*`, `mood`, `tags`, `processed_text` or `word_timings`. A client cannot display analysis output, because it never receives any.
-- The LLM and the SAVYAR morphology bridge are not preloaded, so several GB of weights stay unloaded.
-- Both clients read `/api/config/` at boot and build their navigation from it: two tabs, no calendar, no reminders.
-
-**On**
-
-- The pipeline runs `transcribe → understand → (eventify)`.
-- The endpoints, the payload fields, the model preloading, and the Takvim/Özet screens all come back.
-
-### Where the switch lives
-
-```text
-server/diary/pipeline/
-├── flags.py    the switch itself, plus /api/config/'s payload
-├── stages.py   the ordered list of steps, each declaring when it applies
-└── runner.py   threads, re-entrancy, failure bookkeeping
-```
-
-`runner.py` knows nothing about what a stage does. It walks `stages.PIPELINE`, skips the stages whose flag is off, and runs the rest. Adding a step means adding an entry to that list:
-
-```python
-Stage(
-    key="understand",
-    label="Metin analiz ediliyor",
-    run=understand,
-    requires=NLP_ON,   # NLP_ANY | NLP_ON | NLP_OFF
-)
-```
-
-`deferred=True` hands a stage to its own worker after the synchronous chain returns, so a slow model never delays the entry from appearing.
-
-## Architecture
-
-```text
-Browser / future mobile client
-  - MediaRecorder today, expo-av later
-  - IndexedDB queue today, expo-sqlite later
-  - REST API client
-        |
-        v
-Django + Django REST Framework
-  - Session upload and idempotency
-  - Background processing thread
-  - Audio transcription
-  - Turkish NLP extraction
-  - Conflict detection
-  - Local LLM eventification
-  - Calendar API
-        |
-        v
-SQLite today / PostgreSQL later
-  - Session
-  - Mention
-  - Node
-  - Edge
-  - structured_events JSON
-```
-
-The app is deliberately backend-centered. The client is replaceable. The future mobile app should keep the same API contract and replace only the browser-specific pieces.
-
-## End-To-End Pipeline
-
-Every diary entry becomes a `Session` row.
-
-With the NLP switch **off**:
-
-```text
-audio upload -> Whisper transcription -> word timing alignment -> archive
-manual text  -> archive
-```
-
-With the NLP switch **on**:
-
-```text
-audio upload
-  -> Whisper transcription
-  -> word timing alignment
-  -> Turkish NLP extraction
-  -> conflict detection
-  -> local LLM eventification   (deferred, own worker)
-  -> calendar rollup
-
-manual text
-  -> Turkish NLP extraction
-  -> conflict detection
-  -> local LLM eventification   (deferred, own worker)
-  -> calendar rollup
-```
-
-Processing is started by `diary/pipeline/runner.py`. The HTTP upload returns quickly and the work runs in a daemon thread.
-
-## Backend Data Model
-
-The core models live in `server/diary/models.py`.
-
-- `Session`: one diary entry. Stores audio metadata, transcript, status, `structured_events`, and eventification status.
-- `Mention`: a span in the transcript that references a person, place, time, event, organization, or pronoun.
-- `Node`: canonical graph entity, such as a person or location.
-- `Edge`: relationship between nodes, attached to a session.
-
-`structured_events` is a JSON list stored on `Session`. It drives the calendar. Deleting a session automatically removes its calendar contribution because the calendar is computed from sessions.
-
-## Calendar Behavior
-
-The calendar API is implemented in `calendar_view` in `server/diary/views/api_analytics.py`. It returns 404 while the NLP switch is off.
-
-Priority order for event display:
-
-1. Use completed `structured_events` if present.
-2. If eventification is still queued/running, use saved NLP clause hints so the entry still appears on the correct resolved date.
-3. If no hints exist, fall back to the recording date with transcript text.
-
-This matters because the full LLM eventification step can be slow or unavailable. The calendar should still show useful entries as soon as the basic NLP pass has completed.
-
-## Models And Tools Used
-
-### Web Framework
-
-- **Django 5.x**: backend framework, routing, settings, ORM.
-- **Django REST Framework**: REST API, serializers, viewsets.
-- **django-cors-headers**: permissive local development CORS.
-
-### Database
-
-- **SQLite by default**: simple local database at `var/db.sqlite3`.
-- **PostgreSQL supported by env var**: set `HATIRLAF_DATABASE_URL=postgres://...`.
-
-SQLite is fine for local single-user use. PostgreSQL should be used for real deployment.
-
-### Speech-To-Text
-
-Implemented in `server/diary/processing/transcription.py`.
-
-Supported backends:
-
-- **faster-whisper** with CTranslate2, preferred
-- **openai-whisper**, fallback
-- **placeholder**, if no STT backend is installed
-
-Default model:
-
-- `large-v3-turbo`
-
-Important settings:
-
-- `HATIRLAF_WHISPER_MODEL`
-- `HATIRLAF_WHISPER_LANG`
-- `HATIRLAF_WHISPER_DEVICE`
-- `HATIRLAF_WHISPER_COMPUTE_TYPE`
-- `HATIRLAF_WHISPER_BEAM_SIZE`
-- `HATIRLAF_WHISPER_VAD`
-
-The code uses Turkish-specific prompt text, VAD silence skipping, beam search, and word-level timing where supported.
-
-### Turkish NLP
-
-Implemented across:
-
-- `server/diary/processing/nlp.py`
-- `server/diary/processing/extractor.py`
-- `server/diary/processing/conflicts.py`
-
-Tools and techniques:
-
-- **Zeyrek** for Turkish morphology
-- Hugging Face Turkish NER for person/place/organization extraction when enabled
-- Rule-based named entity and time extraction as the no-download fallback
-- `dateparser` for absolute and relative date grounding
-- Optional `transformers` + `torch` runtime for the Turkish NER model
-
-The extractor creates clause-level hints:
-
-- resolved date, such as `2026-04-29`
-- time of day, such as `14:30`
-- time bucket: `Geçmiş`, `Şu An`, `Gelecek`
-- people
-- places
-- organizations
-- pronoun/reference candidates
-- inferred subject from Turkish verb conjugation
-- full clause text
-
-Turkish named entities:
-
-- Default model: `savasy/bert-base-turkish-ner-cased`
-- Labels consumed by Hatırlaf: `PER` -> person, `LOC` -> place, `ORG` -> organization
-- Alternative researched model: `akdeniz27/xlm-roberta-base-turkish-ner`
-- Enable with `HATIRLAF_USE_TURKISH_NER=1`
-- Override with `HATIRLAF_TURKISH_NER_MODEL=<huggingface-model-id>`
-
-The LLM prompt now treats NER people, places, and organizations as the
-authoritative entity candidate list. It may use grammatical subjects such as
-`Ben`, but it should not invent person or place names outside the transcript or
-NER hints.
-
-### Local LLM
-
-Implemented in `server/diary/processing/llm.py`.
-
-Default model path:
-
-```text
-Qwen2.5-7B-Instruct-Q4_K_M.gguf
-```
-
-Runtime:
-
-- **llama-cpp-python**
-- local GGUF weights
-- no cloud API
-
-The LLM converts NLP hints into structured event JSON. If the model is missing or fails, Hatırlaf falls back to deterministic NLP-only events.
-
-The LLM path uses:
-
-- free-form analysis
-- critique/repair pass
-- JSON-constrained output schema
-- post-processing to sanitize dates, people, locations, and event fields
-
-### Frontend
-
-No Node build step is required.
-
-Always-on files:
-
-- `clients/web/templates/diary/index.html`
-- `clients/web/static/js/app.js` — router; builds navigation from `/api/config/`
-- `clients/web/static/js/config.js` — feature flags
-- `clients/web/static/js/screens/home.js` — photos, recorder, composer
-- `clients/web/static/js/screens/entries.js` — the entry log
-- `clients/web/static/js/screens/settings.js` — text size and the app password
-- `clients/web/static/js/photos.js` — the photo board
-- `clients/web/static/js/textsize.js` — reader-controlled type scale
-- `clients/web/static/js/db.js`, `sync.js`, `audio.js`, `icons.js`
-- `clients/web/static/css/app.css` and `clients/web/static/css/modules/`
-
-Loaded but only routable while the NLP switch is on:
-
-- `screens/timeline.js`, `screens/recap.js`, `screens/memories.js`, `screens/review.js`
-
-Browser APIs:
-
-- MediaRecorder for audio capture
-- IndexedDB for the offline upload queue **and** the home-screen photos
-- Fetch API for REST calls
-
-### Design
-
-The palette is warm paper with muted sage and clay accents — no dark mode and no saturated colour, chosen to stay readable for people over 40 on a phone in poor light. Base type is 19px, buttons have a 56px minimum touch target, and every control carries a full-sentence explanation in body-sized text rather than a caption.
-
-Readers can scale every font in the app from **Ayarlar → Yazı Boyutu**. It works because each size token is a multiple of a single `--text-scale` custom property, so nothing in the layout has to know about it.
-
-## Setup
-
-Prerequisites:
-
-- Linux or compatible environment
-- Python 3.10+
-- `ffmpeg` for audio decoding
-- A modern browser
-- Enough RAM for selected models
-
-Two commands get you a running app:
-
-```bash
-make setup     # create .venv, install dependencies, run migrations
-make run       # serve on http://127.0.0.1:8000
-```
-
-`make` on its own lists every target. The common ones:
-
-| Command | What it does |
+| Özellik | Açıklama |
 |---|---|
-| `make setup` | Full install, including the local ML stack. Safe to re-run. |
-| `make setup-minimal` | Same, minus the multi-GB models — no STT, NER or LLM. |
-| `make run` | Migrate, then serve. `make run NLP=1` turns the understanding pipeline on; `make run PORT=9000` moves the port. |
-| `make test` | Backend test suite. |
-| `make seed` | Fill the local database with demo entries. |
-| `make mobile` | Start the Expo dev server for the mobile client. |
-| `make reset` | Delete the local database and recorded audio, after confirming. |
+| Sesli kayıt | Tek dokunuşla başlar, ara verilebilir, kaydedilir |
+| Cihaz üstü yazıya çevirme | `whisper.cpp` ile Türkçe, tamamen çevrimdışı |
+| Soru kütüphanesi | 10 konuda ~70 hazır hayat hikâyesi sorusu |
+| Fotoğraf | Ana sayfada tek kapak fotoğrafı (kameradan veya galeriden) |
+| Hatıra defteri | Tüm yazıları tek metin dosyası olarak dışa aktarma |
 
-Each target is a thin wrapper over `scripts/*.sh` or `manage.py`, so you can
-always drop down a level and run the underlying command directly.
+Hiçbir veri internete gönderilmez. Hesap, giriş, bulut yok.
 
-By default, `make setup` also installs the local ML stack used by the app:
+---
 
-- `faster-whisper`
-- `openai-whisper`
-- `transformers`
-- `torch`
-- `llama-cpp-python`
+## Yaşlı kullanıcı için tasarım kararları
 
-It also falls back to the main project virtualenv if a dedicated `vendor/savyar/.venv`
-is not present, so SAVYAR does not need a separate manual bootstrap step.
+Bunlar keyfi değil; her biri bilinen bir takılma noktasını kapatıyor:
 
-If you want a lighter install on a constrained machine, skip the ML stack:
+- **20 puntonun altında yazı yok**, dokunulabilir alanlar en az 72 piksel.
+- **Her ikonun yanında yazı var.** Simge tek başına bırakılmıyor.
+- **Gezinme derinliği en fazla iki.** Sekme, alt menü, hamburger menü yok.
+- **Ana buton her zaman ekranda**, listeyle birlikte kaymıyor.
+- **Boş ekran yok.** Ne anlatacağını bilemeyene uygulama soruyu kendisi sorar.
+- **İzin pencereleri habersiz açılmaz**; önce sade bir cümleyle anlatılır.
+  (Habersiz çıkan izin penceresinde refleksle "Reddet"e basılıyor.)
+- **Silme işlemlerinde onay butonu ikinci sırada** ve kırmızı.
+- **Hata mesajları teknik değil**: "Sunucu 503" değil, "İnternete
+  bağlanılamadı. Wi-Fi'nizi kontrol edip tekrar deneyin."
+- **Ekran kayıt sırasında kapanmaz** (wakelock), kayıt yarıda kesilmesin.
+- **Telefon karanlık moddayken bile** uygulama açık temada kalır; kontrast
+  düşmesin.
+
+---
+
+## Kurulum (telefona)
+
+Kuracak kişi genellikle çocuğu/torunu olacak. Sıra:
+
+1. `hatirla.apk` dosyasını telefona aktarın (kablo, WhatsApp, e-posta).
+2. Dosyaya dokunun. Android "bilinmeyen kaynak" uyarısı verirse
+   *İzin ver* deyin.
+3. Uygulamayı açın. Karşılama ekranı 4 adımda her şeyi halleder:
+   - Mikrofon izni
+   - Yazıya çevirme paketinin indirilmesi (**Wi-Fi'de yapın**, ~142 MB)
+   - Hazır
+4. Telefonun ayarlarından yazı boyutunu büyütmeye gerek yok; uygulama
+   zaten büyük. (Sistemden büyütülmüşse de bozulmaz.)
+
+**Önemli:** Yazıya çevirme paketi indirilmezse uygulama yine çalışır, ses
+kayıtları alınır — sadece yazıya çevrilmez. Paket sonradan Ayarlar'dan
+indirilebilir; bekleyen kayıtlar o zaman otomatik olarak çevrilir.
+
+---
+
+## Geliştirme
+
+### Ortam
+
+Bu makinede kurulu olanlar:
+
+```
+Flutter 3.44.1        /home/oktay/flutter
+JDK 21 (Temurin)      ~/jdk/jdk-21.0.12.1+1
+Android SDK 36        ~/Android/Sdk
+  ├── build-tools 36.0.0
+  ├── platform-tools
+  ├── ndk 29.0.13113456   (whisper.cpp bununla derleniyor)
+  └── cmake 3.22.1
+```
+
+Flutter bu yolları kalıcı olarak biliyor:
 
 ```bash
-make setup-minimal
+flutter config --android-sdk ~/Android/Sdk --jdk-dir ~/jdk/jdk-21.0.12.1+1
 ```
 
-Optional helper commands are still available if you want to reinstall or swap
-one backend later:
+> Sistemdeki JDK 25, Android Gradle Plugin ile uyumlu değil. Bu yüzden
+> ayrı bir JDK 21 kuruldu ve Flutter'a gösterildi. `JAVA_HOME`'u global
+> olarak değiştirmeye gerek yok.
+
+### Derleme
 
 ```bash
-./scripts/install_whisper.sh faster
-./scripts/install_whisper.sh openai
-./scripts/install_whisper.sh ner
-./scripts/install_whisper.sh all
+flutter build apk --debug      # sideload için
+flutter build apk --release    # imzalanmamış release (debug anahtarıyla)
 ```
 
-Run locally:
+İlk derleme **uzun sürer** (~10-15 dk): whisper.cpp dört ABI için
+kaynaktan derleniyor. Sonraki derlemeler hızlı.
+
+### Bellek — `tool/flutter.sh`
+
+Bu makinede 15 GB RAM var, `systemd-oomd` ve `earlyoom` **kapalı**. Yani
+bir derleyici kaçarsa araya girip onu öldürecek kimse yok; sistem
+kilitleniyor. Bir kez web derlemesinde oldu.
+
+Bu yüzden `flutter` doğrudan değil, tavan konmuş hâliyle çağrılıyor:
 
 ```bash
-make run
+tool/flutter.sh run
+tool/flutter.sh build apk --debug
 ```
 
-Open:
+Script işi bir `systemd` scope'una sokup cgroup sınırı koyuyor: 6 GB'da
+çekirdek yavaşlatmaya başlıyor, 8 GB'da süreç ölüyor. Ayrıca
+`DART_VM_OPTIONS=--old_gen_heap_size=4096` ile `dart2js`/`frontend_server`
+kendi tavanına çarpıp anlaşılır bir hata veriyor. Sınırlar
+`FLUTTER_MEM_HIGH` / `FLUTTER_MEM_MAX` ile değiştirilebilir.
 
-```text
-http://127.0.0.1:8000/
-```
+Gradle daemon'u bu scope'un dışında kalabildiği için onun sınırları ayrı,
+`android/gradle.properties` içinde: heap 3 GB, metaspace 768 MB, Kotlin
+daemon 1 GB, `org.gradle.workers.max=4`. (Önceki değerler `-Xmx4G` +
+2 GB metaspace idi; tek başına Gradle 6 GB'ı geçebiliyordu. 12 çekirdeğin
+hepsiyle whisper.cpp derlemek de ayrı bir kaynak yiyicisi.)
 
-Everything the app writes at runtime — the SQLite database, uploaded audio, the
-encryption key, collected static files — lands in `var/`. That directory is
-gitignored and disposable: delete it and `make run` builds it again.
-
-## Configuration
-
-Environment variables:
-
-| Variable | Default | Purpose |
-|---|---:|---|
-| `HATIRLAF_NLP_ENABLED` | `0` | **The switch.** Turns the entire understanding pipeline, its endpoints and its screens on or off |
-| `HATIRLAF_DEBUG` | `1` | Enables Django debug mode and permissive dev settings |
-| `HATIRLAF_SECRET_KEY` | generated | Django secret key; must be set in production |
-| `HATIRLAF_ALLOWED_HOSTS` | empty | Required when debug is off |
-| `HATIRLAF_DATABASE_URL` | SQLite | Optional PostgreSQL URL |
-| `HATIRLAF_HOST` | `127.0.0.1` | Dev server host used by `make run` |
-| `HATIRLAF_PORT` | `8000` | Dev server port used by `make run` |
-| `HATIRLAF_VAR_DIR` | `var/` | Where the database, media and keys are written |
-| `HATIRLAF_WHISPER_MODEL` | `large-v3-turbo` | Whisper model size/name |
-| `HATIRLAF_WHISPER_LANG` | `tr` | Transcription language |
-| `HATIRLAF_WHISPER_COMPUTE_TYPE` | `int8_float32` | faster-whisper compute type |
-| `HATIRLAF_WHISPER_DEVICE` | `cpu` | `cpu` or `cuda` |
-| `HATIRLAF_WHISPER_BEAM_SIZE` | `5` | Beam search width |
-| `HATIRLAF_WHISPER_VAD` | `1` | Enables VAD silence skipping |
-| `HATIRLAF_USE_TURKISH_NER` | `0` | Enables optional Hugging Face Turkish NER |
-| `HATIRLAF_TURKISH_NER_MODEL` | `savasy/bert-base-turkish-ner-cased` | Hugging Face token-classification model id |
-| `HATIRLAF_USE_BERTURK` | `0` | Backwards-compatible alias for `HATIRLAF_USE_TURKISH_NER` |
-| `HATIRLAF_LLM_MODEL_PATH` | `models/Qwen2.5-7B-Instruct-Q4_K_M.gguf` | Local Qwen GGUF file |
-| `HATIRLAF_LLM_N_CTX` | `4096` | LLM context window |
-| `HATIRLAF_LLM_N_GPU_LAYERS` | `-1` | GPU offload layers for llama.cpp |
-| `HATIRLAF_SETUP_MINIMAL` | `0` | Skip ML installs during `make setup` |
-| `HATIRLAF_PRELOAD_MODELS` | `1` | Warm-load STT and LLM at startup |
-| `HATIRLAF_SYNC_PROCESSING` | `0` | Run processing inline, mainly for tests |
-
-## API Overview
-
-All API routes are under `/api/`.
-
-| Method | Path | Purpose |
-|---|---|---|
-| `GET` | `/health/` | Liveness check, model warm-up progress, feature flags |
-| `GET` | `/config/` | Feature flags, used by both clients to build navigation |
-| `POST` | `/sessions/` | Upload audio/text session |
-| `GET` | `/sessions/` | List sessions |
-| `GET` | `/sessions/<id>/` | Session detail |
-| `PATCH` | `/sessions/<id>/` | Edit transcript |
-| `DELETE` | `/sessions/<id>/` | Delete session and audio file |
-| `POST` | `/sessions/<id>/process/` | Re-run processing |
-| `GET` | `/sessions/<id>/audio/` | Stream audio |
-
-The routes below are served **only while `HATIRLAF_NLP_ENABLED=1`**. With the switch off they return 404.
-
-| Method | Path | Purpose |
-|---|---|---|
-| `GET` | `/mentions/?session=<id>` | List mentions |
-| `POST` | `/mentions/<id>/resolve/` | Resolve mention conflict |
-| `GET` | `/nodes/` | List/search graph nodes |
-| `POST` | `/nodes/` | Create graph node |
-| `GET` | `/edges/` | List graph edges |
-| `GET` | `/timeline/` | Timeline feed |
-| `GET` | `/calendar/?month=YYYY-MM` | Calendar event buckets |
-| `GET` | `/recap/?month=YYYY-MM` | Monthly memory rollup |
-| `GET` | `/graph/` | Compact graph dump |
-
-Manual transcript upload:
+Kalıcı çözüm işletim sistemi tarafında — bir kez, `sudo` ile:
 
 ```bash
-curl -F "client_uuid=$(uuidgen)" \
-  -F "recorded_at=$(date -Iseconds)" \
-  -F "language=tr" \
-  -F "transcript=Dün Ahmet ile İstanbul'da buluştuk." \
-  http://127.0.0.1:8000/api/sessions/
+sudo systemctl enable --now systemd-oomd
 ```
 
-Edit and reprocess:
+O zaman RAM biterse çekirdek doğru süreci öldürür, masaüstü ayakta kalır.
 
-```bash
-curl -X PATCH \
-  -H "Content-Type: application/json" \
-  -d '{"transcript":"Bugün Ayşe ile sahilde yürüdük."}' \
-  http://127.0.0.1:8000/api/sessions/42/
+### Web derlenmiyor — ve derlenemez
 
-curl -X POST http://127.0.0.1:8000/api/sessions/42/process/
-```
+`flutter build web` bu projede zaten anında hata veriyor (`web/` klasörü
+yok). Oluşturmaya da çalışmayın: uygulamanın çekirdeği web'de **yok**.
 
-## Deployment Readiness
-
-### What Is Already In Good Shape
-
-- Backend API is separated from the client and can serve a future mobile app.
-- SQLite and PostgreSQL paths already exist.
-- Audio upload, transcript editing, reprocessing, delete cascade, and calendar APIs exist.
-- STT and LLM can run locally without cloud calls.
-- The app degrades when heavy ML dependencies are missing.
-- Processing status is persisted on the session row.
-- Calendar can show NLP-derived events before LLM eventification finishes.
-- Tests cover key NLP/calendar behavior.
-
-### What Must Change Before Production
-
-- Add authentication.
-- Add per-user ownership to every session, node, mention, edge, and audio file.
-- Replace permissive DRF permissions with user-scoped access checks.
-- Set `HATIRLAF_DEBUG=0`.
-- Set a stable `HATIRLAF_SECRET_KEY`.
-- Configure `HATIRLAF_ALLOWED_HOSTS`.
-- Restrict CORS.
-- Use PostgreSQL instead of SQLite.
-- Serve media securely.
-- Add HTTPS.
-- Add backup and restore workflows.
-- Move background processing to a durable queue such as Celery/RQ/Django-Q.
-- Add retry handling for failed eventification.
-- Add observability: logs, metrics, error reporting, health checks.
-- Add rate limits and upload validation.
-- Add privacy controls: export, delete account, data retention, consent text.
-- Consider encryption at rest for transcripts/audio.
-
-### Background Job Risk
-
-The current background processing uses daemon threads. That is acceptable for local MVP use, but not durable. If the process restarts during transcription or eventification, the work can be interrupted.
-
-For deployment, use:
-
-- Celery + Redis/RabbitMQ
-- RQ + Redis
-- Django-Q
-- a managed task queue
-
-Each task should be idempotent and restartable from `Session.status` and `eventification_status`.
-
-### Model Hosting Risk
-
-Running Whisper and Qwen locally is private but resource-heavy.
-
-Deployment options:
-
-- Run models on the same backend host for simplicity.
-- Put STT and LLM behind internal worker services.
-- Use GPU acceleration for better latency.
-- Use smaller Whisper models for mobile-ish responsiveness.
-- Keep deterministic NLP fallback as a reliability path.
-
-### Security Risk
-
-The current app has no user model integration and no permissions. A deployed version must assume diary data is highly sensitive.
-
-Minimum production security baseline:
-
-- Authenticated users
-- User-scoped querysets
-- Private media storage
-- CSRF/session strategy or token strategy
-- HTTPS only
-- Encrypted backups
-- Secrets managed outside git
-- Explicit privacy policy
-
-## Pros And Cons
-
-### Pros
-
-- Local-first and privacy-oriented.
-- No cloud LLM or cloud STT is required.
-- Works with both voice and typed entries.
-- Turkish-specific relative date handling.
-- Calendar remains useful even before the LLM finishes.
-- REST backend is reusable by a future mobile app.
-- Deterministic fallback keeps the app functional without large model files.
-- Simple deployment story for local demos.
-- Data model can grow into a personal knowledge graph.
-
-### Cons
-
-- Heavy local models need RAM, disk, and CPU/GPU capacity.
-- Daemon-thread jobs are not production-durable.
-- No multi-user/auth layer yet.
-- Turkish NLP is heuristic in places and will need real-world evaluation.
-- Local LLM output can still be imperfect and needs guardrails.
-- Browser MediaRecorder is not the final mobile recording stack.
-- SQLite is not appropriate for multi-user production.
-- No encrypted storage yet.
-- No packaged mobile app yet.
-
-## Future Mobile App Plan
-
-The future mobile app should be treated as a first-class client of the same backend, not a rewrite of the backend.
-
-Recommended stack:
-
-- Expo / React Native
-- `expo-av` or the modern Expo audio APIs for recording
-- `expo-file-system` for local audio files
-- `expo-sqlite` for offline queue and cached sessions
-- React Query or a small custom sync layer
-- SecureStore for auth tokens
-- Push notifications later for reminders, not needed for MVP
-
-Mobile client replacements:
-
-| Current browser piece | Mobile replacement |
+| Paket | Web |
 |---|---|
-| `MediaRecorder` | `expo-av` / Expo audio recording |
-| IndexedDB queue | `expo-sqlite` |
-| Hash router | React Navigation |
-| Static CSS UI | React Native components |
-| Browser fetch | fetch/Axios with auth token |
-| Browser audio player | Expo audio playback |
+| `whisper_ggml` | ✗ — whisper.cpp native, sadece android/ios/linux/macos/windows |
+| `path_provider` | ✗ — tarayıcıda dosya sistemi yok |
+| `record`, `just_audio`, `image_picker`, `share_plus` | ✓ |
 
-Backend APIs to keep stable:
+Yani yazıya çevirme de, hatıraların diske yazılması da düşer; geriye
+uygulama kalmaz. `flutter create . --platforms web` demek, saatlerce
+derleyip sonuçta çalışmayan bir şey elde etmek olur.
 
-- `POST /api/sessions/`
-- `GET /api/sessions/`
-- `PATCH /api/sessions/<id>/`
-- `POST /api/sessions/<id>/process/`
-- `GET /api/calendar/?month=YYYY-MM`
-- `GET /api/mentions/?session=<id>`
-- `POST /api/mentions/<id>/resolve/`
+Web'i makine genelinde kapatmadım, çünkü `boşanmakul` projesinin `web/`
+klasörü var ve `flutter config --no-enable-web` hepsini birden etkilerdi.
 
-Mobile-specific backend work needed:
+### Gerçek telefona kurma
 
-- Authentication tokens
-- Per-device idempotent upload handling
-- Better upload progress handling
-- File cleanup for abandoned uploads
-- User-specific sync cursors
-- Pagination
-- Conflict resolution UX optimized for touch
-- Offline-first reconciliation rules
+İki yol var.
 
-Mobile product questions to settle:
-
-- Is all processing self-hosted on the user's computer, or on a private server?
-- Will mobile upload audio to a home server, a cloud VM, or an on-device model?
-- Should transcripts/audio be encrypted before upload?
-- Should the app support multiple devices per user?
-- Should event extraction happen immediately or when the phone is charging/on Wi-Fi?
-
-## Privacy Model
-
-Current privacy posture:
-
-- Audio and transcripts stay on the server you run.
-- The LLM uses local GGUF weights.
-- No cloud API is required by the app code.
-- SQLite database and media files are local files.
-
-Current privacy gaps:
-
-- No app-level encryption.
-- No user isolation.
-- No audited delete/export workflow.
-- No production privacy policy.
-- Optional ML dependencies may download model weights during installation.
-
-For a shipped mobile app, privacy should be a product feature, not just an implementation detail.
-
-## Testing
-
-Run the Django test suite:
+**Kablo varsa** (geliştirirken bunu kullanın):
 
 ```bash
-make test
+tool/flutter.sh build apk --release --split-per-abi
+tool/telefon.sh
 ```
 
-Tests that exercise the understanding pipeline declare it explicitly, because
-it is off by default:
+`tool/telefon.sh` telefonun ABI'sini kendisi okuyup doğru APK'yi kuruyor.
+Telefonda önce geliştirici seçenekleri açılmalı: *Ayarlar > Telefon
+hakkında > Yapı numarası*'na 7 kez dokunun, sonra *Geliştirici seçenekleri
+> USB hata ayıklama*'yı açın. Kablo veri kablosu olmalı; birçok şarj
+kablosunda veri hattı yok, telefon hiç görünmez.
 
-```python
-@override_settings(HATIRLAF_NLP_ENABLED=True)
-class CalendarApiTests(TestCase):
-    ...
+Kod değiştirirken hot reload için kablo takılıyken:
+
+```bash
+tool/flutter.sh run --release   # ya da hot reload icin --debug
 ```
 
-Current tests cover:
+**Kablo yoksa** (telefonu kuracak kişi uzaktaysa): APK'yi WhatsApp,
+e-posta veya bir bulut klasörüyle gönderin. Kurulum adımları yukarıdaki
+*Kurulum (telefona)* bölümünde.
 
-- both sides of the NLP switch: which endpoints are served, which session
-  fields are serialised, and which stages the pipeline runs
-  (`diary/tests/test_feature_flags.py`)
-- Turkish relative date extraction
-- pronoun/reference detection
-- subject inference from Turkish verb conjugation
-- calendar fallback behavior while eventification is running
-- NLP-only eventification text preservation
-- LLM cache lifecycle cleanup
-- encrypted storage and the privacy lock
+**`--split-per-abi` neden:** whisper.cpp üç ABI için ayrı ayrı derleniyor,
+hepsi tek APK'de olunca dosya 123 MB oluyor. Ayrılınca telefonun ihtiyacı
+olan tek APK'yi gönderiyorsunuz. Hangisi olduğundan emin değilseniz
+`arm64-v8a`; son ~8 yılın neredeyse bütün telefonları bu.
 
-Recommended next tests:
+> Release APK **debug anahtarıyla** imzalanıyor. Sideload için sorun değil,
+> ama telefonda başka bir anahtarla imzalanmış eski bir sürüm varsa
+> kurulum reddedilir — önce onu kaldırın. Play Store'a çıkılacaksa gerçek
+> bir `signingConfig` gerekir.
 
-- API auth and permissions, after auth is added
-- audio upload validation
-- reprocessing idempotency
-- background job retry behavior
-- mobile sync conflict cases
-- calendar edge cases across time zones and month boundaries
+### Emülatörde test (PC)
 
-## Repository Layout
-
-Five top-level directories, each with one job.
-
-```text
-hatırlaf/
-├── Makefile              the entrypoint — `make` lists everything
-├── README.md
-├── docs/                 written docs and the original project brief
-│   ├── structure.md      file-by-file tour of the tree
-│   └── project-kickoff.pdf
-├── server/               the Django project — the only thing that owns data
-│   ├── manage.py
-│   ├── requirements.txt
-│   ├── config/           project settings, root URLs, WSGI/ASGI
-│   └── diary/            the single Django app
-│       ├── models.py     Session, Mention, Node, Edge
-│       ├── serializers.py
-│       ├── urls.py
-│       ├── views/        one module per API surface
-│       │   ├── api_sessions.py
-│       │   ├── api_analytics.py    NLP-only, gated
-│       │   ├── api_config.py       feature flags + the gates
-│       │   └── web.py              serves the web client's shell
-│       ├── pipeline/     what happens to an entry, and when
-│       │   ├── flags.py            the NLP switch
-│       │   ├── stages.py           ordered steps, each with its flag
-│       │   └── runner.py           threads and failure handling
-│       ├── processing/   the work each stage does
-│       │   ├── transcription.py    Whisper
-│       │   ├── nlp*.py             Turkish morphology, NER, mentions
-│       │   ├── extractor.py        deterministic event pre-pass
-│       │   ├── conflicts.py        ambiguity detection
-│       │   ├── llm.py              local llama.cpp eventification
-│       │   └── savyar_adapter.py   bridge to vendor/savyar
-│       ├── services/     orchestration above the ORM
-│       ├── management/   custom manage.py commands (seed_demo)
-│       ├── migrations/
-│       └── tests/
-├── clients/              two front ends, one REST API
-│   ├── web/              the browser SPA, served by Django
-│   │   ├── templates/    the HTML shell
-│   │   └── static/       css/ and js/, no build step
-│   └── mobile/           the Expo / React Native app
-│       ├── App.js
-│       └── src/          screens/, services/, ui/
-├── vendor/               third-party source checked in, not our code
-│   └── savyar/           Turkish morphological analyser
-├── scripts/              setup.sh, run.sh, install_whisper.sh, and the
-│                         savyar bridge the backend shells out to
-├── models/               large model weights (gitignored)
-│   └── Qwen2.5-7B-Instruct-Q4_K_M.gguf
-└── var/                  everything written at runtime (gitignored)
-    ├── db.sqlite3
-    ├── media/            uploaded audio
-    ├── staticfiles/      collectstatic output
-    └── encryption.key
+```bash
+tool/emulator.sh     # ilk seferde AVD'yi kurar, sonra başlatır
+tool/flutter.sh run  # emülatöre yükler
 ```
 
-The two rules that keep it navigable:
+`tool/emulator.sh` `hatirla` adında bir AVD kuruyor: Android 36
+(`google_apis`, x86_64), Pixel 6 profili, 2 GB RAM, 6 GB depolama.
+Mikrofon açık (`hw.audioInput=yes`) — bu uygulamada şart, PC'nin mikrofonu
+emülatöre geçiyor, kayıt gerçekten test edilebiliyor.
 
-- **`server/config/` is configuration; `server/diary/` is the application.**
-  Nothing about the diary belongs in `config/`, and no Django wiring belongs
-  in `diary/`.
-- **`var/` and `models/` hold no source.** Deleting either loses only data or
-  downloads, never work. That is why neither is committed.
+`--sil` AVD'yi silip sıfırdan kurar. Grafik takılırsa:
 
-## Suggested Roadmap
+```bash
+EMU_GPU=swiftshader_indirect tool/emulator.sh
+```
 
-Near term:
+Emülatör logu `/tmp/emulator-hatirla.log`.
 
-- Add authentication and user ownership.
-- Convert daemon-thread processing to a real queue.
-- Add pagination and sync cursors.
-- Harden upload validation.
-- Add production settings.
-- Add API tests around all session lifecycle endpoints.
+Emülatörde **çalışmayan** tek şey pratikte kamera: sanal kamera var ama
+gerçek fotoğraf vermiyor, galeriden seçmek daha kolay. Whisper modeli
+emülatöre de ~142 MB inecek, ilk açılışta Wi-Fi hızında bekleyin.
 
-Mobile MVP:
+### Klasör adındaki Türkçe karakter
 
-- Build Expo client against current REST API.
-- Implement local SQLite queue.
-- Add authenticated session upload.
-- Add calendar and entries views.
-- Add conflict review UI.
-- Test offline upload and retry flows.
+Proje klasörünün adında `ı` var (`hatırlaf`). Gradle bununla sorun
+yaşamıyor ama **Dart analiz sunucusu çöküyor** (LSP çerçevelemesi
+karakter/bayt karıştırıyor):
 
-Production:
+```
+FormatException: Unexpected end of input
+```
 
-- PostgreSQL
-- private media storage
-- HTTPS
-- background workers
-- monitoring
-- backups
-- privacy/export/delete flows
-- mobile packaging and store release process
+Yani `flutter analyze` ve IDE'deki kod tamamlama bu klasörde çalışmaz.
+Çözüm klasörü ASCII bir isme almak:
+
+```bash
+mv ~/Masaüstü/code/flutter/hatırlaf ~/Masaüstü/code/flutter/hatirla
+```
+
+Kod ve derleme bundan etkilenmez.
+
+### Yapı
+
+```
+lib/
+├── main.dart                     açılış, yerelleştirme, yazı ölçeği sınırı
+├── theme.dart                    renkler, ölçüler, buton/yazı temaları
+├── data/prompts.dart             soru kütüphanesi
+├── models/memory.dart            Memory + JSON
+├── services/
+│   ├── store.dart                hatıraların tek kaynağı (JSON + dosyalar)
+│   ├── cover_photo.dart          ana sayfadaki tek kapak fotoğrafı
+│   ├── recorder.dart             mikrofon kaydı
+│   ├── player.dart               tek oynatıcı
+│   ├── whisper_model_manager.dart model indirme / kalite
+│   └── transcriber.dart          yazıya çevirme kuyruğu
+├── screens/                      welcome, home, record, memory, question,
+│                                 settings, help
+├── widgets/                      BuyukButon, MemoryCard, dialoglar
+└── utils/format.dart             tarih/süre metinleri
+```
+
+Durum yönetimi için ek paket yok: servisler `ChangeNotifier` tekilleri,
+arayüz `ListenableBuilder` ile dinliyor.
+
+### Veri nerede duruyor
+
+```
+<app documents>/
+├── hatiralar.json           dizin (atomik yazılır)
+├── hatiralar.json.yedek     bir önceki sürüm
+├── kapak.jpg                ana sayfadaki tek fotoğraf
+└── hatiralar/<uuid>/
+    └── ses.m4a
+```
+
+Kapak fotoğrafı dizine girmiyor; varlığı doğrudan dosyadan okunuyor.
+Hatıralara bağlı olmadığı için `hatiralar.json` bozulsa bile yerinde
+kalır. Hep aynı ada yazıldığından Flutter'ın resim önbelleği eski kareyi
+gösterirdi; `CoverPhoto` her değişimde önbelleği boşaltıp bir sürüm
+sayacı artırıyor.
+
+Dosya yolları **göreceli** tutulur. Android'de uygulama klasörünün mutlak
+yolu yedekten geri yükleme sonrası değişebiliyor; mutlak yol kaydetmek
+eski hatıraları "kayıp" gösterirdi.
+
+`hatiralar.json` bozulursa `store.dart` önce yedeği, o da olmazsa
+klasörleri tarayarak hatıraları geri kurar. Ses dosyası duruyorsa hatıra
+kaybolmaz.
+
+Whisper modeli `getApplicationSupportDirectory()` altında tutulur
+(`ggml-base.bin`). Yarım inen dosya `.yarim` uzantısıyla yazılır, ancak
+tamamlanınca asıl adına taşınır — yarım model yüklemek whisper.cpp'yi
+çökertiyor.
+
+---
+
+## Bilinen sınırlar
+
+- **Web sürümü mümkün değil.** `whisper_ggml` ve `path_provider` web'i
+  desteklemiyor; ayrıntı yukarıda.
+- **iOS derlenmedi.** Kod iOS'a hazır ama `flutter create --platforms ios`
+  ve bir Mac gerekiyor.
+- **Uzun kayıtlar yavaş çevrilir.** Eski bir telefonda 10 dakikalık bir
+  hatıra `base` modelle ~5-10 dakika sürebilir. Kuyruk arka planda
+  çalışır, kullanıcı beklemek zorunda değil — ama uygulama açık kalmalı.
+- **Release APK debug anahtarıyla imzalanıyor.** Play Store'a çıkılacaksa
+  `android/app/build.gradle.kts` içine gerçek bir `signingConfig` gerekir.
+- **Kayıt arka plana alınırsa** (uygulamadan çıkılırsa) Android 14+ süreci
+  öldürebilir. Ekran wakelock ile açık tutuluyor ama foreground service
+  eklenmedi.
+
+---
+
+## whisper_ggml'in compileSdk çakışması
+
+`whisper_ggml` 2.6.0 kendi `android/build.gradle` dosyasında `compileSdk 34`
+yazıyor, ama bağımlılığı `ffmpeg_kit_flutter_new_min` 2.1.0 kendisine bağlı
+modüllerin **35+** ile derlenmesini şart koşuyor. İkisi çakışınca derleme
+şurada kırılıyor:
+
+```
+Execution failed for task ':whisper_ggml:checkDebugAarMetadata'
+> Dependency ':ffmpeg_kit_flutter_new_min' requires ... version 35 or later
+  :whisper_ggml is currently compiled against android-34.
+```
+
+Uygulamanın kendi `compileSdk = 36` değeri eklenti modüllerine geçmiyor.
+`android/build.gradle.kts` içindeki `subprojects` bloğu 36'nın altında kalan
+modülleri yukarı çekiyor.
+
+Bu blok **`evaluationDependsOn(":app")` bloğundan önce** durmalı. Sonra
+konursa projeler çoktan değerlendirilmiş oluyor ve Gradle şunu diyor:
+
+```
+Cannot run Project.afterEvaluate(Action) when the project is already evaluated.
+```
+
+---
+
+## Neden `permission_handler` yok
+
+`permission_handler_android` 14.1.0 `compileSdk = 37` istiyor. Google bu
+platformu `platforms/android-37.0` adıyla yayınlıyor, AGP 9 ise
+`android-37` arıyor ve derleme şu hatayla kırılıyor:
+
+```
+Failed to find target with hash string 'android-37' in: ~/Android/Sdk
+```
+
+Mikrofon iznini zaten `record` paketi istiyor. Geriye kalan iki şey —
+"uygulama ayarlarını aç" ve "bir daha sorma seçilmiş mi" — `MainActivity.kt`
+içinde ~40 satırlık bir MethodChannel ile çözüldü
+(`lib/services/permissions.dart`). Böylece koca bir eklenti ve onunla gelen
+derleme kırılganlığı projeden çıktı.
+
+`kaliciReddedildiMi()` yalnızca bir izin isteği **reddedildikten sonra**
+çağrılmalı: `shouldShowRequestPermissionRationale()` ilk istekten önce de
+`false` döndüğü için aksi halde yanlış pozitif verir.
