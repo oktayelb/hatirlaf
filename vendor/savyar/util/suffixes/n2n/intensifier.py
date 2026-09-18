@@ -1,1 +1,0 @@
-##buraya pekiştirme gelecek
