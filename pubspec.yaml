@@ -28,6 +28,9 @@ dependencies:
   share_plus: ^13.3.0
   shared_preferences: ^2.5.5
 
+  # Guncelleme APK'sinin ozetini dogrulamak icin
+  crypto: ^3.0.7
+
   # Yardimci
   intl: ^0.20.2
   uuid: ^4.6.0

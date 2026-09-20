@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:audio_session/audio_session.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -10,6 +12,7 @@ import 'screens/welcome_screen.dart';
 import 'services/cover_photo.dart';
 import 'services/store.dart';
 import 'services/transcriber.dart';
+import 'services/updater.dart';
 import 'services/whisper_model_manager.dart';
 import 'theme.dart';
 
@@ -53,6 +56,10 @@ Future<void> main() async {
 
   // Yarim kalmis yaziya cevirme islerini devral.
   Transcriber.instance.resumePending();
+
+  // Guncelleme denetimi. Bilerek beklenmiyor: agi olmayan bir telefonda
+  // acilisi saniyelerce geciktirmesin. Hata verirse sessizce yutar.
+  unawaited(Guncelleyici.instance.baslat());
 
   runApp(HatirlaApp(karsilamaTamam: karsilamaTamam));
 }

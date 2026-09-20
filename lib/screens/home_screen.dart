@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -6,7 +7,10 @@ import 'package:image_picker/image_picker.dart';
 import '../data/prompts.dart';
 import '../models/memory.dart';
 import '../services/cover_photo.dart';
+import '../services/recorder.dart';
 import '../services/store.dart';
+import '../services/transcriber.dart';
+import '../services/updater.dart';
 import '../services/whisper_model_manager.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
@@ -15,6 +19,7 @@ import 'memory_screen.dart';
 import 'question_screen.dart';
 import 'record_screen.dart';
 import 'settings_screen.dart';
+import 'update_screen.dart';
 
 /// Ana ekran: hatira listesi + her zaman gorunen buyuk kayit butonu.
 ///
@@ -148,6 +153,7 @@ class _HomeScreenState extends State<HomeScreen> {
         top: false,
         child: Column(
           children: <Widget>[
+            const _GuncellemeGozcusu(),
             const _ModelUyarisi(),
             Expanded(
               child: ListenableBuilder(
@@ -510,4 +516,101 @@ class _ModelUyarisi extends StatelessWidget {
       },
     );
   }
+}
+
+/// Guncelleme ekranini **dogru anda** acan gorunmez gozcu.
+///
+/// Guncellemenin hazir olmasi yetmez; sorulacak anin da uygun olmasi
+/// gerekir. Kurulum uygulamanin surecini degistirir, yani o sirada suren
+/// her sey yarida kalir. Bu yuzden dort kapi var:
+///
+///  1. Ana ekran ustte mi? (Kayit ekrani, hatira ekrani, ayarlar acikken
+///     kullanicinin isini boluyor olurduk.)
+///  2. Kayit suruyor mu? Anlatilan bir hatira asla bolunmez.
+///  3. Yaziya cevirme suruyor mu? Kurulum sirasinda surec olduruldugu
+///     icin yarim kalan cevirme kaybolur.
+///  4. Erteleme suresi doldu mu? ([Guncelleyici.sorulabilir])
+///  5. Guncelleme, uygulama acildiginda **zaten** hazir miydi?
+///     ([Guncelleyici.acilistaHazirdi]) Kullanimin ortasinda inen bir
+///     guncelleme ekrani basmaz; hatirasina bakan biri birden tam ekran
+///     bir soruyla karsilasmasin. O APK diskte bekler, soru bir sonraki
+///     acilista sorulur.
+///
+/// Hicbiri uygun degilse hicbir sey yapilmaz - guncelleme diskte bekler
+/// ve bir sonraki uygun anda sorulur.
+class _GuncellemeGozcusu extends StatefulWidget {
+  const _GuncellemeGozcusu();
+
+  @override
+  State<_GuncellemeGozcusu> createState() => _GuncellemeGozcusuState();
+}
+
+class _GuncellemeGozcusuState extends State<_GuncellemeGozcusu>
+    with WidgetsBindingObserver {
+  /// Ayni acilista tekrar tekrar acilmasin.
+  bool _acildi = false;
+
+  late final Listenable _dinlenecekler = Listenable.merge(<Listenable>[
+    Guncelleyici.instance,
+    Transcriber.instance,
+    Recorder.instance,
+  ]);
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _dinlenecekler.addListener(_belkiAc);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _belkiAc());
+  }
+
+  @override
+  void dispose() {
+    _dinlenecekler.removeListener(_belkiAc);
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState durum) {
+    if (durum != AppLifecycleState.resumed) return;
+    // On plana donmek yeni bir oturum sayilir: arka planda inmis bir
+    // guncelleme varsa artik sorulabilir.
+    Guncelleyici.instance.oturumaGirildi();
+    // Uygulama gunlerce arka planda kalmis olabilir; donunce yeniden bak.
+    unawaited(Guncelleyici.instance.degerlendir());
+    _belkiAc();
+  }
+
+  void _belkiAc() {
+    if (_acildi || !mounted) return;
+    if (!Guncelleyici.instance.sorulabilir) return;
+    if (!Guncelleyici.instance.acilistaHazirdi) return;
+    if (Recorder.instance.durum != KayitDurumu.bos) return;
+    if (Transcriber.instance.mesgul) return;
+
+    // Cizim sirasinda gezinme yapilamaz, bu yuzden kareden sonraya
+    // birakiyoruz. Ama dikkat: [addPostFrameCallback] yalnizca **bir kare
+    // cizilirse** calisir. Durgun bir ana ekranda (animasyon yok, liste
+    // kaymiyor) Flutter kare uretmez ve geri cagirma sonsuza kadar
+    // beklerdi - guncelleme inmis olur, ekran hic acilmazdi.
+    // [ensureVisualUpdate] gerekirse bir kare planlayarak bunu onler.
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (_acildi || !mounted) return;
+      // Ana ekran en ustte degilse kullanicinin isini bolmeyelim.
+      if (ModalRoute.of(context)?.isCurrent != true) return;
+      // Beklerken kayit baslamis olabilir.
+      if (Recorder.instance.durum != KayitDurumu.bos) return;
+      if (Transcriber.instance.mesgul) return;
+
+      _acildi = true;
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(builder: (_) => const UpdateScreen()),
+      );
+    });
+    WidgetsBinding.instance.ensureVisualUpdate();
+  }
+
+  @override
+  Widget build(BuildContext context) => const SizedBox.shrink();
 }
