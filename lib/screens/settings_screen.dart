@@ -6,11 +6,13 @@ import 'package:share_plus/share_plus.dart';
 import '../models/memory.dart';
 import '../services/permissions.dart';
 import '../services/store.dart';
+import '../services/updater.dart';
 import '../services/whisper_model_manager.dart';
 import '../theme.dart';
 import '../utils/format.dart';
 import '../widgets/common.dart';
 import 'help_screen.dart';
+import 'update_screen.dart';
 
 /// Ayarlar.
 ///
@@ -163,11 +165,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
               'Mikrofon ve kamera izinlerini buradan açıp kapatabilirsiniz.',
               style: TextStyle(fontSize: 19, color: HatirlaColors.inkSoft),
             ),
+            const SizedBox(height: 30),
+
+            const BolumBasligi('Uygulama Sürümü',
+                ikon: Icons.system_update_rounded),
+            const SizedBox(height: 14),
+            const _GuncellemeBolumu(),
             const SizedBox(height: 34),
 
             const Center(
               child: Text(
-                'hatırlaf • sürüm 1.0\nSesiniz telefonunuzdan dışarı çıkmaz.',
+                'Sesiniz telefonunuzdan dışarı çıkmaz.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                     fontSize: 18, height: 1.5, color: HatirlaColors.inkSoft),
@@ -416,5 +424,149 @@ class _BilgiKutusu extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+/// Surum ve guncelleme durumu.
+///
+/// Bu bolum yasli kullanici icin degil, uygulamayi kuran cocugu/torunu
+/// icin. Normal kullanimda kimsenin buraya bakmasi gerekmez: guncelleme
+/// zaten kendiliginden iniyor ve hazir olunca bir kez soruluyor. Burada
+/// **ne olup bittigini gorebilmek** icin var - "neden guncellenmedi?"
+/// sorusunun cevabi uzaktan telefonla degil, buradan okunabilsin.
+class _GuncellemeBolumu extends StatefulWidget {
+  const _GuncellemeBolumu();
+
+  @override
+  State<_GuncellemeBolumu> createState() => _GuncellemeBolumuState();
+}
+
+class _GuncellemeBolumuState extends State<_GuncellemeBolumu> {
+  bool _denetleniyor = false;
+
+  Future<void> _denetle() async {
+    setState(() => _denetleniyor = true);
+    try {
+      await Guncelleyici.instance.degerlendir(elle: true);
+      if (!mounted) return;
+      final Guncelleyici g = Guncelleyici.instance;
+      if (g.asama == GuncellemeAsamasi.hazir) {
+        await Navigator.of(context).push(
+          MaterialPageRoute<void>(builder: (_) => const UpdateScreen()),
+        );
+      } else if (g.asama == GuncellemeAsamasi.bos && g.hata == null) {
+        if (!mounted) return;
+        kisaMesaj(context, 'En son sürümü kullanıyorsunuz.');
+      }
+    } finally {
+      if (mounted) setState(() => _denetleniyor = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: Guncelleyici.instance,
+      builder: (BuildContext context, _) {
+        final Guncelleyici g = Guncelleyici.instance;
+        final bool iniyor = g.asama == GuncellemeAsamasi.indiriliyor;
+        final bool hazir = g.asama == GuncellemeAsamasi.hazir;
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            _BilgiKutusu(
+              satirlar: <(String, String)>[
+                (
+                  'Kurulu sürüm',
+                  g.mevcutSurumAdi.isEmpty
+                      ? '—'
+                      : '${g.mevcutSurumAdi} (${g.mevcutSurumKodu})'
+                ),
+                ('Son denetim', _denetimZamani(g.sonDenetim)),
+                if (g.bilgi != null && g.bilgi!.surumKodu > g.mevcutSurumKodu)
+                  ('Yeni sürüm', g.bilgi!.surumAdi),
+                if (g.bilgi != null && g.bilgi!.surumKodu > g.mevcutSurumKodu)
+                  ('İndirilecek', '${Bicim.boyut(g.bilgi!.boyut)}'
+                      ' (${g.bilgi!.abi})'),
+              ],
+            ),
+            if (iniyor) ...<Widget>[
+              const SizedBox(height: 16),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: LinearProgressIndicator(
+                  value: g.ilerleme,
+                  minHeight: 18,
+                  backgroundColor: HatirlaColors.paperDark,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'İniyor: ${Bicim.boyut(g.inenBayt)} / '
+                '${Bicim.boyut(g.toplamBayt)}',
+                style: const TextStyle(fontSize: 20, height: 1.4),
+              ),
+              const SizedBox(height: 12),
+              CerceveliButon(
+                yazi: 'İndirmeyi Durdur',
+                ikon: Icons.stop_rounded,
+                renk: HatirlaColors.record,
+                onPressed: Guncelleyici.instance.indirmeyiDurdur,
+              ),
+            ] else if (hazir) ...<Widget>[
+              const SizedBox(height: 14),
+              BuyukButon(
+                yazi: 'Şimdi Güncelle',
+                altYazi: 'Yeni sürüm indirildi, kurulmayı bekliyor',
+                ikon: Icons.download_done_rounded,
+                renk: HatirlaColors.confirm,
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(builder: (_) => const UpdateScreen()),
+                ),
+              ),
+            ] else ...<Widget>[
+              const SizedBox(height: 14),
+              CerceveliButon(
+                yazi: _denetleniyor ? 'Bakılıyor…' : 'Güncelleme Var mı?',
+                ikon: Icons.refresh_rounded,
+                onPressed: _denetleniyor ? null : _denetle,
+              ),
+            ],
+            if (g.hata != null) ...<Widget>[
+              const SizedBox(height: 14),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFF4DB),
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: const Color(0xFFD9A400), width: 2),
+                ),
+                child: Text(
+                  g.hata!,
+                  style: const TextStyle(fontSize: 19, height: 1.4),
+                ),
+              ),
+            ],
+            const SizedBox(height: 12),
+            const Text(
+              'Güncellemeler kendiliğinden iner (yaklaşık 22 MB). '
+              'Hazır olduğunda bir kez sorulur.',
+              style: TextStyle(fontSize: 19, color: HatirlaColors.inkSoft),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  static String _denetimZamani(DateTime? t) {
+    if (t == null) return 'hiç';
+    final Duration gecen = DateTime.now().difference(t);
+    if (gecen.isNegative) return Bicim.gunlukTarih(t);
+    if (gecen.inMinutes < 1) return 'az önce';
+    if (gecen.inHours < 1) return '${gecen.inMinutes} dakika önce';
+    if (gecen.inHours < 24) return '${gecen.inHours} saat önce';
+    return '${Bicim.gunlukTarih(t)}, ${Bicim.saat(t)}';
   }
 }
