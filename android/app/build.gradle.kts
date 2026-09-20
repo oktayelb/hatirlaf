@@ -1,7 +1,20 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("dev.flutter.flutter-gradle-plugin")
 }
+
+// Yayin imza anahtari. `android/key.properties` depoda yok (ve olmamali);
+// yedekten gelir. Yoksa derleme kirilmasin diye asagida debug anahtarina
+// dusuyoruz - ama o APK telefonlara **guncelleme olarak kurulamaz**.
+val imzaAyarlari = Properties().apply {
+    val dosya = rootProject.file("key.properties")
+    if (dosya.exists()) dosya.inputStream().use { load(it) }
+}
+val imzaVar = imzaAyarlari.getProperty("storeFile")?.let {
+    rootProject.file(it).exists()
+} == true
 
 android {
     namespace = "com.hatirla.hatirla"
@@ -26,9 +39,29 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        if (imzaVar) {
+            create("yayin") {
+                storeFile = rootProject.file(imzaAyarlari.getProperty("storeFile"))
+                storePassword = imzaAyarlari.getProperty("storePassword")
+                keyAlias = imzaAyarlari.getProperty("keyAlias")
+                keyPassword = imzaAyarlari.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (imzaVar) {
+                signingConfigs.getByName("yayin")
+            } else {
+                logger.warn(
+                    "UYARI: android/key.properties yok. Release APK debug " +
+                        "anahtariyla imzalaniyor; telefonlara guncelleme " +
+                        "olarak KURULAMAZ. Anahtari yedekten geri koyun.",
+                )
+                signingConfigs.getByName("debug")
+            }
             // whisper.cpp + ffmpeg native kutuphaneleri R8 ile ugrasmasin
             isMinifyEnabled = false
             isShrinkResources = false
