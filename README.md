@@ -19,8 +19,12 @@ dinleyebilir hem de yazısını okuyabilir.
 | Soru kütüphanesi | 10 konuda ~70 hazır hayat hikâyesi sorusu |
 | Fotoğraf | Ana sayfada tek kapak fotoğrafı (kameradan veya galeriden) |
 | Hatıra defteri | Tüm yazıları tek metin dosyası olarak dışa aktarma |
+| Kendi kendine güncelleme | Yeni sürümü sessizce indirir, hazır olunca bir kez sorar |
 
-Hiçbir veri internete gönderilmez. Hesap, giriş, bulut yok.
+**Hatıralar telefondan çıkmaz.** Ses kayıtları ve yazıya çevrilmiş
+metinler hiçbir yere gönderilmiyor; hesap, giriş, bulut yok. Uygulamanın
+internete çıktığı tek iki yer var ve ikisi de yalnızca **indirme**
+yönünde: yazıya çevirme paketi ve uygulamanın kendi güncellemesi.
 
 ---
 
@@ -64,6 +68,28 @@ indirilebilir; bekleyen kayıtlar o zaman otomatik olarak çevrilir.
 
 ---
 
+## Güncelleme nasıl çalışıyor
+
+Uygulama mağazası yok; güncelleme depodaki `guncelleme.json` dosyası ve
+GitHub sürüm (release) ekleri üzerinden yürüyor. Yeni sürüm yayınlamak
+tek komut:
+
+```bash
+tool/yayinla.sh 1.0.1 "Kayıt düğmesi büyütüldü."
+```
+
+Telefon tarafında **denetim ve indirme görünmezdir**: yaşlı kullanıcı ne
+ilerleme çubuğu ne de hata uyarısı görür. Yalnızca APK inip özeti
+doğrulandıktan sonra, bir sonraki açılışta bir kez sorulur.
+
+> **Yayınlamadan önce [docs/guncelleme.md](docs/guncelleme.md) okuyun.**
+> Üç şey yanlış yapılırsa hata sizin makinenizde değil, akrabanızın
+> telefonunda sessizce ortaya çıkar: imza anahtarının kaybolması,
+> `guncelleme.json`'un APK'lardan önce itilmesi ve `versionCode`'un
+> mimariye göre kayması.
+
+---
+
 ## Geliştirme
 
 ### Ortam
@@ -94,8 +120,13 @@ flutter config --android-sdk ~/Android/Sdk --jdk-dir ~/jdk/jdk-21.0.12.1+1
 
 ```bash
 flutter build apk --debug      # sideload için
-flutter build apk --release    # imzalanmamış release (debug anahtarıyla)
+flutter build apk --release    # yayın anahtarıyla imzalı
 ```
+
+Release derlemesi `android/key.properties` + `android/hatirlaf.jks`
+ikilisini kullanır. Bu dosyalar depoda **yok** ve olmamalı; yedekten
+gelirler. Yoksa Gradle uyarı basıp debug anahtarına düşer — o APK
+telefonlara **güncelleme olarak kurulamaz**.
 
 İlk derleme **uzun sürer** (~10-15 dk): whisper.cpp dört ABI için
 kaynaktan derleniyor. Sonraki derlemeler hızlı.
