@@ -9,10 +9,8 @@ import '../models/memory.dart';
 import 'store.dart';
 import 'whisper_model_manager.dart';
 
-/// Ses kayitlarini sirayla yaziya ceviren arka plan servisi.
-///
-/// Tek seferde tek kayit islenir: whisper.cpp butun cekirdekleri kullaniyor,
-/// paralel calistirmak eski telefonlari kilitliyor ve bellek yetmiyor.
+/// Ses kayitlarini sirayla yaziya ceviren arka plan servisi. Tek seferde
+/// tek kayit: whisper.cpp butun cekirdekleri kullaniyor.
 class Transcriber extends ChangeNotifier {
   Transcriber._();
 
@@ -33,11 +31,8 @@ class Transcriber extends ChangeNotifier {
   bool get mesgul => _calisiyor;
   int get bekleyenSayisi => _kuyruk.length + (_calisiyor ? 1 : 0);
 
-  /// Uygulama acilisinda yarim kalmis islere devam et.
-  ///
-  /// "cevriliyor" durumunda kalmis bir kayit, uygulama kapandigi icin yarida
-  /// kalmis demektir; onu tekrar sıraya aliyoruz ki kullanici bos bir metinle
-  /// karsi karsiya kalmasin.
+  /// Acilista yarim kalmis islere devam eder: "cevriliyor" durumunda
+  /// kalmis bir kayit uygulama kapandigi icin yarida kalmis demektir.
   void resumePending() {
     for (final Memory m in MemoryStore.instance.memories) {
       if (m.status == TranscriptStatus.bekliyor ||
@@ -81,7 +76,7 @@ class Transcriber extends ChangeNotifier {
       _aktifId = null;
       _yuzde = 0;
       notifyListeners();
-      // Model bellekte parked kaldiysa birak: 150-500 MB RAM'i bosa tutmayalim.
+      // Modeli birak: 150-500 MB RAM'i bosa tutmayalim.
       try {
         await _whisper.releaseModel();
       } catch (_) {}
@@ -127,14 +122,12 @@ class Transcriber extends ChangeNotifier {
     );
 
     try {
-      // Donus tipi (TranscribeResult) whisper_ggml tarafindan disariya
-      // aciklanmadigi icin adiyla yazilamiyor; tip cikarimi kullaniyoruz.
+      // TranscribeResult disariya aciklanmadigi icin tip cikarimi.
       final sonuc = await _whisper.transcribe(
         model: mm.model,
         audioPath: sesYolu,
         lang: 'tr',
-        // Noktalama isaretli bir ornek vermek, whisper'in ciktisini da
-        // noktalamali uretmesini sagliyor. Duz metin okumak yaslilar icin zor.
+        // Noktalamali bir ornek, whisper'in ciktisini da noktalamali yapiyor.
         initialPrompt:
             'Aşağıda Türkçe anlatılmış bir hatıra var. Noktalama işaretleriyle yazalım.',
         suppressNonSpeechTokens: true,
@@ -179,8 +172,7 @@ class Transcriber extends ChangeNotifier {
         ),
       );
     } finally {
-      // whisper_ggml donusturme icin "<ses>.m4a.wav" uretiyor; 1 dakika ses
-      // ~2 MB WAV demek. Birikmesin.
+      // whisper_ggml "<ses>.m4a.wav" uretiyor (~2 MB/dakika); birikmesin.
       try {
         final File wav = File('$sesYolu.wav');
         if (wav.existsSync()) await wav.delete();

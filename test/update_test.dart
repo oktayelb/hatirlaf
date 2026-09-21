@@ -109,9 +109,8 @@ void main() {
       expect(b.apkUrl, endsWith('hatirlaf-armeabi-v7a.apk'));
     });
 
-    // Mimariye ozel derlemede Flutter surum kodunu kaydiriyor; telefonun
-    // kurulu kodu pubspec'teki sayi degil. Her paket kendi gercek kodunu
-    // tasimazsa "yeni surum var mi?" karsilastirmasi hep yanlis cikar.
+    // Flutter surum kodunu mimariye gore kaydiriyor; her paket kendi
+    // gercek kodunu tasimazsa karsilastirma yanlis cikar.
     test('her mimari kendi gercek surum kodunu tasir', () {
       expect(
         GuncellemeBilgisi.cozumle(_json(), _yeniTelefon)!.surumKodu,
@@ -140,8 +139,7 @@ void main() {
       );
     });
 
-    // Yanlis mimarideki APK'yi indirmek bos yere veri harcamak ve
-    // kurulumda "uyumsuz" hatasi almak demek.
+    // Yanlis mimarideki APK bos veri harcar ve "uyumsuz" hatasi verir.
     test('cihazin mimarisi yoksa guncelleme onerilmez', () {
       expect(
         GuncellemeBilgisi.cozumle(_json(), const <String>['riscv64']),
@@ -175,8 +173,7 @@ void main() {
           _yeniTelefon,
         );
 
-    // Asil savunma: guncelleme.json bir sekilde degistirilse bile
-    // uygulama rastgele bir adresten APK indirip kurmamali.
+    // Manifest degistirilse bile rastgele bir adresten APK inmemeli.
     test('baska sunucudaki APK reddedilir', () {
       expect(tekPaketle(_paket(apkUrl: 'https://kotuadam.example/x.apk')),
           isNull);
@@ -268,8 +265,7 @@ void main() {
       );
     });
 
-    // Telefonun saati elle ileri alinip geri alinabiliyor. Gelecege ait bir
-    // damga denetimi sonsuza kadar kilitlememeli.
+    // Gelecege ait bir damga denetimi sonsuza kadar kilitlememeli.
     test('gelecege ait damga denetimi kilitlemez', () {
       expect(
         GuncellemePolitikasi.denetimZamaniGeldiMi(

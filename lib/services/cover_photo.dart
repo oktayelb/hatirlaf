@@ -4,12 +4,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart';
 import 'package:path_provider/path_provider.dart';
 
-/// Ana sayfanin en ustundeki tek kapak fotografi.
-///
-/// Hatiralara bagli degil: anlatan kisinin portresi ya da ailece sevilen
-/// bir kare. Tek dosya oldugu icin `hatiralar.json` dizinine girmiyor;
-/// varligi dogrudan dosyanin kendisinden okunuyor. Dizin bozulsa bile
-/// fotograf yerinde kalir.
+/// Ana sayfanin en ustundeki tek kapak fotografi. `hatiralar.json`
+/// dizinine girmiyor; varligi dogrudan dosyadan okunuyor, dizin bozulsa
+/// bile yerinde kalir.
 class CoverPhoto extends ChangeNotifier {
   CoverPhoto._();
 
@@ -20,9 +17,8 @@ class CoverPhoto extends ChangeNotifier {
   String _rootPath = '';
   bool _varMi = false;
 
-  /// Fotograf hep ayni dosya adina yaziliyor. Flutter'in resim onbellegi
-  /// dosya yolunu anahtar aldigi icin yeni fotograf gorunmezdi; bu sayac
-  /// her degisimde artip [ValueKey] olarak widget'i yeniden kurduruyor.
+  /// Dosya adi hep ayni; Flutter'in resim onbellegi yolu anahtar aldigi
+  /// icin bu sayac her degisimde artip widget'i yeniden kurduruyor.
   int _surum = 0;
   int get surum => _surum;
 
@@ -44,13 +40,11 @@ class CoverPhoto extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// [kaynakYolu] gecici bir dosya olabilir; icerik uygulama klasorune
-  /// kopyalanir. Basarisizsa `false` doner, eski fotograf yerinde kalir.
+  /// [kaynakYolu] gecici olabilir; icerik uygulama klasorune kopyalanir.
   Future<bool> ayarla(String kaynakYolu) async {
     if (_rootPath.isEmpty) return false;
     try {
-      // Once yana yazip sonra yerine tasiyoruz: kopyalama yarida kesilirse
-      // eski fotograf bozulmasin.
+      // Once yana yazip sonra tasiyoruz: yarida kesilirse eskisi bozulmasin.
       final File gecici = File('$yol.gecici');
       await File(kaynakYolu).copy(gecici.path);
       await gecici.rename(yol);

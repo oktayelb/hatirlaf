@@ -9,21 +9,16 @@ import '../models/memory.dart';
 
 /// Hatiralarin tek kaynagi.
 ///
-/// Neden veritabani degil de JSON?
-/// Hedef kitle icin en onemli sey **hicbir hatiranin kaybolmamasi**. Ses
-/// zaten diskte duran normal bir dosya; JSON sadece onlarin dizini.
-/// Dizin bozulsa bile [_rebuildFromDisk] klasorleri tarayip hatiralari geri
-/// getirebiliyor. Bir veritabani semasi bozuldugunda bu kadar kolay kurtulmaz.
+/// Veritabani degil JSON: ses zaten diskte duran normal bir dosya, JSON
+/// sadece dizin. Dizin bozulsa bile [_rebuildFromDisk] klasorleri tarayip
+/// hatiralari geri getiriyor.
 class MemoryStore extends ChangeNotifier {
   MemoryStore._();
 
   static final MemoryStore instance = MemoryStore._();
 
-  /// `<app documents>` mutlak yolu.
-  ///
-  /// `late final` degil: acilista dosya sistemine erisilemezse (cok nadir
-  /// ama oluyor) uygulamanin LateInitializationError ile cokmesindense bos
-  /// kalip "dosya yok" davranisina dusmesi daha iyi.
+  /// `<app documents>` mutlak yolu. `late final` degil: dosya sistemine
+  /// erisilemezse cokmek yerine bos kalip "dosya yok" davranisina dussun.
   String _rootPath = '';
   String get rootPath => _rootPath;
 
@@ -180,8 +175,8 @@ class MemoryStore extends ChangeNotifier {
 
   String absolute(String relPath) => '$rootPath/$relPath';
 
-  /// Once gecici dosyaya yazip sonra yerine tasiriz: yazma sirasinda pil
-  /// biterse eski dizin bozulmamis kalir.
+  /// Once gecici dosyaya yazip sonra tasiriz: yazma sirasinda pil biterse
+  /// eski dizin bozulmamis kalir.
   Future<void> _persist() async {
     try {
       final String data = json.encode(

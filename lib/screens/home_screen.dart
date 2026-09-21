@@ -22,9 +22,7 @@ import 'settings_screen.dart';
 import 'update_screen.dart';
 
 /// Ana ekran: hatira listesi + her zaman gorunen buyuk kayit butonu.
-///
-/// Sekme, menu, alt cubuk yok. Tek ekran, tek ana eylem. Yaslilarda en sik
-/// kaybolma sebebi gezinme derinligi; burada derinlik en fazla iki.
+/// Sekme, menu, alt cubuk yok; gezinme derinligi en fazla iki.
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -42,8 +40,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _gununSorusu = Sorular.rastgeleSoru();
   }
 
-  /// Kamera mi galeri mi? Yaslilarda "hangisi" sorusu en cok takilan yer;
-  /// iki buyuk buton, yazili, ikonlu.
+  /// Kamera mi galeri mi? Iki buyuk, yazili, ikonlu buton.
   Future<void> _kapakFotografiSec() async {
     final ImageSource? kaynak = await showModalBottomSheet<ImageSource>(
       context: context,
@@ -85,7 +82,7 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       final XFile? secilen = await ImagePicker().pickImage(
         source: kaynak,
-        // 12 MP fotograflar bosuna yer yiyor; kapak icin bu fazlasiyla yeter.
+        // 12 MP bosuna yer yiyor; kapak icin bu yeter.
         maxWidth: 1600,
         imageQuality: 85,
       );
@@ -232,10 +229,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-/// Her zaman ekranin altinda duran ana buton.
-///
-/// Listenin icine konsaydi asagi kaydirmayi bilmeyen kullanici butonu
-/// kaybederdi; bu yuzden sabit.
+/// Her zaman ekranin altinda duran ana buton: listenin icinde olsaydi
+/// asagi kaydirmayi bilmeyen kullanici onu kaybederdi.
 class _AltKayitCubugu extends StatelessWidget {
   const _AltKayitCubugu({required this.onBasla});
 
@@ -267,9 +262,7 @@ class _AltKayitCubugu extends StatelessWidget {
   }
 }
 
-/// Ana sayfanin en ustundeki tek kapak fotografi.
-///
-/// Hatiralara bagli degil; anlatan kisinin portresi gibi tek bir kare.
+/// Ana sayfanin en ustundeki tek kapak fotografi; hatiralara bagli degil.
 class _KapakFotografi extends StatelessWidget {
   const _KapakFotografi({
     required this.yukleniyor,
@@ -303,7 +296,7 @@ class _KapakFotografi extends StatelessWidget {
               child: Image.file(
                 File(kapak.yol),
                 // Dosya adi hep ayni; surum anahtari olmadan Flutter eski
-                // fotografi onbellekten gosterir.
+                // kareyi onbellekten gosterir.
                 key: ValueKey<int>(kapak.surum),
                 height: 260,
                 fit: BoxFit.cover,
@@ -518,26 +511,11 @@ class _ModelUyarisi extends StatelessWidget {
   }
 }
 
-/// Guncelleme ekranini **dogru anda** acan gorunmez gozcu.
-///
-/// Guncellemenin hazir olmasi yetmez; sorulacak anin da uygun olmasi
-/// gerekir. Kurulum uygulamanin surecini degistirir, yani o sirada suren
-/// her sey yarida kalir. Bu yuzden dort kapi var:
-///
-///  1. Ana ekran ustte mi? (Kayit ekrani, hatira ekrani, ayarlar acikken
-///     kullanicinin isini boluyor olurduk.)
-///  2. Kayit suruyor mu? Anlatilan bir hatira asla bolunmez.
-///  3. Yaziya cevirme suruyor mu? Kurulum sirasinda surec olduruldugu
-///     icin yarim kalan cevirme kaybolur.
-///  4. Erteleme suresi doldu mu? ([Guncelleyici.sorulabilir])
-///  5. Guncelleme, uygulama acildiginda **zaten** hazir miydi?
-///     ([Guncelleyici.acilistaHazirdi]) Kullanimin ortasinda inen bir
-///     guncelleme ekrani basmaz; hatirasina bakan biri birden tam ekran
-///     bir soruyla karsilasmasin. O APK diskte bekler, soru bir sonraki
-///     acilista sorulur.
-///
-/// Hicbiri uygun degilse hicbir sey yapilmaz - guncelleme diskte bekler
-/// ve bir sonraki uygun anda sorulur.
+/// Guncelleme ekranini dogru anda acan gorunmez gozcu. Kurulum surecin
+/// kendisini degistirdigi icin o an suren her sey yarida kalir; bu yuzden
+/// bes kapi var: ana ekran ustte mi, kayit suruyor mu, yaziya cevirme
+/// suruyor mu, [Guncelleyici.sorulabilir] ve [Guncelleyici.acilistaHazirdi].
+/// Hicbiri uygun degilse guncelleme diskte bekler.
 class _GuncellemeGozcusu extends StatefulWidget {
   const _GuncellemeGozcusu();
 
@@ -574,8 +552,7 @@ class _GuncellemeGozcusuState extends State<_GuncellemeGozcusu>
   @override
   void didChangeAppLifecycleState(AppLifecycleState durum) {
     if (durum != AppLifecycleState.resumed) return;
-    // On plana donmek yeni bir oturum sayilir: arka planda inmis bir
-    // guncelleme varsa artik sorulabilir.
+    // On plana donmek yeni bir oturum sayilir.
     Guncelleyici.instance.oturumaGirildi();
     // Uygulama gunlerce arka planda kalmis olabilir; donunce yeniden bak.
     unawaited(Guncelleyici.instance.degerlendir());
@@ -589,12 +566,10 @@ class _GuncellemeGozcusuState extends State<_GuncellemeGozcusu>
     if (Recorder.instance.durum != KayitDurumu.bos) return;
     if (Transcriber.instance.mesgul) return;
 
-    // Cizim sirasinda gezinme yapilamaz, bu yuzden kareden sonraya
-    // birakiyoruz. Ama dikkat: [addPostFrameCallback] yalnizca **bir kare
-    // cizilirse** calisir. Durgun bir ana ekranda (animasyon yok, liste
-    // kaymiyor) Flutter kare uretmez ve geri cagirma sonsuza kadar
-    // beklerdi - guncelleme inmis olur, ekran hic acilmazdi.
-    // [ensureVisualUpdate] gerekirse bir kare planlayarak bunu onler.
+    // Cizim sirasinda gezinme yapilamaz, kareden sonraya birakiyoruz.
+    // [addPostFrameCallback] yalnizca bir kare cizilirse calisir; durgun
+    // ekranda Flutter kare uretmez ve geri cagirma sonsuza kadar beklerdi.
+    // [ensureVisualUpdate] gerekirse bir kare planlar.
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (_acildi || !mounted) return;
       // Ana ekran en ustte degilse kullanicinin isini bolmeyelim.

@@ -29,8 +29,8 @@ if ! "$SDK/cmdline-tools/latest/bin/avdmanager" list avd -c 2>/dev/null | grep -
     -n "$AVD" -k "$IMAGE" -d pixel_6 --force
 
   CFG="$HOME/.android/avd/$AVD.avd/config.ini"
-  # Varsayilanlar bu makine icin fazla comert; 15 GB RAM'in icinde
-  # derleme de donecek. Mikrofon acik olmali, uygulamanin tek isi o.
+  # Varsayilanlar fazla comert; derleme de ayni RAM'de donecek.
+  # Mikrofon acik olmali.
   sed -i -e '/^hw\.ramSize=/d' -e '/^vm\.heapSize=/d' \
          -e '/^hw\.audioInput=/d' -e '/^hw\.keyboard=/d' \
          -e '/^disk\.dataPartition\.size=/d' -e '/^hw\.lcd\.density=/d' "$CFG"
@@ -49,8 +49,7 @@ if "$SDK/platform-tools/adb" devices | grep -q "^emulator-.*device$"; then
   exit 0
 fi
 
-# -gpu host makinedeki Intel iGPU'yu kullanir. Wayland'de takilirsa
-# EMU_GPU=swiftshader_indirect ile yazilimdan cizdirin (yavas ama calisir).
+# Wayland'de takilirsa: EMU_GPU=swiftshader_indirect (yavas ama calisir).
 GPU="${EMU_GPU:-host}"
 
 echo "emulator baslatiliyor ($AVD, gpu=$GPU)..."
@@ -59,7 +58,7 @@ nohup "$SDK/emulator/emulator" -avd "$AVD" \
   >/tmp/emulator-$AVD.log 2>&1 &
 
 "$SDK/platform-tools/adb" wait-for-device
-# wait-for-device sadece soketi bekler; asil acilis sonra bitiyor.
+# wait-for-device sadece soketi bekler.
 until [[ "$("$SDK/platform-tools/adb" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" == "1" ]]; do
   sleep 2
 done

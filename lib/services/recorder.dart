@@ -9,9 +9,7 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 /// Kayit ekraninin durumu.
 enum KayitDurumu { bos, kaydediyor, duraklatildi }
 
-/// Mikrofon kaydini yoneten servis.
-///
-/// Ekranda yalnizca tek bir kayit ekrani oldugu icin servis de tekildir.
+/// Mikrofon kaydini yoneten tekil servis.
 class Recorder extends ChangeNotifier {
   Recorder._();
 
@@ -37,9 +35,8 @@ class Recorder extends ChangeNotifier {
   DateTime? _baslangic;
   Duration _birikmis = Duration.zero;
 
-  /// Kayit icin AAC/m4a. Whisper 16 kHz WAV istiyor ama donusumu kendisi
-  /// yapiyor; sikistirilmis saklamak telefonda yer kazandiriyor
-  /// (1 saatlik hatira ~ 30 MB yerine ~ 500 MB olurdu).
+  /// AAC/m4a: whisper donusumu kendisi yapiyor, sikistirilmis saklamak
+  /// 1 saatlik hatirayi 500 MB yerine ~30 MB'a indiriyor.
   static const RecordConfig _config = RecordConfig(
     encoder: AudioEncoder.aacLc,
     bitRate: 64000,
@@ -52,8 +49,7 @@ class Recorder extends ChangeNotifier {
     ),
   );
 
-  /// Bazi cihazlarda `voiceRecognition` kaynagi acilmiyor; o zaman
-  /// cihazin varsayilan mikrofonuna dusuyoruz.
+  /// Bazi cihazlarda `voiceRecognition` acilmiyor; varsayilana dusuyoruz.
   static const RecordConfig _yedekConfig = RecordConfig(
     encoder: AudioEncoder.aacLc,
     bitRate: 64000,
@@ -91,7 +87,7 @@ class Recorder extends ChangeNotifier {
       _baslangic = DateTime.now();
       _sayacBasla();
       _genlikDinle();
-      // Anlatirken ekran kapanirsa kayit kesilebiliyor; acik tutalim.
+      // Ekran kapanirsa kayit kesilebiliyor.
       unawaited(WakelockPlus.enable());
       notifyListeners();
       return true;
@@ -139,7 +135,7 @@ class Recorder extends ChangeNotifier {
       final String? sonuc = yol ?? _dosyaYolu;
       await _temizle();
       if (sonuc == null || !File(sonuc).existsSync()) return null;
-      // Cok kisa/bos dosya: kullaniciya "kayit alinamadi" demeliyiz.
+      // Cok kisa ya da bos dosya.
       if (await File(sonuc).length() < 1024) {
         try {
           await File(sonuc).delete();
@@ -190,7 +186,7 @@ class Recorder extends ChangeNotifier {
         // dBFS (-60 .. 0) araligini 0..1'e tasi.
         final double db = a.current.isFinite ? a.current : -60;
         final double norm = ((db + 50) / 50).clamp(0.0, 1.0);
-        // Yumusat: cubuk zipzip etmesin, yasli gozu yorulmasin.
+        // Yumusat: cubuk zipzip etmesin.
         _seviye = _seviye + (math.pow(norm, 0.7).toDouble() - _seviye) * 0.45;
         notifyListeners();
       },

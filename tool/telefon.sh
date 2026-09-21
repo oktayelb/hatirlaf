@@ -1,11 +1,6 @@
 #!/usr/bin/env bash
-# APK'yi USB kablosuyla bagli gercek telefona kurar.
-#
-#   tool/telefon.sh            release kur (varsayilan)
-#   tool/telefon.sh --debug    debug kur (hot reload icin degil, sadece kurulum)
-#
-# Telefonda once: Ayarlar > Telefon hakkinda > Yapi numarasina 7 kez dokun,
-# sonra Ayarlar > Gelistirici secenekleri > USB hata ayiklama = acik.
+# APK'yi USB'deki telefona kurar (--debug ile debug APK). Telefonda once
+# USB hata ayiklama acik olmali.
 set -euo pipefail
 
 SDK="${ANDROID_SDK_ROOT:-$HOME/Android/Sdk}"
@@ -31,7 +26,7 @@ TEL="${CIHAZ[0]}"
 ABI="$("$ADB" -s "$TEL" shell getprop ro.product.cpu.abi | tr -d '\r')"
 APK="build/app/outputs/flutter-apk/app-$ABI-$KIP.apk"
 
-# --split-per-abi kullanilmadiysa tek bir birlesik APK vardir.
+# --split-per-abi kullanilmadiysa tek birlesik APK vardir.
 [[ -f "$APK" ]] || APK="build/app/outputs/flutter-apk/app-$KIP.apk"
 
 if [[ ! -f "$APK" ]]; then

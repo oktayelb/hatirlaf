@@ -10,13 +10,9 @@ import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
 
 /**
- * Uygulamanin tek yerli koprusu.
- *
- * Buradaki islevler icin ayri eklentiler kullanmiyoruz:
- * permission_handler compileSdk 37 istiyor, Google ise o platformu
- * "android-37.0" adiyla yayinladigi icin AGP onu bulamiyor ve derleme
- * kiriliyor. Mikrofon iznini zaten `record` paketi istiyor; geriye kalan
- * birkac soru da birkac satir.
+ * Uygulamanin tek yerli koprusu. permission_handler yerine elde yazildi:
+ * o compileSdk 37 istiyor, Google platformu "android-37.0" adiyla
+ * yayinladigi icin AGP bulamiyor ve derleme kiriliyor.
  */
 class MainActivity : FlutterActivity() {
 
@@ -35,7 +31,7 @@ class MainActivity : FlutterActivity() {
 
         MethodChannel(mesajci, IZIN_KANALI).setMethodCallHandler { call, result ->
             when (call.method) {
-                // Kullaniciyi uygulamanin izin ekranina goturur.
+                // Uygulamanin izin ekranina goturur.
                 "ayarlariAc" -> {
                     try {
                         val intent = Intent(
@@ -49,13 +45,9 @@ class MainActivity : FlutterActivity() {
                     }
                 }
 
-                // "Bir daha sorma" secilmis mi?
-                //
-                // shouldShowRequestPermissionRationale() bir reddedilmeden
-                // SONRA false donuyorsa sistem artik izin penceresini
-                // acmayacak demektir. Bu yuzden yalnizca izin istegi
-                // reddedildikten sonra cagrilmali; ilk istekten once de
-                // false donduğu icin yanlis pozitif verir.
+                // "Bir daha sorma" secilmis mi? Yalnizca bir reddedilmeden
+                // SONRA cagrilmali: shouldShowRequestPermissionRationale()
+                // ilk istekten once de false doner, yani yanlis pozitif.
                 "kaliciReddedildiMi" -> {
                     try {
                         val sorulabilir = shouldShowRequestPermissionRationale(
@@ -89,10 +81,9 @@ class MainActivity : FlutterActivity() {
 
                 "kurulumIzniEkraniniAc" -> result.success(g.kurulumIzniEkraniniAc())
 
-                // Kurulum tek bir yanit uretmiyor: once "onayBekleniyor",
-                // sonra kullanici karar verince "iptal"/"imza"/"tamam".
-                // MethodChannel bir cagriya ikinci kez yanit veremedigi icin
-                // sonuclari Dart'a ters yonde ("kurulumSonucu") itiyoruz.
+                // Kurulum birden fazla yanit uretiyor (once
+                // "onayBekleniyor", sonra sonuc). MethodChannel bir cagriya
+                // iki kez yanit veremedigi icin ters yonde itiyoruz.
                 "kur" -> {
                     val yol = call.argument<String>("apkYolu")
                     if (yol.isNullOrBlank()) {

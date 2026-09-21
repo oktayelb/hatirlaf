@@ -17,9 +17,8 @@ class SoruKonusu {
   final List<String> sorular;
 }
 
-/// Bos bir "kayıt" ekrani yaslilar icin en zor sey: ne anlatacagini bilemiyor.
-/// Bu yuzden uygulama soruyu kendisi soruyor; kullanicinin tek yapmasi
-/// gereken cevaplamak.
+/// Bos bir kayit ekrani karsisinda ne anlatacagini bilmek zor; uygulama
+/// soruyu kendisi soruyor.
 class Sorular {
   const Sorular._();
 

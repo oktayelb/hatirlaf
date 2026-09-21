@@ -5,14 +5,13 @@ import 'package:flutter/services.dart';
 
 /// Telefonun internet durumu.
 enum AgDurumu {
-  /// Internet yok ya da baglanti dogrulanmadi (kafe giris sayfasi, modem
-  /// acik ama hat yok gibi).
+  /// Internet yok ya da baglanti dogrulanmadi (kafe giris sayfasi gibi).
   yok,
 
-  /// Internet var ama sayacli: mobil veri veya sinirli hotspot.
+  /// Mobil veri ya da sinirli hotspot.
   sayacli,
 
-  /// Internet var ve sayacsiz: Wi-Fi, ethernet.
+  /// Wi-Fi, ethernet.
   serbest;
 
   static AgDurumu adindan(String? ad) => AgDurumu.values.firstWhere(
@@ -20,24 +19,16 @@ enum AgDurumu {
         orElse: () => AgDurumu.yok,
       );
 
-  /// Internete cikilabiliyor mu? Guncelleme icin tek kosul bu.
-  ///
-  /// Sayacli/sayacsiz ayrimina **bakilmiyor**: mimariye ozel APK'lar
-  /// ~22 MB ve guncelleme yilda birkac kez. Mobil veriyi beklemek,
-  /// eve gelen misafir torunun Wi-Fi'sini bekleyip aylarca eski surumde
-  /// kalmak demekti. Ayrim yine de Ayarlar'da gosterilmek uzere duruyor.
+  /// Guncelleme icin tek kosul. Sayacli/sayacsiz ayrimina bakilmiyor:
+  /// APK ~22 MB, mobil veriyi beklemek aylarca eski surumde kalmak demekti.
   bool get internetVar => this != AgDurumu.yok;
 
-  /// Sayacsiz (Wi-Fi/ethernet) mi? Yalnizca bilgi amacli gosterilir.
+  /// Yalnizca Ayarlar'da bilgi amacli gosterilir.
   bool get sayacsiz => this == AgDurumu.serbest;
 }
 
-/// Ag durumunu izleyen tekil servis.
-///
-/// Uygulama acilinca dinlemeye baslar ve **calisma boyunca** dinler: yasli
-/// kullanici uygulamayi acip Wi-Fi menzilinden cikabilir, ya da tam tersi,
-/// uygulama acikken eve girip Wi-Fi'ye baglanabilir. Ikisi de tek seferlik
-/// bir "internet var mi?" sorusuyla yakalanamaz.
+/// Ag durumunu calisma boyunca izleyen tekil servis: tek seferlik bir
+/// "internet var mi?" sorusu menzil degisimlerini kacirirdi.
 class Ag extends ChangeNotifier {
   Ag._();
 
@@ -45,9 +36,8 @@ class Ag extends ChangeNotifier {
 
   static const EventChannel _kanal = EventChannel('hatirla/ag');
 
-  /// Wi-Fi'ye baglanirken sistem birkac saniye icinde birden fazla durum
-  /// bildiriyor (once dogrulanmamis, sonra dogrulanmis). Her birinde
-  /// indirme baslatmayalim.
+  /// Wi-Fi'ye baglanirken sistem arka arkaya birkac durum bildiriyor;
+  /// her birinde indirme baslatmayalim.
   static const Duration _sakinlesmeSuresi = Duration(seconds: 3);
 
   AgDurumu _durum = AgDurumu.yok;
@@ -56,8 +46,8 @@ class Ag extends ChangeNotifier {
   StreamSubscription<dynamic>? _abonelik;
   Timer? _sakinlesme;
 
-  /// Durum *degistiginde* haber verir. [notifyListeners]'dan farki: bu akis
-  /// yalnizca gercek gecislerde ve sakinlestikten sonra atesleniyor.
+  /// [notifyListeners]'dan farki: yalnizca gercek gecislerde ve
+  /// sakinlestikten sonra atesleniyor.
   final StreamController<AgDurumu> _degisim =
       StreamController<AgDurumu>.broadcast();
   Stream<AgDurumu> get degisim => _degisim.stream;
@@ -71,8 +61,7 @@ class Ag extends ChangeNotifier {
       _abonelik = _kanal.receiveBroadcastStream().listen(
         _geldi,
         onError: (Object e) {
-          // Ag bilgisi alinamiyorsa guncelleme sessizce devre disi kalir;
-          // uygulamanin geri kalani bundan etkilenmemeli.
+          // Ag bilgisi alinamiyorsa guncelleme sessizce devre disi kalir.
           debugPrint('Ag durumu dinlenemedi: $e');
         },
       );

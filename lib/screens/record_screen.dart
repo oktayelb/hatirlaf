@@ -15,11 +15,8 @@ import '../utils/format.dart';
 import '../widgets/common.dart';
 import 'memory_screen.dart';
 
-/// Kayit ekrani.
-///
-/// Ekranda ayni anda en fazla iki secenek olur. Kayit sirasinda "Duraklat"
-/// ve "Bitir" disinda hicbir sey yok: konusurken karar vermek zorunda
-/// kalmasin.
+/// Kayit ekrani. Ayni anda en fazla iki secenek: konusurken karar vermek
+/// zorunda kalinmasin.
 class RecordScreen extends StatefulWidget {
   const RecordScreen({super.key, this.soru});
 
@@ -156,8 +153,7 @@ class _RecordScreenState extends State<RecordScreen> {
     Transcriber.instance.enqueue(id);
 
     if (!mounted) return;
-    // Kayit ekranini detay ekraniyla degistiriyoruz: geri tusu kullaniciyi
-    // dogrudan listeye goturuyor, kayit ekranina geri dusmuyor.
+    // Detay ekraniyla degistiriyoruz ki geri tusu listeye gotursun.
     Navigator.of(context).pushReplacement(
       MaterialPageRoute<void>(
         builder: (_) => MemoryScreen(memoryId: id, yeniKaydedildi: true),
@@ -253,8 +249,7 @@ class _RecordScreenState extends State<RecordScreen> {
   }
 }
 
-/// Kayit sirasinda soruyu ekranda tutar; yaslilar konusurken soruyu
-/// unutabiliyor.
+/// Kayit sirasinda soruyu ekranda tutar.
 class _SoruSeridi extends StatelessWidget {
   const _SoruSeridi({required this.soru});
 
@@ -284,7 +279,7 @@ class _SoruSeridi extends StatelessWidget {
   }
 }
 
-/// Ortadaki dev kayit dugmesi ve ses seviyesiyle nefes alan halka.
+/// Dev kayit dugmesi ve ses seviyesiyle nefes alan halka.
 class _KayitDugmesi extends StatelessWidget {
   const _KayitDugmesi({
     required this.durum,
@@ -308,8 +303,7 @@ class _KayitDugmesi extends StatelessWidget {
       child: Stack(
         alignment: Alignment.center,
         children: <Widget>[
-          // Sesle birlikte buyuyup kuculen halka: kullaniciya "seni
-          // duyuyorum" demenin en anlasilir yolu.
+          // "Seni duyuyorum" demenin en anlasilir yolu.
           if (kaydediyor)
             AnimatedContainer(
               duration: const Duration(milliseconds: 140),

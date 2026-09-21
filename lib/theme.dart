@@ -1,13 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-/// Uygulamanin gorsel dili.
-///
-/// Tasarim kurallari (yaslilar icin):
-///  - Hicbir yazi 20 punto altinda degil.
-///  - Hicbir dokunulabilir alan 64 pikselden kucuk degil.
-///  - Arka plan sicak/kagit tonunda, yazi cok koyu: yuksek kontrast.
-///  - Ince gri yazi, ince ikon, gri buton yok.
+/// Uygulamanin gorsel dili: 20 puntodan kucuk yazi yok, 64 pikselden
+/// kucuk dokunulabilir alan yok, yuksek kontrast, gri/ince oge yok.
 class HatirlaColors {
   const HatirlaColors._();
 
@@ -85,8 +80,7 @@ ThemeData buildHatirlaTheme() {
     colorScheme: scheme,
     scaffoldBackgroundColor: HatirlaColors.paper,
     textTheme: text,
-    // Yaslilarda titreme olabiliyor; "basildi" dalgasi kucuk kalsin,
-    // ama dokunus geri bildirimi kaybolmasin.
+    // Titreyen parmakta "basildi" dalgasi kucuk kalsin ama kaybolmasin.
     splashFactory: InkRipple.splashFactory,
     appBarTheme: const AppBarTheme(
       backgroundColor: HatirlaColors.paper,

@@ -2,38 +2,28 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 
-/// Guncellemelerin gelecegi yer.
-///
-/// Sunucu yok: `guncelleme.json` deponun ana dalinda duran sade bir dosya,
-/// APK'lar ise GitHub surum (release) ekleri. Ikisi de bedava, kimliksiz
-/// ve kalici. `releases/latest/download/...` adresi **her zaman** en son
-/// surume gittigi icin dosya adresleri surumden surume degismiyor.
+/// Guncellemelerin gelecegi yer: `main` dalindaki `guncelleme.json` ve
+/// GitHub surum ekleri. Sunucu yok.
 class GuncellemeKaynagi {
   const GuncellemeKaynagi._();
 
   static const String sahip = 'oktayelb';
   static const String depo = 'hatirlaf';
 
-  /// Surum bilgisinin okundugu adres.
-  ///
-  /// `raw.githubusercontent.com` CDN'i birkac dakika onbellekliyor; buna
-  /// takilmamak icin adrese her seferinde degisen bir parametre ekliyoruz.
+  /// `raw.githubusercontent.com` birkac dakika onbellekliyor; adrese her
+  /// seferinde degisen bir parametre ekliyoruz.
   static Uri bilgiAdresi() => Uri.parse(
         'https://raw.githubusercontent.com/$sahip/$depo/main/guncelleme.json'
         '?t=${DateTime.now().millisecondsSinceEpoch}',
       );
 
-  /// APK adresinin gitmesine izin verilen tek yer.
-  ///
-  /// `guncelleme.json` bir sekilde degistirilse bile uygulamanin rastgele
-  /// bir adresten APK indirip kurmasini istemiyoruz. Yonlendirmeler
-  /// (GitHub CDN'e gider) bu kontrolden sonra izleniyor; onemli olan
-  /// baslangic adresinin bize ait olmasi.
+  /// APK adresinin gitmesine izin verilen tek yer: manifest degistirilse
+  /// bile rastgele bir adresten APK inmesin. Yonlendirmeler bu kontrolden
+  /// sonra izleniyor.
   static const String izinliSunucu = 'github.com';
   static String get izinliYolBasi => '/$sahip/$depo/releases/';
 
-  /// Makul bir APK ust siniri. Bunun uzerindeki bir "guncelleme" ya yanlis
-  /// ya kotu niyetli; yasli kullanicinin hattini doldurmadan duralim.
+  /// Ust sinir: bunun otesi ya yanlis ya kotu niyetli.
   static const int enBuyukApkBayt = 300 * 1024 * 1024;
 }
 
@@ -47,25 +37,21 @@ class GuncellemePaketi {
     required this.boyut,
   });
 
-  /// **Bu APK'nin** gercek `versionCode`'u.
-  ///
-  /// Mimariye ozel derlemede Flutter surum kodunu mimariye gore kaydiriyor
-  /// (armeabi-v7a +1000, arm64-v8a +2000, x86_64 +4000). Yani telefondaki
-  /// kurulu kod `pubspec.yaml`'daki sayi degil. Karsilastirma yanlis
-  /// olmasin diye her paket kendi gercek kodunu tasiyor; `yayinla.sh` bu
-  /// sayiyi derlenmis APK'dan (`aapt2 dump badging`) okuyor.
+  /// Bu APK'nin gercek `versionCode`'u. Mimariye ozel derlemede Flutter
+  /// kodu kaydiriyor (+1000/+2000/+4000), bu yuzden her paket kendi
+  /// kodunu tasiyor; `yayinla.sh` APK'dan okuyor.
   final int surumKodu;
 
   final String apkUrl;
 
-  /// Inen dosyanin dogrulanacagi ozet (64 hanelik onaltilik).
+  /// 64 hanelik onaltilik sha256.
   final String sha256;
 
-  /// Beklenen dosya boyutu (bayt).
+  /// Bayt.
   final int boyut;
 }
 
-/// `guncelleme.json` icerigi - **bu cihaz icin** cozumlenmis hali.
+/// `guncelleme.json` icerigi, bu cihaz icin cozumlenmis hali.
 @immutable
 class GuncellemeBilgisi {
   const GuncellemeBilgisi({
@@ -76,39 +62,27 @@ class GuncellemeBilgisi {
     required this.notlar,
   });
 
-  /// Secilen APK'nin gercek `versionCode`'u. Karsilastirma **yalniz**
-  /// buna bakar; bkz. [GuncellemePaketi.surumKodu].
+  /// Karsilastirma yalniz buna bakar; bkz. [GuncellemePaketi.surumKodu].
   final int surumKodu;
 
-  /// Kullaniciya gosterilen etiket: "1.0.1".
+  /// Kullaniciya gosterilen etiket.
   final String surumAdi;
 
-  /// Bu cihaz icin secilen mimari ("arm64-v8a" gibi).
+  /// Bu cihaz icin secilen mimari.
   final String abi;
 
   final GuncellemePaketi paket;
 
-  /// "Neler degisti" - kullaniciya gosterilen sade bir iki cumle.
+  /// "Neler degisti" metni.
   final String notlar;
 
   String get apkUrl => paket.apkUrl;
   String get sha256 => paket.sha256;
   int get boyut => paket.boyut;
 
-  /// Bozuk/eksik/supheli JSON'da `null` doner.
-  ///
-  /// [abiler] cihazin calistirabilecegi mimariler, **tercih sirasiyla**
-  /// (`Build.SUPPORTED_ABIS`). Her mimari icin ayri APK yayinlaniyor:
-  /// tek parca APK 60 MB, arm64'e ozel olan 22 MB. Guncelleme her surumde
-  /// yeniden indirilecegi icin aradaki fark her seferinde odenirdi.
-  ///
-  /// Cihazin hicbir mimarisi `paketler` icinde yoksa `null` doner: yanlis
-  /// mimarideki bir APK'yi indirmek bos yere veri harcamak ve kurulumda
-  /// "uyumsuz" hatasi almak demek.
-  ///
-  /// Hicbir kosulda firlatmiyor: guncelleme denetimi yasli kullanicinin
-  /// gormemesi gereken bir arka plan isi, bir yazim hatasi yuzunden
-  /// uygulamanin acilmamasi kabul edilemez.
+  /// Bozuk, eksik ya da supheli JSON'da `null` doner; hicbir kosulda
+  /// firlatmaz. [abiler] cihazin mimarileri, tercih sirasiyla
+  /// (`Build.SUPPORTED_ABIS`); hicbiri manifest'te yoksa `null`.
   static GuncellemeBilgisi? cozumle(String ham, List<String> abiler) {
     try {
       final dynamic kok = json.decode(ham);
@@ -117,8 +91,8 @@ class GuncellemeBilgisi {
       final dynamic paketler = kok['paketler'];
       if (paketler is! Map<String, dynamic>) return null;
 
-      // Cihazin tercih sirasina gore ilk eslesen mimariyi al: 64 bit bir
-      // telefon armeabi-v7a da calistirabilir ama arm64-v8a tercih edilmeli.
+      // Ilk eslesen mimari: 64 bit telefon armeabi-v7a'yi da calistirir
+      // ama arm64-v8a tercih edilmeli.
       String? secilenAbi;
       GuncellemePaketi? secilen;
       for (final String abi in abiler) {
@@ -187,17 +161,11 @@ class GuncellemeBilgisi {
 }
 
 /// Ne zaman denetlenir.
-///
-/// Guncelleme denetimi ve indirme tamamen gorunmezdir; kullanici yalnizca
-/// her sey hazir oldugunda, tek dokunusla bitecek noktada bir ekranla
-/// karsilasir. O ekran **atlanamaz**: guncelleme zorunludur.
 class GuncellemePolitikasi {
   const GuncellemePolitikasi._();
 
-  /// Iki denetim arasi en az sure.
-  ///
-  /// 24 degil 20 saat: her gun ayni saatte uygulamayi acan biri 24 saatlik
-  /// pencereye hep birkac dakikayla yetisemez ve gunlerce denetim yapilmaz.
+  /// 24 degil 20 saat: her gun ayni saatte acan biri 24 saatlik pencereye
+  /// hep birkac dakikayla yetisemezdi.
   static const Duration denetimAraligi = Duration(hours: 20);
 
   static bool denetimZamaniGeldiMi({
@@ -205,8 +173,8 @@ class GuncellemePolitikasi {
     required DateTime simdi,
   }) {
     if (sonDenetim == null) return true;
-    // Telefonun saati geri alinmis olabilir; gelecege ait bir "son denetim"
-    // damgasi denetimi sonsuza kadar kilitlemesin.
+    // Telefonun saati geri alinmis olabilir; gelecege ait bir damga
+    // denetimi sonsuza kadar kilitlemesin.
     if (sonDenetim.isAfter(simdi)) return true;
     return simdi.difference(sonDenetim) >= denetimAraligi;
   }

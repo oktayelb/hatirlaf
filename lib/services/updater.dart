@@ -11,50 +11,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'network.dart';
 import 'update_info.dart';
 
-/// Guncelleme surecinin bulundugu asama.
-enum GuncellemeAsamasi {
-  /// Bilinen bir guncelleme yok. Kullaniciya hicbir sey gosterilmez.
-  bos,
-
-  /// `guncelleme.json` okunuyor.
-  denetleniyor,
-
-  /// Yeni surum var, APK iniyor. Yasli kullaniciya **gosterilmez**.
-  indiriliyor,
-
-  /// APK indi, ozeti dogrulandi, kurulmaya hazir.
-  hazir,
-
-  /// Sistemin kurulum penceresi acildi.
-  kuruluyor,
-
-  /// Bir sey ters gitti. Yasli kullaniciya gosterilmez; Ayarlar'da durur.
-  hata,
-}
+enum GuncellemeAsamasi { bos, denetleniyor, indiriliyor, hazir, kuruluyor, hata }
 
 /// Uygulamayi kendi kendine gunceller.
 ///
-/// ## Tasarim
-///
-/// Uygulama magazasi yok; guncelleme GitHub'daki bir JSON dosyasi ve bir
-/// surum ekinden ibaret. Onemli olan kisim teknik degil, davranissal:
-///
-/// **Denetim ve indirme tamamen gorunmezdir.** Yasli kullanici ne bir
-/// ilerleme cubugu, ne "internete bağlanılamadı" uyarisi, ne de iptal
-/// edebilecegi bir islem gorur. Internet yoksa hicbir sey olmaz ve hicbir
-/// sey soylenmez. Ancak APK inip ozeti dogrulandiktan **sonra**, yani
-/// geriye yalnizca iki dokunus kaldiginda bir kez soru sorulur. "Sonra"
-/// denirse gunlerce bir daha sorulmaz.
-///
-/// Sebebi basit: bu kullanicilar yarida kalan bir islemi kendileri
-/// kurtaramaz. Gosterilen her ilerleme cubugu, iptal edilebilen her islem
-/// ve anlasilmayan her hata bir telefon gorusmesi demek.
-///
-/// ## Kurulumun siniri
-///
-/// Sessiz kurulum mumkun degil: cihaz sahibi (device owner) olarak
-/// saglanmamis bir uygulama sistemin onay penceresini gostermek zorunda.
-/// Elimizden gelen, o pencereye kadar olan her seyi halletmek.
+/// Denetim ve indirme kullaniciya gorunmez; soru yalnizca APK inip ozeti
+/// dogrulandiktan sonra, bir sonraki oturum basinda sorulur.
 class Guncelleyici extends ChangeNotifier {
   Guncelleyici._();
 
@@ -62,17 +24,13 @@ class Guncelleyici extends ChangeNotifier {
 
   static const MethodChannel _kanal = MethodChannel('hatirla/guncelleme');
 
-  // Ayarlarda saklananlar.
   static const String _pSonDenetim = 'guncelleme_son_denetim';
   static const String _pSonBilgi = 'guncelleme_son_bilgi';
 
   static const String _klasorAdi = 'guncelleme';
 
-  /// `guncelleme.json` icin ust sinir. Dosya birkac yuz bayt; bunun
-  /// otesi bir yanlislik demek.
+  /// `guncelleme.json` birkac yuz bayt; otesi bir yanlislik demek.
   static const int _enBuyukBilgiBayt = 16 * 1024;
-
-  // --------------------------------------------------------------- durum
 
   int _mevcutSurumKodu = 0;
   int get mevcutSurumKodu => _mevcutSurumKodu;
@@ -80,8 +38,7 @@ class Guncelleyici extends ChangeNotifier {
   String _mevcutSurumAdi = '';
   String get mevcutSurumAdi => _mevcutSurumAdi;
 
-  /// Cihazin calistirabilecegi mimariler, tercih sirasiyla. Hangi APK'nin
-  /// indirilecegini bu belirliyor.
+  /// Cihazin mimarileri, tercih sirasiyla; hangi APK'nin inecegini belirler.
   List<String> _abiler = const <String>[];
   List<String> get abiler => _abiler;
 
@@ -100,22 +57,17 @@ class Guncelleyici extends ChangeNotifier {
   int _toplamBayt = 0;
   int get toplamBayt => _toplamBayt;
 
-  /// Teknik hata metni. Yalnizca Ayarlar'da, kuran kisi icin gosterilir.
+  /// Teknik hata metni; yalnizca Ayarlar'da gosterilir.
   String? _hata;
   String? get hata => _hata;
 
-  /// Kurulum bir imza uyusmazligiyla reddedildi mi?
-  ///
-  /// Yasli kullanicinin cozemeyecegi tek hata: tek cikis yolu uygulamayi
-  /// silmek, o da hatiralari siler. Bu yuzden ona asla "silip yeniden
-  /// kurun" denmez, "aileden biri yardım etsin" denir.
+  /// Imza uyusmazligi: kullanicinin cozemeyecegi tek hata. Tek cikis yolu
+  /// uygulamayi silmek, o da hatiralari siler; bu yuzden oyle denmez.
   bool _imzaUyusmazligi = false;
   bool get imzaUyusmazligi => _imzaUyusmazligi;
 
-  /// Kullanici sistemin kurulum penceresinde "Vazgeç" dedi mi?
-  ///
-  /// Guncelleme zorunlu oldugu icin ekran yerinde kaliyor; bu bayrak
-  /// olmasa kullanici ayni ekrana hicbir aciklama olmadan geri donerdi.
+  /// Sistemin penceresinde "Vazgeç" dendi mi? Ekran yerinde kaldigi icin
+  /// sebebi soylenmezse kullanici aciklamasiz ayni ekrana doner.
   bool _iptalEdildi = false;
   bool get iptalEdildi => _iptalEdildi;
 
@@ -132,16 +84,12 @@ class Guncelleyici extends ChangeNotifier {
   StreamSubscription<AgDurumu>? _agAbonelik;
   String? _klasorYolu;
 
-  /// Guncelleme, kullanici uygulamayi actiginda **zaten** hazir miydi?
-  ///
-  /// Kullanimin ortasinda inen bir guncelleme ekrani basmasin diye var:
-  /// hatirasina bakan biri, birden tam ekran bir soruyla karsilasmasin.
-  /// Oyle bir durumda APK diskte bekler, soru bir sonraki acilista sorulur.
+  /// Guncelleme uygulama acildiginda zaten hazir miydi? Kullanimin
+  /// ortasinda inen bir guncelleme ekran basmasin diye.
   bool _acilistaHazirdi = false;
   bool get acilistaHazirdi => _acilistaHazirdi;
 
-  /// Uygulama yeniden on plana geldi: bu da "yeni bir oturum" sayilir,
-  /// yani bekleyen guncelleme artik sorulabilir.
+  /// On plana donus de yeni bir oturum sayilir: bekleyen guncelleme sorulabilir.
   void oturumaGirildi() {
     if (_asama == GuncellemeAsamasi.hazir && !_acilistaHazirdi) {
       _acilistaHazirdi = true;
@@ -149,21 +97,15 @@ class Guncelleyici extends ChangeNotifier {
     }
   }
 
-  /// Kurulmaya hazir, dogrulanmis bir APK var mi?
   bool get hazirApkVar =>
       _asama == GuncellemeAsamasi.hazir ||
       _asama == GuncellemeAsamasi.kuruluyor;
 
-  /// Kullaniciya su anda guncelleme gosterilmeli mi?
-  ///
-  /// Guncelleme zorunlu: erteleme yok, "sonra" yok. Hazirsa gosterilir.
+  /// Guncelleme zorunlu: erteleme yok, hazirsa gosterilir.
   bool get sorulabilir =>
       _asama == GuncellemeAsamasi.hazir && _bilgi != null;
 
-  // -------------------------------------------------------------- baslat
-
-  /// Uygulama acilisinda bir kez cagrilir. Hicbir kosulda firlatmaz ve
-  /// acilisi bekletmez.
+  /// Acilista bir kez cagrilir; firlatmaz, acilisi bekletmez.
   Future<void> baslat() async {
     if (_basladi) return;
     _basladi = true;
@@ -186,9 +128,8 @@ class Guncelleyici extends ChangeNotifier {
       _sonDenetim = denetimMs == null
           ? null
           : DateTime.fromMillisecondsSinceEpoch(denetimMs);
-      // Son bilinen surum bilgisi diskten geri yuklenir. Boylece dun
-      // Wi-Fi'de inmis bir guncelleme, bugun internet hic olmasa bile
-      // kurulabilir; internet yalnizca *indirmek* icin gerekli.
+      // Diskteki son manifest: dun inmis bir guncelleme bugun internetsiz
+      // de kurulabilsin.
       final String? sonBilgi = ayarlar.getString(_pSonBilgi);
       if (sonBilgi != null) {
         final GuncellemeBilgisi? b =
@@ -198,17 +139,14 @@ class Guncelleyici extends ChangeNotifier {
 
       await _eskiDosyalariTemizle();
 
-      // Onceki oturumda inmis ve dogrulanmis bir APK var mi?
+      // Onceki oturumdan kalmis, dogrulanmis bir APK varsa sormak icin
+      // dogru an.
       final GuncellemeBilgisi? b = _bilgi;
       if (b != null && await _diskteHazirMi(b)) {
-        // Onceki oturumdan kalmis: kullanici uygulamayi actiginda zaten
-        // hazirdi, yani sormak icin dogru an.
         _hazirla(b, acilista: true);
       }
 
       Ag.instance.basla();
-      // Uygulama acikken eve girip Wi-Fi'ye baglanan kullanici da
-      // guncellemeyi alabilsin.
       _agAbonelik = Ag.instance.degisim.listen((AgDurumu d) {
         if (d.internetVar) unawaited(degerlendir());
       });
@@ -216,26 +154,20 @@ class Guncelleyici extends ChangeNotifier {
       notifyListeners();
       unawaited(degerlendir());
     } on MissingPluginException {
-      // Android disi platform ya da test ortami: guncelleme kapali kalsin.
+      // Android disi platform ya da test ortami.
       debugPrint('Guncelleme kanali yok; guncelleme kapali.');
     } catch (e, s) {
       debugPrint('Guncelleyici baslatilamadi: $e\n$s');
     }
   }
 
-  // --------------------------------------------------------- degerlendir
-
-  /// "Su anda ne yapmaliyim?" sorusunun tek cevap yeri.
-  ///
-  /// Acilista, ag degisiminde ve Ayarlar'daki elle denetimde cagrilir.
-  /// [elle] `true` ise ag ve sure kisitlarini atlar: Ayarlar'a girip
-  /// dugmeye basan kisi zaten yasli kullanici degil, ona yardim eden biri.
+  /// "Su anda ne yapmaliyim?" Acilista, ag degisiminde ve elle denetimde
+  /// cagrilir. [elle] ag ve sure kisitlarini atlar.
   Future<void> degerlendir({bool elle = false}) async {
     if (_mesgul || _mevcutSurumKodu <= 0) return;
 
     _mesgul = true;
     try {
-      // Kurulmayi bekleyen ya da kurulmakta olan bir sey varsa karismayalim.
       if (_asama == GuncellemeAsamasi.kuruluyor) return;
       if (_asama == GuncellemeAsamasi.hazir && !elle) return;
 
@@ -275,9 +207,7 @@ class Guncelleyici extends ChangeNotifier {
     }
   }
 
-  // ------------------------------------------------------------- denetle
-
-  /// `guncelleme.json`'u okur. Basarisizsa **sessizce** `false` doner.
+  /// `guncelleme.json`'u okur. Basarisizsa sessizce `false` doner.
   Future<bool> _denetle() async {
     if (_asama != GuncellemeAsamasi.hazir) {
       _asama = GuncellemeAsamasi.denetleniyor;
@@ -317,8 +247,8 @@ class Guncelleyici extends ChangeNotifier {
       }
 
       _bilgi = okunan;
-      // Yalnizca **basarili** denetim zaman damgasi birakir; boylece
-      // internetsiz gecen gunlerin ardindan ilk baglantida hemen denenir.
+      // Yalnizca basarili denetim damga birakir: internetsiz gunlerin
+      // ardindan ilk baglantida hemen denensin.
       _sonDenetim = DateTime.now();
       final SharedPreferences ayarlar = await SharedPreferences.getInstance();
       await ayarlar.setInt(_pSonDenetim, _sonDenetim!.millisecondsSinceEpoch);
@@ -335,12 +265,8 @@ class Guncelleyici extends ChangeNotifier {
     }
   }
 
-  // --------------------------------------------------------------- indir
-
   /// APK'yi indirir, dogrular ve [GuncellemeAsamasi.hazir]'a gecer.
-  ///
-  /// Yarim inen dosya silinmez: `Range` basligiyla kaldigi yerden devam
-  /// eder. Wi-Fi menzilinden cikan bir telefon 45 MB'i bastan indirmez.
+  /// Yarim inen dosya silinmez; `Range` ile kaldigi yerden devam eder.
   Future<void> _indir(GuncellemeBilgisi b, {required bool elle}) async {
     final Directory klasor = Directory(await _klasor());
     final File hedef = File(_apkYolu(klasor.path, b.surumKodu));
@@ -366,7 +292,7 @@ class Guncelleyici extends ChangeNotifier {
         if (uzunluk > 0 && uzunluk < b.boyut) {
           baslangic = uzunluk;
         } else {
-          // Ya bos ya beklenenden buyuk: guvenilmez, bastan.
+          // Bos ya da beklenenden buyuk: guvenilmez.
           await _sessizSil(yarim);
         }
       }
@@ -399,8 +325,7 @@ class Guncelleyici extends ChangeNotifier {
       DateTime sonBildirim = DateTime.fromMillisecondsSinceEpoch(0);
       await for (final List<int> parca in yanit) {
         if (_indirmeIptal) throw const _Iptal();
-        // Baglanti tamamen koptuysa dur. Yarim dosya diskte kalir, ag
-        // gelince kaldigi yerden devam eder.
+        // Baglanti koptuysa dur; yarim dosya diskte kalir.
         if (!elle && !Ag.instance.durum.internetVar) throw const _Iptal();
 
         akis.add(parca);
@@ -423,8 +348,8 @@ class Guncelleyici extends ChangeNotifier {
       if (await yarim.length() != b.boyut) {
         throw const HttpException('İndirme yarıda kesildi');
       }
-      // Dogrulama **tasimadan once**: bozuk bir dosya asla asil adi
-      // almasin, yoksa sonraki acilista "hazir" sanip kurmaya calisiriz.
+      // Dogrulama tasimadan once: bozuk dosya asil adi almasin, yoksa
+      // sonraki acilista "hazir" sanilir.
       if (!await _ozetDogruMu(yarim, b.sha256)) {
         await _sessizSil(yarim);
         throw const FormatException('İnen dosya bozuk');
@@ -439,7 +364,7 @@ class Guncelleyici extends ChangeNotifier {
         // Zaten kapanmis olabilir.
       }
       if (e is _Iptal) {
-        // Yarim dosya bilerek birakiliyor: sonraki denemede devam edecek.
+        // Yarim dosya bilerek kaliyor: sonraki denemede devam edecek.
         _bosaAl();
         return;
       }
@@ -451,7 +376,6 @@ class Guncelleyici extends ChangeNotifier {
     }
   }
 
-  /// Bu surumun APK'si diskte ve ozeti dogru mu?
   Future<bool> _diskteHazirMi(GuncellemeBilgisi b) async {
     try {
       final File apk = File(_apkYolu(await _klasor(), b.surumKodu));
@@ -481,7 +405,7 @@ class Guncelleyici extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Dosyayi parca parca okuyarak ozetler; 45 MB'i bellege almaz.
+  /// Parca parca okur; 45 MB'i bellege almaz.
   Future<bool> _ozetDogruMu(File dosya, String beklenen) async {
     try {
       final Digest ozet = await sha256.bind(dosya.openRead()).first;
@@ -492,12 +416,8 @@ class Guncelleyici extends ChangeNotifier {
     }
   }
 
-  // ----------------------------------------------------------------- kur
-
-  /// Sistemin kurulum penceresini acar.
-  ///
-  /// `false` donerse **kullaniciya bir sey gosterilmeli**: ya izin eksik
-  /// (bkz. [kurulumIzniVar]) ya da dosya kaybolmus.
+  /// Sistemin kurulum penceresini acar. `false` donerse kullaniciya bir sey
+  /// gosterilmeli: ya izin eksik ([kurulumIzniVar]) ya da dosya kaybolmus.
   Future<bool> kur() async {
     final GuncellemeBilgisi? b = _bilgi;
     if (b == null || _asama != GuncellemeAsamasi.hazir) return false;
@@ -512,7 +432,7 @@ class Guncelleyici extends ChangeNotifier {
 
       final String yol = _apkYolu(await _klasor(), b.surumKodu);
       if (!File(yol).existsSync()) {
-        // Android depolamayi temizlemis olabilir: bastan indir.
+        // Android depolamayi temizlemis olabilir.
         _bosaAl();
         unawaited(degerlendir(elle: true));
         return false;
@@ -533,7 +453,6 @@ class Guncelleyici extends ChangeNotifier {
     }
   }
 
-  /// Kullaniciyi "bilinmeyen kaynaklara izin ver" ekranina goturur.
   Future<bool> kurulumIzniIste() async {
     try {
       return await _kanal.invokeMethod<bool>('kurulumIzniEkraniniAc') ?? false;
@@ -543,7 +462,6 @@ class Guncelleyici extends ChangeNotifier {
     }
   }
 
-  /// Izin ekranindan donuldugunde durumu tazeler.
   Future<void> izniTazele() async {
     try {
       _kurulumIzniVar =
@@ -566,28 +484,23 @@ class Guncelleyici extends ChangeNotifier {
 
     switch (sonuc) {
       case 'onayBekleniyor':
-        // Sistem penceresi acildi; kullanicinin kararini bekliyoruz.
         break;
 
       case 'tamam':
-        // Genelde buraya gelinmez: kurulum basarili olunca surec
-        // degistirildigi icin uygulama yeniden baslar.
+        // Genelde buraya gelinmez: basarili kurulumda surec degistirilir.
         _bilgi = null;
         _bosaAl();
         await _eskiDosyalariTemizle(hepsi: true);
         break;
 
       case 'iptal':
-        // Kullanici sistemin penceresinde "Vazgeç" dedi. Guncelleme
-        // zorunlu oldugu icin ertelemiyoruz: ekran yerinde kaliyor,
-        // kullanici tekrar deneyebilir.
+        // Guncelleme zorunlu: ertelemiyoruz, ekran yerinde kaliyor.
         _asama = GuncellemeAsamasi.hazir;
         _iptalEdildi = true;
         notifyListeners();
         break;
 
       case 'imza':
-        // Kurulu uygulama baska bir anahtarla imzalanmis.
         _imzaUyusmazligi = true;
         _hataKur('İmza uyuşmuyor: kurulu sürüm farklı bir anahtarla '
             'imzalanmış. Silmeden güncellenemez. ${mesaj ?? ''}');
@@ -619,13 +532,11 @@ class Guncelleyici extends ChangeNotifier {
     return null;
   }
 
-  /// Suren indirmeyi durdurur (Ayarlar'daki elle denetim icin).
+  /// Suren indirmeyi durdurur (elle denetim icin).
   void indirmeyiDurdur() {
     _indirmeIptal = true;
     _istemci?.close(force: true);
   }
-
-  // ------------------------------------------------------------ yardimci
 
   Future<String> _klasor() async {
     if (_klasorYolu != null) return _klasorYolu!;
@@ -637,10 +548,8 @@ class Guncelleyici extends ChangeNotifier {
   static String _apkYolu(String klasor, int surumKodu) =>
       '$klasor/hatirlaf-$surumKodu.apk';
 
-  /// Kurulmus ya da artik beklenmeyen APK'lari siler.
-  ///
-  /// 45 MB'lik bir dosyanin telefonda oylece durmasi, hatiralar icin yer
-  /// kalmamasi demek olabilir. [hepsi] `true` ise beklenen surum de silinir.
+  /// Kurulmus ya da artik beklenmeyen APK'lari siler; 45 MB telefonda
+  /// oylece durmasin. [hepsi] ise beklenen surum de silinir.
   Future<void> _eskiDosyalariTemizle({bool hepsi = false}) async {
     try {
       final Directory klasor = Directory(await _klasor());
@@ -674,8 +583,8 @@ class Guncelleyici extends ChangeNotifier {
     }
   }
 
-  /// Hata kaydeder ama **hazir bir APK'yi gozden cikarmaz**: elle yapilan
-  /// basarisiz bir denetim, dun inmis kurulabilir surumu kaybettirmemeli.
+  /// Hata kaydeder ama hazir bir APK'yi gozden cikarmaz: basarisiz bir
+  /// denetim dun inmis kurulabilir surumu kaybettirmemeli.
   void _hataKur(String mesaj) {
     _hata = mesaj;
     if (!hazirApkVar) {
@@ -702,7 +611,7 @@ class Guncelleyici extends ChangeNotifier {
   }
 }
 
-/// Indirme bilerek durduruldu (ag degisti ya da kullanici durdurdu).
+/// Indirme bilerek durduruldu.
 class _Iptal implements Exception {
   const _Iptal();
 }

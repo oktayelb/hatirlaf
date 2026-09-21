@@ -8,18 +8,12 @@ import android.os.Build
 import android.util.Log
 
 /**
- * PackageInstaller'in kurulum sonucunu bildirdigi yer.
+ * PackageInstaller'in kurulum sonucunu bildirdigi yer. Sonuc PendingIntent
+ * ile geldigi icin BroadcastReceiver sart; manifest'te tanimli, cunku
+ * calisma aninda kaydedilen alici surec olduruldugunde kaybolur.
  *
- * Sonuc bir PendingIntent ile geldigi icin bir BroadcastReceiver sart;
- * dogrudan geri cagirma (callback) kullanilamiyor. Alici manifest'te
- * tanimli (`exported=false`) - Android 14'ten sonra calisma aninda
- * kaydedilen aliciların `RECEIVER_NOT_EXPORTED` bayragi istemesi ve
- * surec olduruldugunde kaybolmasi yuzunden manifest yolu daha saglam.
- *
- * [dinleyici] uygulama on plandayken [Guncelleyici] tarafindan doldurulur.
- * Bos olabilir: kullanici onay penceresindeyken uygulama olduruldüyse
- * sonucu dinleyen kimse kalmaz. Bu bir sorun degil - bir sonraki acilista
- * [Guncelleyici.surumKodu] zaten kurulumun olup olmadigini soyluyor.
+ * [dinleyici] bos olabilir (uygulama olduruldüyse); sorun degil, bir
+ * sonraki acilista surum kodu zaten sonucu soyluyor.
  */
 class KurulumAlicisi : BroadcastReceiver() {
 
@@ -38,15 +32,11 @@ class KurulumAlicisi : BroadcastReceiver() {
             PackageInstaller.STATUS_FAILURE,
         )
         val mesaj = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE)
-        // Kurulum uzaktaki bir telefonda sessizce basarisiz olabiliyor;
-        // `adb logcat -s KurulumAlicisi` tek bakista sebebi soylesin.
+        // `adb logcat -s KurulumAlicisi` sebebi soylesin.
         Log.i("KurulumAlicisi", "kurulum durumu=$durum mesaj=$mesaj")
 
-        // Sistemin "Kurmak istiyor musunuz?" penceresi.
-        //
-        // Bu Intent'i buradan baslatmiyoruz: Android 10'dan beri arka plandan
-        // ekran acmak engelli. Onun yerine on plandaki Activity'ye veriyoruz,
-        // o baslatiyor.
+        // Sistemin onay penceresi. Buradan baslatilmiyor: Android 10'dan
+        // beri arka plandan ekran acmak engelli, on plandaki Activity acar.
         val onay: Intent? = if (durum == PackageInstaller.STATUS_PENDING_USER_ACTION) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 intent.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)

@@ -22,12 +22,9 @@ enum TranscriptStatus {
   }
 }
 
-/// Tek bir sesli hatira.
-///
-/// Dosya yollari **gorece** tutulur (`hatiralar/<id>/ses.m4a`). Android
-/// uygulama klasorunun mutlak yolu surum/yedek sonrasi degisebildigi icin
-/// mutlak yol kaydetmek eski hatiralari "kayip" gosterir; bu yuzden mutlak
-/// yol yalnizca calisma aninda [Memory.absolutePath] ile uretilir.
+/// Tek bir sesli hatira. Dosya yollari gorece tutulur: uygulama
+/// klasorunun mutlak yolu yedekten donus sonrasi degisebiliyor ve
+/// kaydedilmis mutlak yol hatiralari "kayip" gosterirdi.
 class Memory {
   const Memory({
     required this.id,

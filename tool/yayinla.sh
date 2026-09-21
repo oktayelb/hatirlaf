@@ -1,35 +1,12 @@
 #!/usr/bin/env bash
-# Yeni bir surum yayinlar.
+# Yeni bir surum yayinlar. Ayrintilar: docs/guncelleme.md
 #
-#   tool/yayinla.sh bug     "Kayıt düğmesi bazen çalışmıyordu."
-#   tool/yayinla.sh feature "Fotoğraf eklenebiliyor."
-#   tool/yayinla.sh version "Yeni hatıra defteri."
-#   tool/yayinla.sh feature "Deneme." --deneme     (hicbir sey yayinlanmaz)
+#   tool/yayinla.sh bug|feature|version "Not"  [--zorunlu] [--deneme]
+#   tool/yayinla.sh 3.0.0 "Not"                (acik numara)
 #
-# Surum numarasi elle yazilmaz; degisikligin turunu soylersiniz, numarayi
-# script pubspec.yaml'dan hesaplar:
-#
-#   bug      1.4.2 -> 1.4.3    en sagdaki artar
-#   feature  1.4.2 -> 1.5.0    ortadaki artar, sagdaki sifirlanir
-#   version  1.4.2 -> 2.0.0    soldaki artar, digerleri sifirlanir
-#
-# Gerekirse acik numara da verilebilir: tool/yayinla.sh 3.0.0 "..."
-#
-# Yaptigi sirayla:
-#   1. On kontroller (imza anahtari, temiz dizin, arac ve yetki).
-#   2. pubspec.yaml'daki surumu yukseltir (surum adi + surum kodu).
-#   3. Mimariye ozel, imzali APK'lari derler.
-#   4. Her APK'nin gercek versionCode'unu, sha256'sini ve boyutunu okuyup
-#      guncelleme.json'u yazar.
-#   5. Surum commit'ini ve etiketini iter, GitHub surumunu olusturup
-#      APK'lari yukler.
-#   6. Yuklenen dosyalarin gercekten indirilebildigini dogrular.
-#   7. **Ancak bundan sonra** guncelleme.json'u iter.
-#
-# 5-6-7 sirasi pazarlik konusu degil: guncelleme.json "yeni surum var"
-# demektir. Once itilseydi telefonlar henuz yuklenmemis bir dosyayi
-# indirmeye calisir, basarisiz olur ve 20 saat boyunca bir daha
-# denemezdi. Bkz. docs/guncelleme.md, 2.2.
+# Surum numarasini pubspec.yaml'dan hesaplar. 5-6-7. adimlarin sirasi
+# pazarlik konusu degil: guncelleme.json "yeni surum var" demektir, once
+# itilseydi telefonlar henuz yuklenmemis bir dosyayi indirmeye calisirdi.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -52,10 +29,6 @@ for ARG in "$@"; do
 done
 
 # --- surum numarasini hesapla -------------------------------------------
-#
-# Numarayi elle yazmak, yazilan sayinin pubspec'tekiyle ilgisiz olmasi
-# demekti: once "hangi numaradaydik?" diye bakmak, sonra dogru yeri
-# artirmak gerekiyordu. Artik degisikligin *turunu* soyluyoruz.
 MEVCUT_AD="$(grep -m1 '^version:' pubspec.yaml \
   | sed 's/^version:[[:space:]]*//' | cut -d'+' -f1)"
 if [[ ! "$MEVCUT_AD" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
@@ -86,8 +59,7 @@ case "$ARTIS" in
   version)
     BUYUK=$((BUYUK + 1)); ORTA=0; KUCUK=0 ;;
   *)
-    # Acik numara: kacis kapisi. Numarayi atlamak ya da geri almak
-    # gerekirse diye duruyor.
+    # Acik numara: kacis kapisi.
     if [[ ! "$ARTIS" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
       echo "hata: '$ARTIS' anlasilmadi." >&2
       echo >&2
@@ -99,19 +71,12 @@ esac
 SURUM="$BUYUK.$ORTA.$KUCUK"
 
 DEPO="oktayelb/hatirlaf"
-# APK adresleri ETIKETE sabitleniyor, "latest"e degil.
-#
-# `releases/latest/download/...` hareketli bir hedef: yeni bir surum
-# olusturuldugu anda eski guncelleme.json'un isaret ettigi adres yeni
-# dosyaya kayardi. Telefon o dosyayi indirir, sha256 tutmaz, atar ve
-# sonsuza kadar yeniden denerdi. Etiketli adres hic degismez.
+# APK adresleri ETIKETE sabitleniyor: "latest" hareketli bir hedef, yeni
+# surumde eski manifest'in adresi kayar ve sha256 tutmaz.
 KOK="https://github.com/$DEPO/releases/download/v$SURUM"
 ABILER=(arm64-v8a armeabi-v7a x86_64)
 
-# --- 1. on kontroller ----------------------------------------------------
-#
-# Hepsi burada, derlemeye baslamadan once: 10 dakikalik bir derlemenin
-# sonunda "gh yok" demek kotu bir saka olurdu.
+# --- 1. on kontroller (derlemeye baslamadan once) ------------------------
 
 if [[ -n "$(git status --porcelain)" ]]; then
   echo "hata: calisma dizininde kaydedilmemis degisiklik var." >&2
@@ -119,18 +84,16 @@ if [[ -n "$(git status --porcelain)" ]]; then
   exit 1
 fi
 
-# Imza anahtari en kritik kontrol: debug anahtariyla imzalanmis bir APK
-# telefonlara guncelleme olarak KURULAMAZ ve bu ancak kullanicinin
-# telefonunda, sessizce fark edilir.
+# En kritik kontrol: debug anahtariyla imzalanmis APK telefonlara
+# guncelleme olarak kurulamaz ve bu ancak kullanicinin telefonunda anlasilir.
 if [[ ! -f android/key.properties || ! -f android/hatirlaf.jks ]]; then
   echo "hata: yayin imza anahtari yok (android/key.properties + hatirlaf.jks)." >&2
   echo "Yedekten geri koyun. Bu anahtar olmadan guncelleme yayinlanamaz." >&2
   exit 1
 fi
 
-# Surum kodunu APK'dan okumak icin aapt2 sart. Mimariye ozel derlemede
-# Flutter surum kodunu kaydiriyor (armeabi-v7a +1000, arm64-v8a +2000,
-# x86_64 +4000); kaydirmayi varsaymak yerine APK'ya soruyoruz.
+# Flutter surum kodunu mimariye gore kaydiriyor; varsaymak yerine
+# aapt2 ile APK'ya soruyoruz.
 AAPT="$(ls "${ANDROID_SDK_ROOT:-$HOME/Android/Sdk}"/build-tools/*/aapt2 2>/dev/null | sort -V | tail -1)"
 if [[ -z "$AAPT" ]]; then
   echo "hata: aapt2 bulunamadi (Android SDK build-tools)." >&2
@@ -164,7 +127,7 @@ ESKI_KOD="${ESKI_SATIR##*+}"
 YENI_KOD=$((ESKI_KOD + 1))
 
 # Buradan sonra bir sey patlarsa pubspec.yaml'i geri al: yarim kalmis bir
-# surum yukseltmesi bir sonraki denemede numarayi sessizce kaydirirdi.
+# yukseltme sonraki denemede numarayi kaydirirdi.
 GERI_AL="evet"
 geri_al() {
   if [[ "$GERI_AL" == "evet" ]]; then
@@ -180,9 +143,7 @@ sed -i "s|^version:.*|version: $SURUM+$YENI_KOD|" pubspec.yaml
 
 # --- 3. derle ------------------------------------------------------------
 #
-# Mimariye ozel APK'lar: tek parca (universal) APK 60 MB, arm64'e ozel
-# olan 22 MB. Guncelleme her surumde yeniden indirilecegi icin aradaki
-# 38 MB her seferinde tekrar odenirdi.
+# Mimariye ozel APK'lar: universal 60 MB, arm64'e ozel olan 22 MB.
 echo "derleniyor…"
 tool/flutter.sh build apk --release --split-per-abi
 
@@ -192,9 +153,6 @@ for A in "${ABILER[@]}"; do
 done
 
 # --- 4. guncelleme.json --------------------------------------------------
-#
-# Her mimari icin ayri adres + surum kodu + ozet + boyut. Telefon kendi
-# mimarisini (Build.SUPPORTED_ABIS) bilip dogru satiri seciyor.
 python3 - "$AAPT" "$SURUM" "$NOTLAR" "$KOK" "${ABILER[@]}" <<'PY'
 import hashlib, io, json, os, re, subprocess, sys
 
@@ -262,7 +220,7 @@ fi
 
 # --- 5. surum commit'i + GitHub surumu -----------------------------------
 #
-# guncelleme.json bilerek DISARIDA birakiliyor; o en sona kaliyor.
+# guncelleme.json bilerek disarida; o en sona kaliyor.
 echo
 echo "surum commit'i itiliyor…"
 git add pubspec.yaml
@@ -280,9 +238,7 @@ gh release create "v$SURUM" "${YUKLENECEK[@]}" \
 
 # --- 6. yuklenenler gercekten inebiliyor mu? -----------------------------
 #
-# Guvenlik kemeri: guncelleme.json'u itmeden once dosyalarin telefonun
-# kullanacagi ADRESTEN indirilebildigini dogruluyoruz. Burada durursak
-# telefonlar eski surumde kalir, yani kimse zarar gormez.
+# Burada durursak telefonlar eski surumde kalir, kimse zarar gormez.
 echo "yuklenen dosyalar dogrulaniyor…"
 for A in "${ABILER[@]}"; do
   BEKLENEN="$(stat -c%s "/tmp/hatirlaf-$A.apk")"

@@ -10,15 +10,9 @@ import '../utils/format.dart';
 import '../widgets/common.dart';
 import 'home_screen.dart';
 
-/// Ilk acilis. Uygulamanin en kritik ekrani: burada takilan kullanici
-/// uygulamayi bir daha acmaz.
-///
-/// Kurallar:
-///  - Her adimda ekranda **tek bir** ana buton var.
-///  - Hicbir adim zorunlu degil; "Şimdi değil" hep mumkun.
-///  - Izin ve indirme gibi teknik seyler once sade bir cumleyle aciklaniyor,
-///    ancak ondan sonra sistem penceresi aciliyor. Habersiz cikan izin
-///    penceresi yaslilarda refleks olarak "Reddet"e basilmasina yol aciyor.
+/// Ilk acilis: her adimda tek ana buton, hicbir adim zorunlu degil, ve her
+/// izin penceresi once sade bir cumleyle aciklaniyor - habersiz cikan bir
+/// pencerede refleksle "Reddet"e basiliyor.
 class WelcomeScreen extends StatefulWidget {
   const WelcomeScreen({super.key});
 
@@ -58,7 +52,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
       final SharedPreferences prefs = await SharedPreferences.getInstance();
       await prefs.setBool(kKarsilamaAnahtari, true);
     } catch (_) {
-      // Kaydedilemezse karsilama bir daha cikar; can yakan bir sey degil.
+      // Kaydedilemezse karsilama bir daha cikar.
     }
     if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
@@ -88,8 +82,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
       return;
     }
 
-    // Kullanici "bir daha sorma" dediyse sistem penceresi artik acilmaz;
-    // onu elinden tutup ayarlara goturuyoruz.
+    // "Bir daha sorma" dendiyse sistem penceresi acilmaz; ayarlara goturuyoruz.
     final bool kalici = await Izinler.kaliciReddedildiMi();
     if (!mounted) return;
     if (kalici) {
@@ -274,7 +267,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
   }
 }
 
-/// Ustteki "1 / 4" cubugu. Nokta degil cubuk: yasli gozu noktalari secemiyor.
+/// Ustteki "1 / 4" cubugu. Nokta degil cubuk: noktalar secilemiyor.
 class _AdimGostergesi extends StatelessWidget {
   const _AdimGostergesi({required this.adim, required this.toplam});
 

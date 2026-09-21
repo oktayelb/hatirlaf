@@ -3,10 +3,8 @@ import 'package:flutter/services.dart';
 
 import '../theme.dart';
 
-/// Ana eylem butonu: buyuk, ikonlu, tek satirda ne yapacagini yazan.
-///
-/// Yaslilar icin en kritik nokta ikonun tek basina birakilmamasi. Her ikonun
-/// yaninda mutlaka yazi var; simge tahmin ettirmiyoruz.
+/// Ana eylem butonu: buyuk, ikonlu ve her zaman yazili. Ikon tek basina
+/// birakilmiyor.
 class BuyukButon extends StatelessWidget {
   const BuyukButon({
     super.key,
@@ -144,10 +142,8 @@ class CerceveliButon extends StatelessWidget {
   }
 }
 
-/// Evet/hayir sorusu. Butonlar alt alta ve buyuk; yanlislikla basmak zor.
-///
-/// Tehlikeli islemde ([tehlikeli] true) onay butonu kirmizi ve **ikinci**
-/// sirada; parmak refleksiyle "evet"e basilmasin diye.
+/// Evet/hayir sorusu; butonlar alt alta ve buyuk. [tehlikeli] ise onay
+/// butonu kirmizi ve ikinci sirada.
 Future<bool> onayIste(
   BuildContext context, {
   required String baslik,

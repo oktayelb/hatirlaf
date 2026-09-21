@@ -5,9 +5,8 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
-// Yayin imza anahtari. `android/key.properties` depoda yok (ve olmamali);
-// yedekten gelir. Yoksa derleme kirilmasin diye asagida debug anahtarina
-// dusuyoruz - ama o APK telefonlara **guncelleme olarak kurulamaz**.
+// Yayin imza anahtari; `android/key.properties` depoda yok, yedekten gelir.
+// Yoksa debug anahtarina dusuyoruz ama o APK guncelleme olarak kurulamaz.
 val imzaAyarlari = Properties().apply {
     val dosya = rootProject.file("key.properties")
     if (dosya.exists()) dosya.inputStream().use { load(it) }
@@ -20,8 +19,7 @@ android {
     namespace = "com.hatirla.hatirla"
     compileSdk = 36
 
-    // whisper_ggml, whisper.cpp'yi bu NDK surumu ile derliyor.
-    // Tum modullerin ayni NDK'yi kullanmasi icin burada da sabitliyoruz.
+    // whisper_ggml bu NDK surumunu kullaniyor; hepsi ayni olsun.
     ndkVersion = "29.0.13113456"
 
     compileOptions {

@@ -1,10 +1,7 @@
 import 'package:intl/intl.dart';
 
-/// Tarih ve sure metinleri.
-///
-/// Kural: rakam yiginindan kacinilir. "02:14" yerine "2 dakika 14 saniye"
-/// gibi okunabilir ifadeler tercih edilir; sayac gibi surekli degisen
-/// yerlerde ise buyuk rakamlar kullanilir.
+/// Tarih ve sure metinleri. Rakam yigini yerine okunabilir ifadeler
+/// ("2 dakika 14 saniye"); yalnizca sayacta rakam.
 class Bicim {
   const Bicim._();
 

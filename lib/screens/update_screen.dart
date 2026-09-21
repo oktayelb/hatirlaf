@@ -4,28 +4,12 @@ import '../services/updater.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
 
-/// Yasli kullanicinin guncellemeyle ilgili gordugu **tek** ekran.
+/// Kullanicinin guncellemeyle ilgili gordugu tek ekran. Buraya yalnizca
+/// her sey hazirken gelinir: bir dokunus ve sistemin onay penceresi.
 ///
-/// Buraya yalnizca her sey hazirken gelinir: yeni surum inmis, ozeti
-/// dogrulanmis, kurulmayi bekliyor. Yani burada beklenecek, iptal
-/// edilecek, yarida kalacak bir sey yok - bir dokunus, bir de sistemin
-/// onay penceresi.
-///
-/// ## Guncelleme zorunludur
-///
-/// "Sonra" yok, geri tusu yok: kurulabilir bir guncelleme varken
-/// uygulamaya devam edilemez. Sebep, herkesin ayni surumde olmasinin
-/// destegi mumkun kilmasi - 20-30 telefonun farkli surumlere dagilmasi,
-/// her sorunda "sende ne yaziyor?" diye telefonda konusmak demek.
-///
-/// ## Ama asla kilitlemez
-///
-/// Zorunluluk yalnizca **kurulumun mumkun oldugu** durumda gecerli.
-/// Imza uyusmazligi, yer yoklugu, Play Protect engeli gibi kullanicinin
-/// cozemeyecegi bir hata varsa ekran kapatilabilir. Aksi halde yasli
-/// kullanici, cozemeyecegi bir hata yuzunden **kendi hatiralarina
-/// erisemez** hale gelirdi; bu, eski surumde kalmaktan cok daha kotu.
-/// Ekran her acilista yeniden gelir, yani israr surer - ama kapi acik.
+/// Guncelleme zorunlu ("sonra" yok, geri tusu yok) ama asla kilitlemez:
+/// kullanicinin cozemeyecegi bir hata varsa ekran kapatilabilir, yoksa
+/// kendi hatiralarina erisemez hale gelirdi.
 class UpdateScreen extends StatefulWidget {
   const UpdateScreen({super.key});
 
@@ -51,16 +35,13 @@ class _UpdateScreenState extends State<UpdateScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState durum) {
-    // Kullanici izin ekranindan donmus olabilir; izni yeniden soralim ki
-    // "İzin Ver" butonu bos yere ekranda kalmasin.
+    // Izin ekranindan donulmus olabilir.
     if (durum == AppLifecycleState.resumed) {
       Guncelleyici.instance.izniTazele();
     }
   }
 
-  /// Kullanici bu ekrandan cikabilir mi?
-  ///
-  /// Yalnizca kurulumun onunde kullanicinin cozemeyecegi bir engel varsa.
+  /// Yalnizca kullanicinin cozemeyecegi bir engel varsa cikilabilir.
   static bool _kacisVar(Guncelleyici g) =>
       g.imzaUyusmazligi ||
       !g.kurulumIzniVar ||
@@ -96,10 +77,8 @@ class _UpdateScreenState extends State<UpdateScreen>
       builder: (BuildContext context, _) {
         final Guncelleyici g = Guncelleyici.instance;
         return PopScope(
-          // Kurulabilir bir guncelleme varken geri tusu calismaz.
-          //
           // canPop false iken geri cagirmadan maybePop() CAGIRMAYIN:
-          // geri cagirmayi yeniden tetikler ve sonsuz donguye girer.
+          // geri cagirmayi yeniden tetikler, sonsuz donguye girer.
           canPop: _kacisVar(g),
           child: Scaffold(
             body: SafeArea(
@@ -128,8 +107,8 @@ class _UpdateScreenState extends State<UpdateScreen>
   }
 
   Widget _butonlar(Guncelleyici g) {
-    // Imza uyusmazliginda kurma butonu hic gosterilmez: bir daha denemek
-    // ayni duvara carpar, kullaniciyi bosuna ugrastirir.
+    // Imza uyusmazliginda kurma butonu gosterilmez: bir daha denemek
+    // ayni duvara carpar.
     if (g.imzaUyusmazligi) {
       return CerceveliButon(
         yazi: 'Kapat',
@@ -180,7 +159,7 @@ class _UpdateScreenState extends State<UpdateScreen>
       );
     }
 
-    // Asil durum: kurulabilir bir guncelleme var. Tek buton, cikis yok.
+    // Kurulabilir guncelleme: tek buton, cikis yok.
     return BuyukButon(
       yazi: bekleniyor ? 'Kuruluyor…' : 'Güncelle',
       altYazi: bekleniyor ? null : 'Birkaç saniye sürer',
@@ -224,8 +203,7 @@ class _Hazir extends StatelessWidget {
               ?.copyWith(color: HatirlaColors.inkSoft),
         ),
 
-        // Sistemin penceresinde "Vazgeç" denmisse sebebini soyleyelim;
-        // yoksa kullanici ayni ekrana hicbir aciklama olmadan doner.
+        // "Vazgeç" denmisse sebebini soyleyelim.
         if (g.iptalEdildi) ...<Widget>[
           const SizedBox(height: 22),
           Container(
@@ -283,10 +261,8 @@ class _Hazir extends StatelessWidget {
   }
 }
 
-/// "Bilinmeyen kaynak" izni verilmemis.
-///
-/// Bu izin normalde telefonu teslim ederken bir kez acilir. Yine de
-/// kapaliysa kullaniciyi sucla yuzlestirmeden, tek cumleyle anlatiyoruz.
+/// "Bilinmeyen kaynak" izni verilmemis. Normalde telefonu teslim ederken
+/// bir kez acilir.
 class _IzinAnlatimi extends StatelessWidget {
   const _IzinAnlatimi();
 
@@ -318,11 +294,8 @@ class _IzinAnlatimi extends StatelessWidget {
   }
 }
 
-/// Kurulum bir hatayla bitti.
-///
-/// Burada cikis kapisi aciktir: kullanicinin cozemeyecegi bir hata
-/// yuzunden kendi hatiralarina erisemez hale gelmesi, eski surumde
-/// kalmasindan cok daha kotu.
+/// Kurulum bir hatayla bitti. Cikis kapisi acik: cozemeyecegi bir hata
+/// kullaniciyi kendi hatiralarindan etmemeli.
 class _Aksadi extends StatelessWidget {
   const _Aksadi();
 
@@ -353,11 +326,8 @@ class _Aksadi extends StatelessWidget {
   }
 }
 
-/// Imza uyusmazligi: kullanicinin cozemeyecegi tek hata.
-///
-/// Burada **asla** "uygulamayi silip yeniden kurun" denmez. Dogru olan
-/// tavsiye bu olsa bile, o islem hatiralari siler ve yasli kullanici
-/// uyarıyı okumadan ilerleyebilir.
+/// Imza uyusmazligi. Burada asla "silip yeniden kurun" denmez: dogru
+/// tavsiye o olsa bile hatiralari siler.
 class _AileyeDanis extends StatelessWidget {
   const _AileyeDanis();
 

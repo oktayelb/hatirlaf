@@ -14,11 +14,8 @@ import '../widgets/common.dart';
 import 'help_screen.dart';
 import 'update_screen.dart';
 
-/// Ayarlar.
-///
-/// Bilerek kisa tutuldu: yasli kullanicinin buradaki hicbir seye dokunmak
-/// zorunda kalmamasi hedef. Ekran daha cok "cocugu/torunu bir kez ayarlasin"
-/// diye var.
+/// Ayarlar. Bilerek kisa: kullanicinin buraya girmek zorunda kalmamasi
+/// hedef, ekran daha cok kuran kisi icin.
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
 
@@ -427,13 +424,8 @@ class _BilgiKutusu extends StatelessWidget {
   }
 }
 
-/// Surum ve guncelleme durumu.
-///
-/// Bu bolum yasli kullanici icin degil, uygulamayi kuran cocugu/torunu
-/// icin. Normal kullanimda kimsenin buraya bakmasi gerekmez: guncelleme
-/// zaten kendiliginden iniyor ve hazir olunca bir kez soruluyor. Burada
-/// **ne olup bittigini gorebilmek** icin var - "neden guncellenmedi?"
-/// sorusunun cevabi uzaktan telefonla degil, buradan okunabilsin.
+/// Surum ve guncelleme durumu; kuran kisi icin. "Neden guncellenmedi?"
+/// sorusunun cevabi telefonla degil buradan okunur.
 class _GuncellemeBolumu extends StatefulWidget {
   const _GuncellemeBolumu();
 

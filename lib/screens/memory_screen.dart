@@ -28,8 +28,7 @@ class MemoryScreen extends StatefulWidget {
 class _MemoryScreenState extends State<MemoryScreen> {
   @override
   void dispose() {
-    // Ekrandan cikinca ses calmaya devam etmesin: kullanici sesin nereden
-    // geldigini bulamiyor.
+    // Ekrandan cikinca ses devam etmesin.
     if (Player.instance.aktifMi(widget.memoryId)) {
       Player.instance.durdur();
     }
@@ -158,8 +157,7 @@ class _KaydedildiSeridi extends StatelessWidget {
   }
 }
 
-/// Hatiranin ne zaman kaydedildigi. Baslik burada gosterilmiyor; ekranin
-/// isi dinlemek ve okumak, basligi listede zaten goruyor.
+/// Hatiranin ne zaman kaydedildigi; baslik listede zaten var.
 class _Tarih extends StatelessWidget {
   const _Tarih({required this.memory});
 
@@ -490,9 +488,8 @@ class _BilgiSatiri extends StatelessWidget {
   }
 }
 
-/// Yaziyi duzeltmek icin tam ekran metin alani.
-///
-/// Kucuk bir dialog yerine tam ekran: klavye acilinca metin kaybolmasin.
+/// Yaziyi duzeltmek icin tam ekran metin alani: dialogda klavye acilinca
+/// metin kayboluyor.
 class _YaziDuzeltEkrani extends StatelessWidget {
   const _YaziDuzeltEkrani({required this.controller});
 

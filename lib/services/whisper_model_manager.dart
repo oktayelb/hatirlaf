@@ -5,12 +5,8 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:whisper_ggml/whisper_ggml.dart';
 
-/// Kullaniciya gosterilen ses tanima kalitesi secenekleri.
-///
-/// Whisper modelleri buyudukce Turkce dogrulugu artar ama yavaslar.
-/// Varsayilan [normal]: eski telefonlarda bile makul surede biter ve
-/// Turkce'de anlasilir metin uretir. `tiny` Turkce'de cok zayif oldugu
-/// icin secenek olarak sunulmuyor.
+/// Ses tanima kalitesi secenekleri. Model buyudukce Turkce dogrulugu artar
+/// ama yavaslar; `tiny` Turkce'de cok zayif oldugu icin sunulmuyor.
 enum SesKalitesi {
   normal(
     model: WhisperModel.base,
@@ -89,10 +85,8 @@ class WhisperModelManager extends ChangeNotifier {
   Future<String> modelPath([SesKalitesi? q]) =>
       _controller.getPath((q ?? _kalite).model);
 
-  /// Model dosyasi diskte ve makul buyuklukte mi?
-  ///
-  /// Yarim inmis dosyayi "hazir" saymamak icin boyut da kontrol edilir;
-  /// aksi halde whisper.cpp acilista cokerdi.
+  /// Boyut da kontrol edilir: yarim dosyayi "hazir" saymak whisper.cpp'yi
+  /// acilista cokertiyor.
   Future<bool> isReady([SesKalitesi? q]) async {
     try {
       final File f = File(await modelPath(q));
@@ -123,11 +117,8 @@ class WhisperModelManager extends ChangeNotifier {
     _client?.close(force: true);
   }
 
-  /// Modeli indirir. Zaten varsa hemen doner.
-  ///
-  /// Once `.yarim` uzantili gecici dosyaya yazilir, ancak tamamen inince
-  /// asil ada tasinir. Boylece internet kesilirse bir sonraki acilista
-  /// yarim dosya "hazir" sanilmaz.
+  /// Modeli indirir. Once `.yarim` uzantiyla yazilir, tamamlaninca asil
+  /// ada tasinir.
   Future<bool> download() async {
     if (_durum == IndirmeDurumu.iniyor) return false;
     if (await isReady()) {
@@ -172,8 +163,7 @@ class WhisperModelManager extends ChangeNotifier {
         sink.add(parca);
         _inenBayt += parca.length;
         if (_toplamBayt > 0) _ilerleme = _inenBayt / _toplamBayt;
-        // Saniyede ~10 kez guncelle; her pakette setState cagirmak
-        // eski telefonlarda arayuzu kasiyor.
+        // Saniyede ~10 kez: her pakette setState eski telefonlari kasiyor.
         final DateTime now = DateTime.now();
         if (now.difference(sonBildirim).inMilliseconds > 100) {
           sonBildirim = now;
@@ -211,7 +201,7 @@ class WhisperModelManager extends ChangeNotifier {
     }
   }
 
-  /// Teknik hatayi yaslilarin anlayacagi bir cumleye cevirir.
+  /// Teknik hatayi anlasilir bir cumleye cevirir.
   static String _kullaniciyaMesaj(Object e) {
     if (e is SocketException || e is HttpException) {
       return 'İnternete bağlanılamadı. Wi-Fi bağlantınızı kontrol edip '
@@ -223,7 +213,7 @@ class WhisperModelManager extends ChangeNotifier {
     return 'Bir sorun oldu. Tekrar deneyin.';
   }
 
-  /// Indirilen modeli siler (Ayarlar ekranindan yer acmak icin).
+  /// Indirilen modeli siler (Ayarlar'dan yer acmak icin).
   Future<void> modelSil(SesKalitesi q) async {
     try {
       final File f = File(await modelPath(q));

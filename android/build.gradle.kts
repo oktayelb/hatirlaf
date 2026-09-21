@@ -16,14 +16,11 @@ subprojects {
     project.layout.buildDirectory.value(newSubprojectBuildDir)
 }
 
-// whisper_ggml kendi android/build.gradle'inda compileSdk 34 yaziyor, ama
-// bagimliligi ffmpeg_kit_flutter_new_min 35+ istiyor; ikisi carpisinca
-// :whisper_ggml:checkDebugAarMetadata patliyor. Eklenti modullerini
-// uygulamayla ayni compileSdk'ya cekiyoruz.
+// whisper_ggml compileSdk 34 yaziyor ama bagimliligi 35+ istiyor;
+// eklenti modullerini uygulamayla ayni compileSdk'ya cekiyoruz.
 //
-// Bu blok asagidaki evaluationDependsOn blogundan ONCE gelmeli: o blok
-// projeleri degerlendirmeye zorluyor, degerlendirilmis bir projeye
-// afterEvaluate eklenemiyor.
+// Bu blok asagidaki evaluationDependsOn blogundan ONCE gelmeli:
+// degerlendirilmis bir projeye afterEvaluate eklenemiyor.
 subprojects {
     afterEvaluate {
         when (val ext = extensions.findByName("android")) {

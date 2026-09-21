@@ -9,11 +9,8 @@ import '../theme.dart';
 import '../utils/format.dart';
 import 'common.dart';
 
-/// Listede bir hatirayi gosteren kart.
-///
-/// Karta dokunmak hatirayi acar; sagdaki yuvarlak dugme ise listeden
-/// cikmadan dinletir. "Once acayim sonra oynatayim" adimini kaldirmak
-/// yaslilarda en cok fark yaratan seylerden biri.
+/// Listede bir hatirayi gosteren kart. Karta dokunmak hatirayi acar,
+/// sagdaki dugme listeden cikmadan dinletir.
 class MemoryCard extends StatelessWidget {
   const MemoryCard({super.key, required this.memory, required this.onTap});
 

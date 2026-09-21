@@ -3,10 +3,8 @@ import 'package:flutter/material.dart';
 import '../data/prompts.dart';
 import '../theme.dart';
 
-/// Soru listesi. Secilen soru geriye dondurulur.
-///
-/// Konular kapali baslar; ekrani 70 soruyla doldurmak yerine once 10 basit
-/// baslik gosteriyoruz. Secim yapmak, okumaktan kolaydir.
+/// Soru listesi; secilen soru geriye dondurulur. Konular kapali baslar:
+/// 70 soru yerine once 10 baslik.
 class QuestionScreen extends StatefulWidget {
   const QuestionScreen({super.key});
 

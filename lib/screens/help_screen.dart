@@ -2,11 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../theme.dart';
 
-/// "Nasil kullanilir" ekrani.
-///
-/// Uzun paragraf yok: her adim tek cumle, basinda buyuk bir numara.
-/// Yasli kullanicinin cocugu telefonu eline alip birlikte okuyabilsin diye
-/// yazildi.
+/// "Nasil kullanilir" ekrani: her adim tek cumle, basinda buyuk numara.
 class HelpScreen extends StatelessWidget {
   const HelpScreen({super.key});
 

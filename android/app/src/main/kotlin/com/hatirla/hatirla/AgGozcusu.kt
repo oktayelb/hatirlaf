@@ -10,23 +10,12 @@ import android.util.Log
 import io.flutter.plugin.common.EventChannel
 
 /**
- * Aga baglanma durumunu Dart tarafina akitan gozcu.
+ * Ag durumunu Dart tarafina akitan gozcu. `yok` / `sayacli` / `serbest`
+ * yayar. connectivity_plus yerine elde yazildi: bize baglanti turu degil
+ * sayacli mi bilgisi lazim, ve her yeni eklenti bir derleme riski.
  *
- * Neden ayri bir eklenti (connectivity_plus) degil? Iki sebep: bu proje
- * compileSdk/NDK surumlerini elle sabitledigi icin her yeni eklenti bir
- * derleme riski (bkz. MainActivity'deki permission_handler notu), ve bize
- * baglanti *turu* degil **sayacli mi** bilgisi lazim - paylasilan mobil
- * baglantiyi Wi-Fi sanip yasli kullanicinin faturasina 45 MB yazmayalim.
- *
- * Yayilan degerler:
- *  - `yok`      : internet yok (ya da henuz dogrulanmadi)
- *  - `sayacli`  : internet var ama sayacli (mobil veri, sinirli hotspot)
- *  - `serbest`  : internet var ve sayacsiz (Wi-Fi, ethernet)
- *
- * `NET_CAPABILITY_VALIDATED` da araniyor: telefonun Wi-Fi'ye bagli olmasi
- * internete cikabildigi anlamina gelmiyor (otel/kafe giris sayfalari,
- * modem acik ama hat yok). Dogrulanmamis agda indirmeye baslamak yarim
- * kalan dosyalardan baska bir sey uretmiyor.
+ * `NET_CAPABILITY_VALIDATED` da araniyor: Wi-Fi'ye bagli olmak internete
+ * cikabilmek demek degil (kafe giris sayfalari, modem acik hat yok).
  */
 class AgGozcusu(private val context: Context) : EventChannel.StreamHandler {
 
@@ -52,9 +41,8 @@ class AgGozcusu(private val context: Context) : EventChannel.StreamHandler {
             return
         }
 
-        // Ilk deger: dinlemeye baslar baslamaz mevcut durumu bildir.
-        // Sistem geri cagirmasi yalnizca *degisiklikte* atesleniyor; bunu
-        // atlarsak uygulama acilista agi "yok" sanir.
+        // Sistem yalnizca degisiklikte atesliyor; ilk degeri kendimiz
+        // bildirmezsek uygulama acilista agi "yok" sanir.
         gonder(durumuOku(cm))
 
         val gc = object : ConnectivityManager.NetworkCallback() {
@@ -66,8 +54,7 @@ class AgGozcusu(private val context: Context) : EventChannel.StreamHandler {
             }
 
             override fun onLost(network: Network) {
-                // Baska bir ag devralmis olabilir (Wi-Fi > mobil); tek bir
-                // agin kaybini "internet yok" saymak yerine yeniden okuyoruz.
+                // Baska bir ag devralmis olabilir; yeniden okuyoruz.
                 gonder(durumuOku(yonetici))
             }
 
@@ -120,8 +107,7 @@ class AgGozcusu(private val context: Context) : EventChannel.StreamHandler {
     }
 
     private fun gonder(deger: String) {
-        // Sistem ayni yetenekleri saniyede birkac kez bildirebiliyor;
-        // degismediyse Dart tarafini uyandirmaya gerek yok.
+        // Sistem ayni yetenekleri saniyede birkac kez bildirebiliyor.
         if (deger == sonDeger) return
         sonDeger = deger
         anaIsParcacigi.post { yayinci?.success(deger) }

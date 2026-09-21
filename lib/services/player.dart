@@ -4,16 +4,14 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
 
-/// Hatiralari dinletmek icin tek bir oynatici.
-///
-/// Tek oynatici olmasi onemli: iki hatira ayni anda calarsa yaslilar icin
-/// tamamen kafa karistirici olur. Yeni bir hatira calinca eskisi durur.
+/// Hatiralari dinletmek icin tek oynatici: yeni bir hatira calinca eskisi
+/// durur.
 class Player extends ChangeNotifier {
   Player._() {
     _player.playerStateStream.listen((PlayerState s) {
       _caliyor = s.playing && s.processingState != ProcessingState.completed;
       if (s.processingState == ProcessingState.completed) {
-        // Bitince basa sar ki "tekrar dinle" tek dokunus olsun.
+        // Bitince basa sar: "tekrar dinle" tek dokunus olsun.
         unawaited(_player.seek(Duration.zero));
         unawaited(_player.pause());
       }

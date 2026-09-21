@@ -12,8 +12,7 @@ void main() {
     test('dakika:saniye olarak yazar', () {
       expect(Bicim.sayac(const Duration(seconds: 7)), '0:07');
       expect(Bicim.sayac(const Duration(minutes: 3, seconds: 12)), '3:12');
-      // 60 dakikayi asinca da dakika olarak saymaya devam eder: yaslilar
-      // "1:02:30" formatini okumakta zorlaniyor.
+      // 60 dakikayi asinca da dakika olarak sayar; "1:02:30" okunmuyor.
       expect(Bicim.sayac(const Duration(hours: 1, minutes: 2)), '62:00');
     });
   });
@@ -48,8 +47,7 @@ void main() {
     });
 
     test('gece yarisina yakin saatlerde gun kaymaz', () {
-      // 23:55'te kaydedilen bir hatira "Bugün" olmali; saat farki gun
-      // farkina donusmemeli.
+      // 23:55'te kaydedilen hatira "Bugün" olmali.
       final DateTime simdi = DateTime.now();
       final DateTime gecVakit =
           DateTime(simdi.year, simdi.month, simdi.day, 23, 55);

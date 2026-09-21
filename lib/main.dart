@@ -22,7 +22,7 @@ const String kKarsilamaAnahtari = 'karsilama_tamamlandi';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Telefonu yan cevirmek yaslilarda sik kaza; dikey sabit.
+  // Dikey sabit.
   await SystemChrome.setPreferredOrientations(<DeviceOrientation>[
     DeviceOrientation.portraitUp,
   ]);
@@ -42,8 +42,7 @@ Future<void> main() async {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     karsilamaTamam = prefs.getBool(kKarsilamaAnahtari) ?? false;
   } catch (e, s) {
-    // Acilista bir sey patlarsa bile uygulama acilsin: kullanici en azindan
-    // eski hatiralarini gorebilmeli.
+    // Acilista bir sey patlasa bile uygulama acilsin.
     debugPrint('Acilis hatasi: $e\n$s');
   }
 
@@ -57,8 +56,7 @@ Future<void> main() async {
   // Yarim kalmis yaziya cevirme islerini devral.
   Transcriber.instance.resumePending();
 
-  // Guncelleme denetimi. Bilerek beklenmiyor: agi olmayan bir telefonda
-  // acilisi saniyelerce geciktirmesin. Hata verirse sessizce yutar.
+  // Bilerek beklenmiyor: agi olmayan telefonda acilisi geciktirmesin.
   unawaited(Guncelleyici.instance.baslat());
 
   runApp(HatirlaApp(karsilamaTamam: karsilamaTamam));
@@ -83,9 +81,8 @@ class HatirlaApp extends StatelessWidget {
         GlobalCupertinoLocalizations.delegate,
       ],
       builder: (BuildContext context, Widget? child) {
-        // Yazilar zaten buyuk. Sistemde "en buyuk yazi" secili bir telefonda
-        // kat kat buyuyup butonlarin tasmasini engelliyoruz; ama kullanici
-        // sistemden buyutmusse birazini onurlandiriyoruz.
+        // Yazilar zaten buyuk; sistemden gelen olcegi sinirliyoruz ama
+        // tamamen yok saymiyoruz.
         final MediaQueryData mq = MediaQuery.of(context);
         return MediaQuery(
           data: mq.copyWith(

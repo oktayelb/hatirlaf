@@ -14,19 +14,10 @@ import android.util.Log
 import java.io.File
 
 /**
- * Yeni surumu kuran yerli kopru.
- *
- * Uygulama magazasi olmadigi icin guncellemeyi uygulamanin kendisi kuruyor.
- * `PackageInstaller` oturum API'si kullaniliyor; eski
- * `ACTION_INSTALL_PACKAGE` yolunun aksine bu yol sonucu geri bildiriyor
- * (kullanici vazgecti mi, imza tutmadi mi, yer mi yetmedi) ve FileProvider
- * kurmayi gerektirmiyor.
- *
- * **Sessiz kurulum mumkun degil.** Cihaz sahibi (device owner) olarak
- * saglanmamis bir uygulama, kullaniciya sistemin onay penceresini
- * gostermek zorunda. Yapabildigimiz en iyi sey o pencereye kadar olan her
- * seyi (denetim, indirme, dogrulama) gorunmez halletmek; boylece yasli
- * kullaniciya tek bir "Güncelle" dokunusu kaliyor.
+ * Yeni surumu kuran yerli kopru. `PackageInstaller` oturum API'si: eski
+ * `ACTION_INSTALL_PACKAGE`'in aksine sonucu geri bildiriyor ve
+ * FileProvider istemiyor. Sessiz kurulum mumkun degil; device owner
+ * olmayan uygulama sistemin onay penceresini gostermek zorunda.
  */
 class Guncelleyici(private val activity: Activity) {
 
@@ -40,14 +31,7 @@ class Guncelleyici(private val activity: Activity) {
     /** Kurulum surerken ikinci bir oturum acilmasin. */
     private var kurulumSuruyor = false
 
-    // ---------------------------------------------------------------- surum
-
-    /**
-     * Kurulu surumun kodu. `pubspec.yaml`'daki `+N`.
-     *
-     * Guncelleme karari **yalniz** bu sayiya bakar; surum adi ("1.0.1")
-     * kullaniciya gosterilen bir etiketten ibaret.
-     */
+    /** Kurulu surumun kodu; guncelleme karari yalniz buna bakar. */
     fun surumKodu(): Long {
         return try {
             val bilgi = activity.packageManager.getPackageInfo(activity.packageName, 0)
@@ -63,16 +47,7 @@ class Guncelleyici(private val activity: Activity) {
         }
     }
 
-    /**
-     * Cihazin calistirabilecegi islemci mimarileri, **tercih sirasiyla**.
-     *
-     * Her mimari icin ayri APK yayinliyoruz: tek parca (universal) APK 60 MB,
-     * arm64'e ozel olan 22 MB. Guncelleme her seferinde indirilecegi icin
-     * aradaki 38 MB her surumde tekrar tekrar odenen bir bedel olurdu.
-     *
-     * Liste sirali geliyor: 64 bit bir telefon hem `arm64-v8a` hem
-     * `armeabi-v7a` calistirabilir ama ilki tercih edilmeli.
-     */
+    /** Cihazin mimarileri, tercih sirasiyla. Her mimari icin ayri APK var. */
     fun abiler(): List<String> = Build.SUPPORTED_ABIS?.toList() ?: emptyList()
 
     fun surumAdi(): String {
@@ -85,14 +60,9 @@ class Guncelleyici(private val activity: Activity) {
         }
     }
 
-    // ----------------------------------------------------------------- izin
-
     /**
-     * "Bilinmeyen kaynaklardan uygulama yukleme" izni verilmis mi?
-     *
-     * API 26'dan once bu izin uygulama basina degil cihaz genelindeydi ve
-     * uygulamadan okunamiyor; orada `true` varsayip kurulumu deniyoruz,
-     * engelliyse sistem zaten kendi penceresini gosteriyor.
+     * "Bilinmeyen kaynaklardan yukleme" izni var mi? API 26 oncesinde izin
+     * cihaz genelinde ve okunamiyor; `true` varsayip deniyoruz.
      */
     fun kurulumIzniVarMi(): Boolean {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return true
@@ -126,16 +96,10 @@ class Guncelleyici(private val activity: Activity) {
         }
     }
 
-    // -------------------------------------------------------------- kurulum
-
     /**
-     * [apkYolu]'ndaki APK'yi kurar.
-     *
-     * [geriBildirim] ana is parcaciginda, tek kelimelik bir sonuc koduyla
-     * cagrilir. Ardindan sistemin onay penceresi acilir; kullanici onay
-     * verirse surec zaten olduruldugu icin "tamam" sonucu cogu zaman
-     * gorulmez - guncellemenin olup olmadigini bir sonraki acilista surum
-     * kodu soyler.
+     * [apkYolu]'ndaki APK'yi kurar. [geriBildirim] ana is parcaciginda tek
+     * kelimelik bir sonuc koduyla cagrilir; onay verilirse surec
+     * olduruldugu icin "tamam" cogu zaman gorulmez.
      */
     fun kur(apkYolu: String, geriBildirim: (String, String?) -> Unit) {
         if (kurulumSuruyor) {
@@ -155,7 +119,7 @@ class Guncelleyici(private val activity: Activity) {
             anaIsParcacigi.post { sonucuIsle(durum, mesaj, onay, geriBildirim) }
         }
 
-        // 45 MB'lik kopyalama ana is parcaciginda yapilirsa arayuz donuyor.
+        // 45 MB'lik kopyalama ana is parcaciginda arayuzu donduruyor.
         Thread({ oturumuYaz(apk, geriBildirim) }, "hatirlaf-kurulum").start()
     }
 
@@ -176,19 +140,16 @@ class Guncelleyici(private val activity: Activity) {
             kurucu.openSession(oturumNo).use { oturum ->
                 oturum.openWrite(OTURUM_ADI, 0, apk.length()).use { cikis ->
                     apk.inputStream().use { giris -> giris.copyTo(cikis, 64 * 1024) }
-                    // fsync olmadan commit, yazilmamis veriyle "bozuk APK"
-                    // hatasi verebiliyor.
+                    // fsync olmadan commit "bozuk APK" hatasi verebiliyor.
                     oturum.fsync(cikis)
                 }
 
-                // Bilesen acikca veriliyor: eylem adiyla gonderilen ortuk
-                // yayinlar Android 8'den beri manifest'teki alicilara
-                // ulasmiyor ve kurulum sessizce yarida kaliyor.
+                // Bilesen acikca veriliyor: ortuk yayinlar Android 8'den beri
+                // manifest'teki alicilara ulasmiyor.
                 val niyet = Intent(activity, KurulumAlicisi::class.java).apply {
                     action = KurulumAlicisi.EYLEM
                 }
-                // FLAG_MUTABLE sart: sonucu (durum kodu, onay penceresi)
-                // Intent'e sistem dolduruyor.
+                // FLAG_MUTABLE sart: sonucu Intent'e sistem dolduruyor.
                 val bayraklar = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                     PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
                 } else {
