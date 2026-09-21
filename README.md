@@ -75,8 +75,13 @@ GitHub sürüm (release) ekleri üzerinden yürüyor. Yeni sürüm yayınlamak
 tek komut:
 
 ```bash
-tool/yayinla.sh 1.0.1 "Kayıt düğmesi büyütüldü."
+tool/yayinla.sh bug     "Kayıt düğmesi bazen çalışmıyordu."
+tool/yayinla.sh feature "Fotoğraf eklenebiliyor."
 ```
+
+Sürüm numarasını siz yazmazsınız; değişikliğin türünü söylersiniz,
+numarayı script hesaplar (`bug` → 1.4.3, `feature` → 1.5.0,
+`version` → 2.0.0).
 
 Telefon tarafında **denetim ve indirme görünmezdir**: yaşlı kullanıcı ne
 ilerleme çubuğu ne de hata uyarısı görür. Yalnızca APK inip özeti

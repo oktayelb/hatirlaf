@@ -1,9 +1,20 @@
 #!/usr/bin/env bash
 # Yeni bir surum yayinlar.
 #
-#   tool/yayinla.sh 1.0.1 "Kayıt düğmesi büyütüldü."
-#   tool/yayinla.sh 1.0.2 "Veri kaybı düzeltildi." --zorunlu
-#   tool/yayinla.sh 1.0.3 "Deneme." --deneme      (hicbir sey yayinlanmaz)
+#   tool/yayinla.sh bug     "Kayıt düğmesi bazen çalışmıyordu."
+#   tool/yayinla.sh feature "Fotoğraf eklenebiliyor."
+#   tool/yayinla.sh version "Yeni hatıra defteri."
+#   tool/yayinla.sh bug     "Veri kaybı düzeltildi." --zorunlu
+#   tool/yayinla.sh feature "Deneme." --deneme     (hicbir sey yayinlanmaz)
+#
+# Surum numarasi elle yazilmaz; degisikligin turunu soylersiniz, numarayi
+# script pubspec.yaml'dan hesaplar:
+#
+#   bug      1.4.2 -> 1.4.3    en sagdaki artar
+#   feature  1.4.2 -> 1.5.0    ortadaki artar, sagdaki sifirlanir
+#   version  1.4.2 -> 2.0.0    soldaki artar, digerleri sifirlanir
+#
+# Gerekirse acik numara da verilebilir: tool/yayinla.sh 3.0.0 "..."
 #
 # Yaptigi sirayla:
 #   1. On kontroller (imza anahtari, temiz dizin, arac ve yetki).
@@ -24,7 +35,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-SURUM=""
+ARTIS=""
 NOTLAR=""
 ZORUNLU="false"
 DENEME="false"
@@ -35,7 +46,7 @@ for ARG in "$@"; do
     --deneme)  DENEME="true" ;;
     -*) echo "hata: bilinmeyen secenek: $ARG" >&2; exit 1 ;;
     *)
-      if [[ -z "$SURUM" ]]; then SURUM="$ARG"
+      if [[ -z "$ARTIS" ]]; then ARTIS="$ARG"
       elif [[ -z "$NOTLAR" ]]; then NOTLAR="$ARG"
       else echo "hata: fazladan argüman: $ARG" >&2; exit 1
       fi
@@ -43,16 +54,53 @@ for ARG in "$@"; do
   esac
 done
 
-if [[ -z "$SURUM" ]]; then
-  echo "kullanim: tool/yayinla.sh <surum> \"<neler degisti>\" [--zorunlu] [--deneme]" >&2
-  echo "ornek  : tool/yayinla.sh 1.0.1 \"Kayıt düğmesi büyütüldü.\"" >&2
+# --- surum numarasini hesapla -------------------------------------------
+#
+# Numarayi elle yazmak, yazilan sayinin pubspec'tekiyle ilgisiz olmasi
+# demekti: once "hangi numaradaydik?" diye bakmak, sonra dogru yeri
+# artirmak gerekiyordu. Artik degisikligin *turunu* soyluyoruz.
+MEVCUT_AD="$(grep -m1 '^version:' pubspec.yaml \
+  | sed 's/^version:[[:space:]]*//' | cut -d'+' -f1)"
+if [[ ! "$MEVCUT_AD" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  echo "hata: pubspec.yaml icindeki surum okunamadi: '$MEVCUT_AD'" >&2
   exit 1
 fi
+IFS='.' read -r BUYUK ORTA KUCUK <<< "$MEVCUT_AD"
 
-if [[ ! "$SURUM" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-  echo "hata: surum 1.2.3 biciminde olmali (girilen: $SURUM)" >&2
+kullanim() {
+  echo "kullanim: tool/yayinla.sh <bug|feature|version> \"<neler degisti>\"" >&2
+  echo "                          [--zorunlu] [--deneme]" >&2
+  echo >&2
+  echo "Su an $MEVCUT_AD. Buradan:" >&2
+  echo "  bug      -> $BUYUK.$ORTA.$((KUCUK + 1))  (hata duzeltmesi)" >&2
+  echo "  feature  -> $BUYUK.$((ORTA + 1)).0  (yeni ozellik)" >&2
+  echo "  version  -> $((BUYUK + 1)).0.0  (buyuk degisiklik)" >&2
+  echo >&2
+  echo "Acik numara da verilebilir: tool/yayinla.sh 3.0.0 \"...\"" >&2
   exit 1
-fi
+}
+
+[[ -z "$ARTIS" ]] && kullanim
+
+case "$ARTIS" in
+  bug)
+    KUCUK=$((KUCUK + 1)) ;;
+  feature)
+    ORTA=$((ORTA + 1)); KUCUK=0 ;;
+  version)
+    BUYUK=$((BUYUK + 1)); ORTA=0; KUCUK=0 ;;
+  *)
+    # Acik numara: kacis kapisi. Numarayi atlamak ya da geri almak
+    # gerekirse diye duruyor.
+    if [[ ! "$ARTIS" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+      echo "hata: '$ARTIS' anlasilmadi." >&2
+      echo >&2
+      kullanim
+    fi
+    IFS='.' read -r BUYUK ORTA KUCUK <<< "$ARTIS" ;;
+esac
+
+SURUM="$BUYUK.$ORTA.$KUCUK"
 
 DEPO="oktayelb/hatirlaf"
 KOK="https://github.com/$DEPO/releases/latest/download"
@@ -123,9 +171,9 @@ geri_al() {
     echo "yayinlama yarida kaldi; pubspec.yaml geri alindi." >&2
   fi
 }
-trap geri_al EXIT
+trap geri_al EXIT INT TERM
 
-echo "surum   : $SURUM+$YENI_KOD  (onceki: ${ESKI_SATIR#version: })"
+echo "surum   : $MEVCUT_AD -> $SURUM+$YENI_KOD  ($ARTIS)"
 sed -i "s|^version:.*|version: $SURUM+$YENI_KOD|" pubspec.yaml
 
 # --- 3. derle ------------------------------------------------------------
@@ -205,7 +253,7 @@ if [[ "$DENEME" == "true" ]]; then
   printf '  %s\n' "${YUKLENECEK[@]}"
   git checkout -- pubspec.yaml guncelleme.json
   GERI_AL="hayir"
-  trap - EXIT
+  trap - EXIT INT TERM
   echo
   echo "pubspec.yaml ve guncelleme.json geri alindi."
   exit 0
@@ -264,7 +312,7 @@ git add guncelleme.json
 git commit -q -m "guncelleme $SURUM"
 git push --quiet origin main
 
-trap - EXIT
+trap - EXIT INT TERM
 echo
 echo "yayinlandi: hatırlaf $SURUM ($YENI_KOD)"
 echo "Telefonlar internete ciktiklari ilk acilista indirecek,"

@@ -85,10 +85,44 @@ olursa güncelleme ya hiç önerilmez ya da sonsuza kadar önerilir.
 ## 3. Yeni sürüm yayınlama
 
 ```bash
-tool/yayinla.sh 1.0.1 "Kayıt düğmesi büyütüldü."
-tool/yayinla.sh 1.0.2 "Veri kaybı düzeltildi." --zorunlu
-tool/yayinla.sh 1.0.3 "Deneme." --deneme      # hiçbir şey yayınlanmaz
+tool/yayinla.sh bug     "Kayıt düğmesi bazen çalışmıyordu."
+tool/yayinla.sh feature "Fotoğraf eklenebiliyor."
+tool/yayinla.sh version "Yeni hatıra defteri."
+tool/yayinla.sh bug     "Veri kaybı düzeltildi." --zorunlu
+tool/yayinla.sh feature "Deneme." --deneme      # hiçbir şey yayınlanmaz
 ```
+
+**Sürüm numarasını siz yazmazsınız.** Değişikliğin türünü söylersiniz,
+numarayı script `pubspec.yaml`'dan hesaplar:
+
+| Söylediğiniz | 1.4.2 ise | Ne zaman |
+|---|---|---|
+| `bug` | 1.4.**3** | Hata düzeltmesi |
+| `feature` | 1.**5**.**0** | Yeni özellik |
+| `version` | **2**.**0**.**0** | Büyük değişiklik |
+
+Numarayı elle yazmak, yazılan sayının `pubspec.yaml`'dakiyle ilgisiz
+olması demekti: önce "hangi numaradaydık?" diye bakmak, sonra doğru
+haneyi artırmak gerekiyordu. Yanlış yazılırsa sürümler karışırdı.
+
+Argümansız çalıştırırsanız script şu an nerede olduğunuzu ve her
+seçeneğin nereye götüreceğini yazar:
+
+```
+Su an 1.0.0. Buradan:
+  bug      -> 1.0.1  (hata duzeltmesi)
+  feature  -> 1.1.0  (yeni ozellik)
+  version  -> 2.0.0  (buyuk degisiklik)
+```
+
+Kaçış kapısı olarak açık numara da verilebilir
+(`tool/yayinla.sh 3.0.0 "..."`) — numara atlamak ya da düzeltmek
+gerekirse.
+
+> `versionCode` ile karıştırmayın. Buradaki üç haneli numara sürüm
+> **adı**; kullanıcıya gösterilen etiket. Güncelleme kararını veren
+> `versionCode`, `pubspec.yaml`'daki `+N`'den geliyor ve her yayında
+> mutlaka bir artıyor (bkz. 2.3).
 
 Script sırasıyla:
 
