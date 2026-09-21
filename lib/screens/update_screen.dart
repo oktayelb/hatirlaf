@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 
 import '../services/updater.dart';
@@ -13,9 +11,21 @@ import '../widgets/common.dart';
 /// edilecek, yarida kalacak bir sey yok - bir dokunus, bir de sistemin
 /// onay penceresi.
 ///
-/// Ekranin tonu bilerek sakin: "yeni bir sey geldi", "hatiralariniza bir
-/// sey olmaz". Guncelleme kelimesi bile cogu yasli kullanici icin
-/// "bir seyler bozulacak" demek.
+/// ## Guncelleme zorunludur
+///
+/// "Sonra" yok, geri tusu yok: kurulabilir bir guncelleme varken
+/// uygulamaya devam edilemez. Sebep, herkesin ayni surumde olmasinin
+/// destegi mumkun kilmasi - 20-30 telefonun farkli surumlere dagilmasi,
+/// her sorunda "sende ne yaziyor?" diye telefonda konusmak demek.
+///
+/// ## Ama asla kilitlemez
+///
+/// Zorunluluk yalnizca **kurulumun mumkun oldugu** durumda gecerli.
+/// Imza uyusmazligi, yer yoklugu, Play Protect engeli gibi kullanicinin
+/// cozemeyecegi bir hata varsa ekran kapatilabilir. Aksi halde yasli
+/// kullanici, cozemeyecegi bir hata yuzunden **kendi hatiralarina
+/// erisemez** hale gelirdi; bu, eski surumde kalmaktan cok daha kotu.
+/// Ekran her acilista yeniden gelir, yani israr surer - ama kapi acik.
 class UpdateScreen extends StatefulWidget {
   const UpdateScreen({super.key});
 
@@ -48,6 +58,14 @@ class _UpdateScreenState extends State<UpdateScreen>
     }
   }
 
+  /// Kullanici bu ekrandan cikabilir mi?
+  ///
+  /// Yalnizca kurulumun onunde kullanicinin cozemeyecegi bir engel varsa.
+  static bool _kacisVar(Guncelleyici g) =>
+      g.imzaUyusmazligi ||
+      !g.kurulumIzniVar ||
+      g.asama == GuncellemeAsamasi.hata;
+
   Future<void> _guncelle() async {
     setState(() => _basiliyor = true);
     try {
@@ -57,32 +75,35 @@ class _UpdateScreenState extends State<UpdateScreen>
     }
   }
 
-  /// Ekrandan cikildiginda ertelemeyi kaydeder.
-  ///
-  /// Tek yol var: ekran kapanir, [PopScope] geri cagirmasi ertelemeyi
-  /// yazar. Once erteleyip sonra kapatmak (ya da tersi) iki kod yolu
-  /// demek olurdu ve ikisi birbirini tetikleyebilirdi.
-  void _sonra() => Navigator.of(context).pop();
+  Future<void> _tekrarDene() async {
+    setState(() => _basiliyor = true);
+    try {
+      await Guncelleyici.instance.degerlendir(elle: true);
+      if (Guncelleyici.instance.asama == GuncellemeAsamasi.hazir) {
+        await Guncelleyici.instance.kur();
+      }
+    } finally {
+      if (mounted) setState(() => _basiliyor = false);
+    }
+  }
+
+  void _kapat() => Navigator.of(context).pop();
 
   @override
   Widget build(BuildContext context) {
-    return PopScope(
-      // Geri tusu "Sonra" demekle ayni sey: ekran kullaniciyi hapsetmez,
-      // ama nasil cikilirsa cikilsin erteleme kaydedilir.
-      //
-      // canPop **true** olmali: false olsaydi maybePop() bu geri cagirmayi
-      // yeniden tetikler, o da tekrar kapatmayi denerdi - sonsuz dongu.
-      canPop: true,
-      onPopInvokedWithResult: (bool ciktiMi, Object? _) {
-        if (ciktiMi) unawaited(Guncelleyici.instance.ertele());
-      },
-      child: Scaffold(
-        body: SafeArea(
-          child: ListenableBuilder(
-            listenable: Guncelleyici.instance,
-            builder: (BuildContext context, _) {
-              final Guncelleyici g = Guncelleyici.instance;
-              return Padding(
+    return ListenableBuilder(
+      listenable: Guncelleyici.instance,
+      builder: (BuildContext context, _) {
+        final Guncelleyici g = Guncelleyici.instance;
+        return PopScope(
+          // Kurulabilir bir guncelleme varken geri tusu calismaz.
+          //
+          // canPop false iken geri cagirmadan maybePop() CAGIRMAYIN:
+          // geri cagirmayi yeniden tetikler ve sonsuz donguye girer.
+          canPop: _kacisVar(g),
+          child: Scaffold(
+            body: SafeArea(
+              child: Padding(
                 padding: const EdgeInsets.all(HatirlaSizes.gutter),
                 child: Column(
                   children: <Widget>[
@@ -91,18 +112,18 @@ class _UpdateScreenState extends State<UpdateScreen>
                     _butonlar(g),
                   ],
                 ),
-              );
-            },
+              ),
+            ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
   Widget _govde(Guncelleyici g) {
     if (g.imzaUyusmazligi) return const _AileyeDanis();
     if (!g.kurulumIzniVar) return const _IzinAnlatimi();
-    if (g.asama == GuncellemeAsamasi.hata) return _Aksadi(hata: g.hata);
+    if (g.asama == GuncellemeAsamasi.hata) return const _Aksadi();
     return _Hazir(g: g);
   }
 
@@ -113,9 +134,12 @@ class _UpdateScreenState extends State<UpdateScreen>
       return CerceveliButon(
         yazi: 'Kapat',
         ikon: Icons.arrow_back_rounded,
-        onPressed: _sonra,
+        onPressed: _kapat,
       );
     }
+
+    final bool bekleniyor =
+        _basiliyor || g.asama == GuncellemeAsamasi.kuruluyor;
 
     if (!g.kurulumIzniVar) {
       return Column(
@@ -129,40 +153,46 @@ class _UpdateScreenState extends State<UpdateScreen>
           ),
           const SizedBox(height: 12),
           CerceveliButon(
-            yazi: 'Sonra',
-            ikon: Icons.schedule_rounded,
-            onPressed: _sonra,
+            yazi: 'Kapat',
+            ikon: Icons.arrow_back_rounded,
+            onPressed: _kapat,
           ),
         ],
       );
     }
 
-    final bool bekleniyor =
-        _basiliyor || g.asama == GuncellemeAsamasi.kuruluyor;
+    if (g.asama == GuncellemeAsamasi.hata) {
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          BuyukButon(
+            yazi: bekleniyor ? 'Deneniyor…' : 'Tekrar Dene',
+            ikon: Icons.refresh_rounded,
+            onPressed: bekleniyor ? null : _tekrarDene,
+          ),
+          const SizedBox(height: 12),
+          CerceveliButon(
+            yazi: 'Kapat',
+            ikon: Icons.arrow_back_rounded,
+            onPressed: bekleniyor ? null : _kapat,
+          ),
+        ],
+      );
+    }
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: <Widget>[
-        BuyukButon(
-          yazi: bekleniyor ? 'Kuruluyor…' : 'Güncelle',
-          altYazi: bekleniyor ? null : 'Birkaç saniye sürer',
-          ikon: Icons.download_done_rounded,
-          renk: HatirlaColors.confirm,
-          yukseklik: 96,
-          onPressed: bekleniyor ? null : _guncelle,
-        ),
-        const SizedBox(height: 12),
-        CerceveliButon(
-          yazi: 'Sonra',
-          ikon: Icons.schedule_rounded,
-          onPressed: bekleniyor ? null : _sonra,
-        ),
-      ],
+    // Asil durum: kurulabilir bir guncelleme var. Tek buton, cikis yok.
+    return BuyukButon(
+      yazi: bekleniyor ? 'Kuruluyor…' : 'Güncelle',
+      altYazi: bekleniyor ? null : 'Birkaç saniye sürer',
+      ikon: Icons.download_done_rounded,
+      renk: HatirlaColors.confirm,
+      yukseklik: 96,
+      onPressed: bekleniyor ? null : _guncelle,
     );
   }
 }
 
-/// Normal durum: her sey hazir.
+/// Normal durum: her sey hazir, kurulmasi bekleniyor.
 class _Hazir extends StatelessWidget {
   const _Hazir({required this.g});
 
@@ -193,6 +223,27 @@ class _Hazir extends StatelessWidget {
               .bodyLarge
               ?.copyWith(color: HatirlaColors.inkSoft),
         ),
+
+        // Sistemin penceresinde "Vazgeç" denmisse sebebini soyleyelim;
+        // yoksa kullanici ayni ekrana hicbir aciklama olmadan doner.
+        if (g.iptalEdildi) ...<Widget>[
+          const SizedBox(height: 22),
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFF4DB),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: const Color(0xFFD9A400), width: 2),
+            ),
+            child: const Text(
+              'Kurulum tamamlanmadı. Devam edebilmek için '
+              '“Güncelle”ye dokunup açılan pencerede onay verin.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 20, height: 1.4),
+            ),
+          ),
+        ],
+
         if (notlar != null && notlar.isNotEmpty) ...<Widget>[
           const SizedBox(height: 26),
           Container(
@@ -268,10 +319,12 @@ class _IzinAnlatimi extends StatelessWidget {
 }
 
 /// Kurulum bir hatayla bitti.
+///
+/// Burada cikis kapisi aciktir: kullanicinin cozemeyecegi bir hata
+/// yuzunden kendi hatiralarina erisemez hale gelmesi, eski surumde
+/// kalmasindan cok daha kotu.
 class _Aksadi extends StatelessWidget {
-  const _Aksadi({required this.hata});
-
-  final String? hata;
+  const _Aksadi();
 
   @override
   Widget build(BuildContext context) {

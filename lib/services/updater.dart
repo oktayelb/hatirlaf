@@ -64,8 +64,6 @@ class Guncelleyici extends ChangeNotifier {
 
   // Ayarlarda saklananlar.
   static const String _pSonDenetim = 'guncelleme_son_denetim';
-  static const String _pErtelenenSurum = 'guncelleme_ertelenen_surum';
-  static const String _pErtelemeBitisi = 'guncelleme_erteleme_bitisi';
   static const String _pSonBilgi = 'guncelleme_son_bilgi';
 
   static const String _klasorAdi = 'guncelleme';
@@ -114,11 +112,15 @@ class Guncelleyici extends ChangeNotifier {
   bool _imzaUyusmazligi = false;
   bool get imzaUyusmazligi => _imzaUyusmazligi;
 
+  /// Kullanici sistemin kurulum penceresinde "Vazgeç" dedi mi?
+  ///
+  /// Guncelleme zorunlu oldugu icin ekran yerinde kaliyor; bu bayrak
+  /// olmasa kullanici ayni ekrana hicbir aciklama olmadan geri donerdi.
+  bool _iptalEdildi = false;
+  bool get iptalEdildi => _iptalEdildi;
+
   DateTime? _sonDenetim;
   DateTime? get sonDenetim => _sonDenetim;
-
-  int? _ertelenenSurum;
-  DateTime? _ertelemeBitisi;
 
   bool _kurulumIzniVar = true;
   bool get kurulumIzniVar => _kurulumIzniVar;
@@ -152,19 +154,11 @@ class Guncelleyici extends ChangeNotifier {
       _asama == GuncellemeAsamasi.hazir ||
       _asama == GuncellemeAsamasi.kuruluyor;
 
-  /// Kullaniciya su anda guncelleme sorulabilir mi?
+  /// Kullaniciya su anda guncelleme gosterilmeli mi?
   ///
-  /// Yalnizca her sey hazirsa ve erteleme suresi dolduysa.
-  bool get sorulabilir {
-    final GuncellemeBilgisi? b = _bilgi;
-    if (_asama != GuncellemeAsamasi.hazir || b == null) return false;
-    return GuncellemePolitikasi.sorulabilirMi(
-      hazirSurumKodu: b.surumKodu,
-      ertelenenSurumKodu: _ertelenenSurum,
-      ertelemeBitisi: _ertelemeBitisi,
-      simdi: DateTime.now(),
-    );
-  }
+  /// Guncelleme zorunlu: erteleme yok, "sonra" yok. Hazirsa gosterilir.
+  bool get sorulabilir =>
+      _asama == GuncellemeAsamasi.hazir && _bilgi != null;
 
   // -------------------------------------------------------------- baslat
 
@@ -192,11 +186,6 @@ class Guncelleyici extends ChangeNotifier {
       _sonDenetim = denetimMs == null
           ? null
           : DateTime.fromMillisecondsSinceEpoch(denetimMs);
-      _ertelenenSurum = ayarlar.getInt(_pErtelenenSurum);
-      final int? bitisMs = ayarlar.getInt(_pErtelemeBitisi);
-      _ertelemeBitisi =
-          bitisMs == null ? null : DateTime.fromMillisecondsSinceEpoch(bitisMs);
-
       // Son bilinen surum bilgisi diskten geri yuklenir. Boylece dun
       // Wi-Fi'de inmis bir guncelleme, bugun internet hic olmasa bile
       // kurulabilir; internet yalnizca *indirmek* icin gerekli.
@@ -531,6 +520,7 @@ class Guncelleyici extends ChangeNotifier {
 
       _asama = GuncellemeAsamasi.kuruluyor;
       _imzaUyusmazligi = false;
+      _iptalEdildi = false;
       _hata = null;
       notifyListeners();
 
@@ -588,9 +578,12 @@ class Guncelleyici extends ChangeNotifier {
         break;
 
       case 'iptal':
-        // Kullanici "Vazgeç" dedi. Israr etmiyoruz.
+        // Kullanici sistemin penceresinde "Vazgeç" dedi. Guncelleme
+        // zorunlu oldugu icin ertelemiyoruz: ekran yerinde kaliyor,
+        // kullanici tekrar deneyebilir.
         _asama = GuncellemeAsamasi.hazir;
-        await ertele();
+        _iptalEdildi = true;
+        notifyListeners();
         break;
 
       case 'imza':
@@ -624,35 +617,6 @@ class Guncelleyici extends ChangeNotifier {
         _hataKur('Kurulum tamamlanamadı. ${mesaj ?? ''}');
     }
     return null;
-  }
-
-  // ------------------------------------------------------------ erteleme
-
-  /// "Sonra" denildi. Bu surum icin bir sure daha sorulmaz.
-  Future<void> ertele() async {
-    final GuncellemeBilgisi? b = _bilgi;
-    if (b == null) return;
-
-    final Duration sure = b.zorunlu
-        ? GuncellemePolitikasi.zorunluErtelemeSuresi
-        : GuncellemePolitikasi.ertelemeSuresi;
-
-    _ertelenenSurum = b.surumKodu;
-    _ertelemeBitisi = DateTime.now().add(sure);
-    // APK diskte kalir: erteleme bitince kullanici beklemeden kurabilsin.
-    _asama = GuncellemeAsamasi.hazir;
-
-    try {
-      final SharedPreferences ayarlar = await SharedPreferences.getInstance();
-      await ayarlar.setInt(_pErtelenenSurum, _ertelenenSurum!);
-      await ayarlar.setInt(
-        _pErtelemeBitisi,
-        _ertelemeBitisi!.millisecondsSinceEpoch,
-      );
-    } catch (e) {
-      debugPrint('Erteleme kaydedilemedi: $e');
-    }
-    notifyListeners();
   }
 
   /// Suren indirmeyi durdurur (Ayarlar'daki elle denetim icin).

@@ -4,7 +4,6 @@
 #   tool/yayinla.sh bug     "Kayıt düğmesi bazen çalışmıyordu."
 #   tool/yayinla.sh feature "Fotoğraf eklenebiliyor."
 #   tool/yayinla.sh version "Yeni hatıra defteri."
-#   tool/yayinla.sh bug     "Veri kaybı düzeltildi." --zorunlu
 #   tool/yayinla.sh feature "Deneme." --deneme     (hicbir sey yayinlanmaz)
 #
 # Surum numarasi elle yazilmaz; degisikligin turunu soylersiniz, numarayi
@@ -37,12 +36,10 @@ cd "$(dirname "$0")/.."
 
 ARTIS=""
 NOTLAR=""
-ZORUNLU="false"
 DENEME="false"
 
 for ARG in "$@"; do
   case "$ARG" in
-    --zorunlu) ZORUNLU="true" ;;
     --deneme)  DENEME="true" ;;
     -*) echo "hata: bilinmeyen secenek: $ARG" >&2; exit 1 ;;
     *)
@@ -68,8 +65,7 @@ fi
 IFS='.' read -r BUYUK ORTA KUCUK <<< "$MEVCUT_AD"
 
 kullanim() {
-  echo "kullanim: tool/yayinla.sh <bug|feature|version> \"<neler degisti>\"" >&2
-  echo "                          [--zorunlu] [--deneme]" >&2
+  echo "kullanim: tool/yayinla.sh <bug|feature|version> \"<neler degisti>\" [--deneme]" >&2
   echo >&2
   echo "Su an $MEVCUT_AD. Buradan:" >&2
   echo "  bug      -> $BUYUK.$ORTA.$((KUCUK + 1))  (hata duzeltmesi)" >&2
@@ -103,7 +99,13 @@ esac
 SURUM="$BUYUK.$ORTA.$KUCUK"
 
 DEPO="oktayelb/hatirlaf"
-KOK="https://github.com/$DEPO/releases/latest/download"
+# APK adresleri ETIKETE sabitleniyor, "latest"e degil.
+#
+# `releases/latest/download/...` hareketli bir hedef: yeni bir surum
+# olusturuldugu anda eski guncelleme.json'un isaret ettigi adres yeni
+# dosyaya kayardi. Telefon o dosyayi indirir, sha256 tutmaz, atar ve
+# sonsuza kadar yeniden denerdi. Etiketli adres hic degismez.
+KOK="https://github.com/$DEPO/releases/download/v$SURUM"
 ABILER=(arm64-v8a armeabi-v7a x86_64)
 
 # --- 1. on kontroller ----------------------------------------------------
@@ -193,11 +195,11 @@ done
 #
 # Her mimari icin ayri adres + surum kodu + ozet + boyut. Telefon kendi
 # mimarisini (Build.SUPPORTED_ABIS) bilip dogru satiri seciyor.
-python3 - "$AAPT" "$SURUM" "$NOTLAR" "$ZORUNLU" "$KOK" "${ABILER[@]}" <<'PY'
+python3 - "$AAPT" "$SURUM" "$NOTLAR" "$KOK" "${ABILER[@]}" <<'PY'
 import hashlib, io, json, os, re, subprocess, sys
 
-aapt, surum, notlar, zorunlu, kok = sys.argv[1:6]
-abiler = sys.argv[6:]
+aapt, surum, notlar, kok = sys.argv[1:5]
+abiler = sys.argv[5:]
 
 paketler = {}
 for a in abiler:
@@ -229,7 +231,6 @@ for a in abiler:
 veri = {
     "surumAdi": surum,
     "notlar": notlar,
-    "zorunlu": zorunlu == "true",
     "paketler": paketler,
 }
 io.open("guncelleme.json", "w", encoding="utf-8").write(

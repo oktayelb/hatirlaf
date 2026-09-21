@@ -12,7 +12,7 @@ const String _ozetArm32 =
     'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
 
 const String _kok =
-    'https://github.com/oktayelb/hatirlaf/releases/latest/download';
+    'https://github.com/oktayelb/hatirlaf/releases/download/v1.0.1';
 
 /// Telefonlarin bildirdigi tipik mimari listeleri.
 const List<String> _yeniTelefon = <String>['arm64-v8a', 'armeabi-v7a'];
@@ -37,13 +37,11 @@ Map<String, Object?> _paket({
 String _json({
   Object? surumAdi = '1.0.1',
   Object? notlar = 'Kayıt düğmesi büyütüldü.',
-  Object? zorunlu = false,
   Object? paketler,
 }) {
   return json.encode(<String, Object?>{
     'surumAdi': surumAdi,
     'notlar': notlar,
-    'zorunlu': zorunlu,
     'paketler': paketler ??
         <String, Object?>{
           'arm64-v8a': _paket(),
@@ -65,7 +63,6 @@ void main() {
       expect(b, isNotNull);
       expect(b!.surumKodu, 2002);
       expect(b.surumAdi, '1.0.1');
-      expect(b.zorunlu, isFalse);
     });
 
     test('bozuk JSON uygulamayi coktermez, null doner', () {
@@ -277,71 +274,6 @@ void main() {
       expect(
         GuncellemePolitikasi.denetimZamaniGeldiMi(
           sonDenetim: simdi.add(const Duration(days: 400)),
-          simdi: simdi,
-        ),
-        isTrue,
-      );
-    });
-  });
-
-  group('erteleme', () {
-    final DateTime simdi = DateTime(2026, 3, 4, 12);
-
-    test('hic ertelenmediyse sorulur', () {
-      expect(
-        GuncellemePolitikasi.sorulabilirMi(
-          hazirSurumKodu: 2,
-          ertelenenSurumKodu: null,
-          ertelemeBitisi: null,
-          simdi: simdi,
-        ),
-        isTrue,
-      );
-    });
-
-    test('erteleme suresi dolmadan sorulmaz', () {
-      expect(
-        GuncellemePolitikasi.sorulabilirMi(
-          hazirSurumKodu: 2,
-          ertelenenSurumKodu: 2,
-          ertelemeBitisi: simdi.add(const Duration(days: 2)),
-          simdi: simdi,
-        ),
-        isFalse,
-      );
-    });
-
-    test('erteleme suresi dolunca tekrar sorulur', () {
-      expect(
-        GuncellemePolitikasi.sorulabilirMi(
-          hazirSurumKodu: 2,
-          ertelenenSurumKodu: 2,
-          ertelemeBitisi: simdi.subtract(const Duration(minutes: 1)),
-          simdi: simdi,
-        ),
-        isTrue,
-      );
-    });
-
-    // "Sonra" denen surum degil, yeni bir surum geldiyse erteleme dusmez.
-    test('daha yeni bir surum ertelemeyi asar', () {
-      expect(
-        GuncellemePolitikasi.sorulabilirMi(
-          hazirSurumKodu: 3,
-          ertelenenSurumKodu: 2,
-          ertelemeBitisi: simdi.add(const Duration(days: 2)),
-          simdi: simdi,
-        ),
-        isTrue,
-      );
-    });
-
-    test('saat geri alinsa da erteleme sonsuza kadar surmez', () {
-      expect(
-        GuncellemePolitikasi.sorulabilirMi(
-          hazirSurumKodu: 2,
-          ertelenenSurumKodu: 2,
-          ertelemeBitisi: simdi.add(const Duration(days: 365)),
           simdi: simdi,
         ),
         isTrue,

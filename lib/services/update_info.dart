@@ -74,7 +74,6 @@ class GuncellemeBilgisi {
     required this.abi,
     required this.paket,
     required this.notlar,
-    required this.zorunlu,
   });
 
   /// Secilen APK'nin gercek `versionCode`'u. Karsilastirma **yalniz**
@@ -91,10 +90,6 @@ class GuncellemeBilgisi {
 
   /// "Neler degisti" - kullaniciya gosterilen sade bir iki cumle.
   final String notlar;
-
-  /// Veri kaybina yol acan bir hata duzeltildiyse `true`. Erteleme suresini
-  /// kisaltir; yine de kurulum zorla yapilamaz, kullanici hep onaylar.
-  final bool zorunlu;
 
   String get apkUrl => paket.apkUrl;
   String get sha256 => paket.sha256;
@@ -144,7 +139,6 @@ class GuncellemeBilgisi {
         abi: secilenAbi,
         paket: secilen,
         notlar: (kok['notlar'] as String?)?.trim() ?? '',
-        zorunlu: kok['zorunlu'] == true,
       );
     } catch (e) {
       debugPrint('Guncelleme bilgisi cozumlenemedi: $e');
@@ -192,12 +186,11 @@ class GuncellemeBilgisi {
   String toString() => 'GuncellemeBilgisi($surumAdi / $surumKodu / $abi)';
 }
 
-/// Ne zaman denetlenir, ne zaman gosterilir.
+/// Ne zaman denetlenir.
 ///
-/// Yasli kullanici icin en onemli kural: **rahatsiz etme**. Guncelleme
-/// denetimi ve indirme tamamen gorunmez; kullanici yalnizca her sey hazir
-/// oldugunda, tek dokunusla bitecek noktada bir kez soruyla karsilasir.
-/// "Sonra" derse uzunca bir sure bir daha sorulmaz.
+/// Guncelleme denetimi ve indirme tamamen gorunmezdir; kullanici yalnizca
+/// her sey hazir oldugunda, tek dokunusla bitecek noktada bir ekranla
+/// karsilasir. O ekran **atlanamaz**: guncelleme zorunludur.
 class GuncellemePolitikasi {
   const GuncellemePolitikasi._();
 
@@ -206,12 +199,6 @@ class GuncellemePolitikasi {
   /// 24 degil 20 saat: her gun ayni saatte uygulamayi acan biri 24 saatlik
   /// pencereye hep birkac dakikayla yetisemez ve gunlerce denetim yapilmaz.
   static const Duration denetimAraligi = Duration(hours: 20);
-
-  /// "Sonra" denince bir daha sorulmayacak sure.
-  static const Duration ertelemeSuresi = Duration(days: 3);
-
-  /// Onemli bir duzeltmede erteleme daha kisa.
-  static const Duration zorunluErtelemeSuresi = Duration(hours: 20);
 
   static bool denetimZamaniGeldiMi({
     required DateTime? sonDenetim,
@@ -224,17 +211,4 @@ class GuncellemePolitikasi {
     return simdi.difference(sonDenetim) >= denetimAraligi;
   }
 
-  /// Hazir bir guncelleme kullaniciya gosterilebilir mi?
-  static bool sorulabilirMi({
-    required int hazirSurumKodu,
-    required int? ertelenenSurumKodu,
-    required DateTime? ertelemeBitisi,
-    required DateTime simdi,
-  }) {
-    if (ertelenenSurumKodu != hazirSurumKodu) return true;
-    if (ertelemeBitisi == null) return true;
-    // Saat geri alinmissa erteleme sonsuza kadar surmesin.
-    if (ertelemeBitisi.difference(simdi) > const Duration(days: 30)) return true;
-    return simdi.isAfter(ertelemeBitisi);
-  }
 }
