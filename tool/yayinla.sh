@@ -186,6 +186,9 @@ for a in abiler:
     }
     print(f"  {a:<14} kod={kod:<6} {boyut / 1048576:5.1f} MB  {ozet.hexdigest()[:16]}…")
 
+if not paketler:
+    sys.exit("hata: hicbir paket uretilmedi")
+
 veri = {
     "surumAdi": surum,
     "notlar": notlar,
@@ -245,7 +248,8 @@ for A in "${ABILER[@]}"; do
   GORULEN=""
   for _ in 1 2 3 4 5; do
     GORULEN="$(curl -sIL "$KOK/hatirlaf-$A.apk" \
-      | tr -d '\r' | awk 'tolower($1)=="content-length:"{v=$2} END{print v}')"
+      | tr -d '\r' | awk 'tolower($1)=="content-length:"{v=$2} END{print v}' \
+      || true)"
     [[ "$GORULEN" == "$BEKLENEN" ]] && break
     sleep 3
   done
