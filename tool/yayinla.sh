@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Yeni bir surum yayinlar. Ayrintilar: docs/guncelleme.md
 #
-#   tool/yayinla.sh bug|feature|version "Not"  [--zorunlu] [--deneme]
+#   tool/yayinla.sh bug|feature|version "Not"  [--deneme]
 #   tool/yayinla.sh 3.0.0 "Not"                (acik numara)
 #
 # Surum numarasini pubspec.yaml'dan hesaplar. 5-6-7. adimlarin sirasi

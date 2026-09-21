@@ -29,7 +29,6 @@ uydurmayın, APK'dan okuyun (`aapt2 dump badging`).
 tool/yayinla.sh bug     "Kayıt düğmesi bazen çalışmıyordu."
 tool/yayinla.sh feature "Fotoğraf eklenebiliyor."
 tool/yayinla.sh version "Yeni hatıra defteri."
-tool/yayinla.sh bug     "..." --zorunlu
 tool/yayinla.sh feature "Deneme." --deneme   # hiçbir şey yayınlanmaz
 tool/yayinla.sh 3.0.0   "..."                # açık numara
 ```
@@ -53,7 +52,6 @@ Elle yayınlarken sıra aynı kalmalı.
 {
   "surumAdi": "1.0.1",
   "notlar": "Kayıt düğmesi büyütüldü.",
-  "zorunlu": false,
   "paketler": {
     "arm64-v8a": {
       "surumKodu": 2002,
@@ -90,8 +88,7 @@ edilebilir işlem yok. Soru yalnızca APK inip özeti doğrulandıktan sonra,
 
 Denetim aralığı en az 20 saat. Diskte:
 `<app support>/guncelleme/hatirlaf-<surumKodu>.apk` (yarım inen `.yarim`)
-ve `SharedPreferences`: `guncelleme_son_denetim`, `guncelleme_son_bilgi`,
-`guncelleme_ertelenen_surum`, `guncelleme_erteleme_bitisi`. Manifest
+ve `SharedPreferences`: `guncelleme_son_denetim`, `guncelleme_son_bilgi`. Manifest
 diskte tutulduğu için dün inmiş bir güncelleme bugün internetsiz de
 kurulabilir. Telefonun saati geri alınabildiği için zaman damgaları
 geleceğe karşı korumalı.
@@ -113,7 +110,7 @@ geleceğe karşı korumalı.
 
 | Dosya | İşi |
 |---|---|
-| `lib/services/update_info.dart` | Manifest çözümleme, mimari seçimi, adres kısıtı, erteleme (saf) |
+| `lib/services/update_info.dart` | Manifest çözümleme, mimari seçimi, adres kısıtı (saf) |
 | `lib/services/updater.dart` | Durum makinesi: denetle → indir → doğrula → kur |
 | `lib/services/network.dart` | Ağ durumu akışı |
 | `lib/screens/update_screen.dart` | Kullanıcının gördüğü tek ekran |
