@@ -87,27 +87,47 @@ olursa güncelleme ya hiç önerilmez ya da sonsuza kadar önerilir.
 ```bash
 tool/yayinla.sh 1.0.1 "Kayıt düğmesi büyütüldü."
 tool/yayinla.sh 1.0.2 "Veri kaybı düzeltildi." --zorunlu
+tool/yayinla.sh 1.0.3 "Deneme." --deneme      # hiçbir şey yayınlanmaz
 ```
 
 Script sırasıyla:
 
-1. Çalışma dizini temiz mi, imza anahtarı yerinde mi diye bakar.
+1. **Ön kontroller**, derlemeye başlamadan önce: çalışma dizini temiz mi,
+   imza anahtarı yerinde mi, `aapt2`/`gh` var mı, `gh` oturumu açık mı,
+   bu sürüm zaten yayınlanmış mı, yerel `main` `origin/main` ile aynı mı.
 2. `pubspec.yaml`'daki sürümü yükseltir (`1.0.1+2`).
 3. `--split-per-abi` ile üç imzalı APK derler.
 4. Her APK'nın **gerçek** `versionCode`'unu, sha256 özetini ve boyutunu
    okuyup `guncelleme.json`'u yazar.
-5. Commit + tag + push, sonra `gh release create` ile APK'ları yükler.
+5. **Yalnızca sürüm commit'ini** ve etiketi iter, `gh release create` ile
+   APK'ları yükler. `guncelleme.json` bilerek dışarıda bırakılır.
+6. Yüklenen her dosyanın, telefonun kullanacağı adresten gerçekten
+   indirilebildiğini doğrular (boyut karşılaştırır, 5 kez dener).
+7. **Ancak bundan sonra** `guncelleme.json`'u iter.
 
-`gh` kurulu değilse script durup kalan iki adımı ekrana yazar.
+5-6-7 sırası bu belgenin 2.2'sindeki kuralın koda dökülmüş hâli. 6. adım
+başarısız olursa script durur ve `guncelleme.json` **itilmez** —
+telefonlar eski sürümde kalır, yani kimse zarar görmez.
 
-> `aapt2` gerekir (Android SDK `build-tools`). Yoksa script durur.
+Derleme bittikten sonra bir şey ters giderse `pubspec.yaml` otomatik geri
+alınır; yarım kalmış bir yayın sürüm numarasını sessizce kaydırmaz.
+
+`--deneme` her şeyi yapar ama hiçbir şey yayınlamaz: üretilecek
+`guncelleme.json`'u ve yüklenecek dosyaları gösterir, sonra çalışma
+dizinini eski hâline döndürür. Yeni bir şey denerken bunu kullanın.
+
+> `aapt2` (Android SDK `build-tools`) ve `gh` gerekir. Yoksa script
+> **derlemeye başlamadan** durur.
 
 ### Elle yayınlamak
+
+Script'in yapamadığı bir durum çıkarsa sıra aynı kalmalı:
 
 1. `pubspec.yaml` içindeki `version:` satırını yükseltin (kod **artmalı**).
 2. `tool/flutter.sh build apk --release --split-per-abi`
 3. Üç APK'yı `hatirlaf-<mimari>.apk` adıyla GitHub sürümüne ekleyin.
-4. **Sonra** `guncelleme.json`'u güncelleyip `main`'e itin.
+4. Yüklendiklerini doğrulayın (adresten indirilebiliyor mu?).
+5. **Sonra** `guncelleme.json`'u güncelleyip `main`'e itin.
 
 ---
 

@@ -2,36 +2,66 @@
 # Yeni bir surum yayinlar.
 #
 #   tool/yayinla.sh 1.0.1 "Kayıt düğmesi büyütüldü."
-#   tool/yayinla.sh 1.0.1 "Veri kaybı düzeltildi." --zorunlu
+#   tool/yayinla.sh 1.0.2 "Veri kaybı düzeltildi." --zorunlu
+#   tool/yayinla.sh 1.0.3 "Deneme." --deneme      (hicbir sey yayinlanmaz)
 #
 # Yaptigi sirayla:
-#   1. pubspec.yaml'daki surumu yukseltir (surum adi + surum kodu).
-#   2. Yayin anahtariyla imzali, mimariye ozel APK'lar derler.
-#   3. Her APK'nin sha256 ozetini hesaplar, guncelleme.json'u yazar.
-#   4. GitHub'da surum (release) olusturup APK'lari ekler.
-#   5. guncelleme.json'u depoya iter.
+#   1. On kontroller (imza anahtari, temiz dizin, arac ve yetki).
+#   2. pubspec.yaml'daki surumu yukseltir (surum adi + surum kodu).
+#   3. Mimariye ozel, imzali APK'lari derler.
+#   4. Her APK'nin gercek versionCode'unu, sha256'sini ve boyutunu okuyup
+#      guncelleme.json'u yazar.
+#   5. Surum commit'ini ve etiketini iter, GitHub surumunu olusturup
+#      APK'lari yukler.
+#   6. Yuklenen dosyalarin gercekten indirilebildigini dogrular.
+#   7. **Ancak bundan sonra** guncelleme.json'u iter.
 #
-# Telefonlardaki uygulamalar 4. ve 5. adimdan sonra, internete ciktiklari
-# ilk acilista guncellemeyi kendiliginden indirir.
+# 5-6-7 sirasi pazarlik konusu degil: guncelleme.json "yeni surum var"
+# demektir. Once itilseydi telefonlar henuz yuklenmemis bir dosyayi
+# indirmeye calisir, basarisiz olur ve 20 saat boyunca bir daha
+# denemezdi. Bkz. docs/guncelleme.md, 2.2.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-SURUM="${1:-}"
-NOTLAR="${2:-}"
+SURUM=""
+NOTLAR=""
 ZORUNLU="false"
-[[ "${3:-}" == "--zorunlu" ]] && ZORUNLU="true"
+DENEME="false"
+
+for ARG in "$@"; do
+  case "$ARG" in
+    --zorunlu) ZORUNLU="true" ;;
+    --deneme)  DENEME="true" ;;
+    -*) echo "hata: bilinmeyen secenek: $ARG" >&2; exit 1 ;;
+    *)
+      if [[ -z "$SURUM" ]]; then SURUM="$ARG"
+      elif [[ -z "$NOTLAR" ]]; then NOTLAR="$ARG"
+      else echo "hata: fazladan argüman: $ARG" >&2; exit 1
+      fi
+      ;;
+  esac
+done
 
 if [[ -z "$SURUM" ]]; then
-  echo "kullanim: tool/yayinla.sh <surum> \"<neler degisti>\" [--zorunlu]" >&2
+  echo "kullanim: tool/yayinla.sh <surum> \"<neler degisti>\" [--zorunlu] [--deneme]" >&2
   echo "ornek  : tool/yayinla.sh 1.0.1 \"Kayıt düğmesi büyütüldü.\"" >&2
   exit 1
 fi
 
 if [[ ! "$SURUM" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-  echo "hata: surum 1.2.3 bicinde olmali (girilen: $SURUM)" >&2
+  echo "hata: surum 1.2.3 biciminde olmali (girilen: $SURUM)" >&2
   exit 1
 fi
+
+DEPO="oktayelb/hatirlaf"
+KOK="https://github.com/$DEPO/releases/latest/download"
+ABILER=(arm64-v8a armeabi-v7a x86_64)
+
+# --- 1. on kontroller ----------------------------------------------------
+#
+# Hepsi burada, derlemeye baslamadan once: 10 dakikalik bir derlemenin
+# sonunda "gh yok" demek kotu bir saka olurdu.
 
 if [[ -n "$(git status --porcelain)" ]]; then
   echo "hata: calisma dizininde kaydedilmemis degisiklik var." >&2
@@ -39,9 +69,7 @@ if [[ -n "$(git status --porcelain)" ]]; then
   exit 1
 fi
 
-# --- 1. imza anahtari yerinde mi? ---------------------------------------
-#
-# Bu kontrol sondan basa en onemlisi: debug anahtariyla imzalanmis bir APK
+# Imza anahtari en kritik kontrol: debug anahtariyla imzalanmis bir APK
 # telefonlara guncelleme olarak KURULAMAZ ve bu ancak kullanicinin
 # telefonunda, sessizce fark edilir.
 if [[ ! -f android/key.properties || ! -f android/hatirlaf.jks ]]; then
@@ -50,10 +78,52 @@ if [[ ! -f android/key.properties || ! -f android/hatirlaf.jks ]]; then
   exit 1
 fi
 
+# Surum kodunu APK'dan okumak icin aapt2 sart. Mimariye ozel derlemede
+# Flutter surum kodunu kaydiriyor (armeabi-v7a +1000, arm64-v8a +2000,
+# x86_64 +4000); kaydirmayi varsaymak yerine APK'ya soruyoruz.
+AAPT="$(ls "${ANDROID_SDK_ROOT:-$HOME/Android/Sdk}"/build-tools/*/aapt2 2>/dev/null | sort -V | tail -1)"
+if [[ -z "$AAPT" ]]; then
+  echo "hata: aapt2 bulunamadi (Android SDK build-tools)." >&2
+  exit 1
+fi
+
+if [[ "$DENEME" == "false" ]]; then
+  if ! command -v gh >/dev/null; then
+    echo "hata: gh (GitHub CLI) kurulu degil." >&2
+    echo "  sudo dnf install gh && gh auth login" >&2
+    exit 1
+  fi
+  if ! gh auth status >/dev/null 2>&1; then
+    echo "hata: gh oturumu yok. 'gh auth login' calistirin." >&2
+    exit 1
+  fi
+  if gh release view "v$SURUM" --repo "$DEPO" >/dev/null 2>&1; then
+    echo "hata: v$SURUM surumu zaten var. Baska bir surum numarasi secin." >&2
+    exit 1
+  fi
+  git fetch --quiet origin main
+  if [[ "$(git rev-parse HEAD)" != "$(git rev-parse origin/main)" ]]; then
+    echo "hata: yerel main ile origin/main ayni degil. Once pull/push edin." >&2
+    exit 1
+  fi
+fi
+
 # --- 2. surum kodunu yukselt --------------------------------------------
 ESKI_SATIR="$(grep -m1 '^version:' pubspec.yaml)"
 ESKI_KOD="${ESKI_SATIR##*+}"
 YENI_KOD=$((ESKI_KOD + 1))
+
+# Buradan sonra bir sey patlarsa pubspec.yaml'i geri al: yarim kalmis bir
+# surum yukseltmesi bir sonraki denemede numarayi sessizce kaydirirdi.
+GERI_AL="evet"
+geri_al() {
+  if [[ "$GERI_AL" == "evet" ]]; then
+    git checkout -- pubspec.yaml guncelleme.json 2>/dev/null || true
+    echo >&2
+    echo "yayinlama yarida kaldi; pubspec.yaml geri alindi." >&2
+  fi
+}
+trap geri_al EXIT
 
 echo "surum   : $SURUM+$YENI_KOD  (onceki: ${ESKI_SATIR#version: })"
 sed -i "s|^version:.*|version: $SURUM+$YENI_KOD|" pubspec.yaml
@@ -66,34 +136,20 @@ sed -i "s|^version:.*|version: $SURUM+$YENI_KOD|" pubspec.yaml
 echo "derleniyor…"
 tool/flutter.sh build apk --release --split-per-abi
 
-ABILER=(arm64-v8a armeabi-v7a x86_64)
 for A in "${ABILER[@]}"; do
   [[ -f "build/app/outputs/flutter-apk/app-$A-release.apk" ]] || {
     echo "hata: app-$A-release.apk olusmadi" >&2; exit 1; }
 done
 
-# Surum kodunu APK'dan okumak icin aapt2 sart.
-#
-# Mimariye ozel derlemede Flutter surum kodunu kaydiriyor (armeabi-v7a
-# +1000, arm64-v8a +2000, x86_64 +4000). Telefondaki kurulu kod bu yuzden
-# pubspec'teki sayi degil. Kaydirmayi burada varsaymak yerine derlenmis
-# APK'ya sorup ogreniyoruz; Flutter yarin kurali degistirse de dogru kalir.
-AAPT="$(ls "${ANDROID_SDK_ROOT:-$HOME/Android/Sdk}"/build-tools/*/aapt2 2>/dev/null | sort -V | tail -1)"
-if [[ -z "$AAPT" ]]; then
-  echo "hata: aapt2 bulunamadi (Android SDK build-tools)." >&2
-  exit 1
-fi
-
 # --- 4. guncelleme.json --------------------------------------------------
 #
-# Her mimari icin ayri adres + ozet + boyut. Telefon kendi mimarisini
-# (Build.SUPPORTED_ABIS) bilip dogru satiri seciyor.
-python3 - "$AAPT" "$SURUM" "$NOTLAR" "$ZORUNLU" "${ABILER[@]}" <<'PY'
+# Her mimari icin ayri adres + surum kodu + ozet + boyut. Telefon kendi
+# mimarisini (Build.SUPPORTED_ABIS) bilip dogru satiri seciyor.
+python3 - "$AAPT" "$SURUM" "$NOTLAR" "$ZORUNLU" "$KOK" "${ABILER[@]}" <<'PY'
 import hashlib, io, json, os, re, subprocess, sys
 
-aapt, surum, notlar, zorunlu = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
-abiler = sys.argv[5:]
-KOK = "https://github.com/oktayelb/hatirlaf/releases/latest/download"
+aapt, surum, notlar, zorunlu, kok = sys.argv[1:6]
+abiler = sys.argv[6:]
 
 paketler = {}
 for a in abiler:
@@ -116,7 +172,7 @@ for a in abiler:
 
     paketler[a] = {
         "surumKodu": kod,
-        "apkUrl": f"{KOK}/hatirlaf-{a}.apk",
+        "apkUrl": f"{kok}/hatirlaf-{a}.apk",
         "sha256": ozet.hexdigest(),
         "boyut": boyut,
     }
@@ -133,43 +189,83 @@ io.open("guncelleme.json", "w", encoding="utf-8").write(
 )
 PY
 
-# --- 5. GitHub surumu ----------------------------------------------------
-#
-# SIRA ONEMLI: once APK yuklenir, sonra guncelleme.json itilir. Ters sirada
-# olsaydi telefonlar "yeni surum var" deyip henuz var olmayan bir dosyayi
-# indirmeye calisirdi.
 YUKLENECEK=()
 for A in "${ABILER[@]}"; do
   cp "build/app/outputs/flutter-apk/app-$A-release.apk" "/tmp/hatirlaf-$A.apk"
   YUKLENECEK+=("/tmp/hatirlaf-$A.apk")
 done
 
-if command -v gh >/dev/null; then
-  echo "GitHub surumu olusturuluyor…"
-  git add pubspec.yaml guncelleme.json
-  git commit -m "surum $SURUM+$YENI_KOD"
-  git tag "v$SURUM"
-  git push origin HEAD --tags
-
-  gh release create "v$SURUM" "${YUKLENECEK[@]}" \
-    --title "hatırlaf $SURUM" \
-    --notes "${NOTLAR:-Küçük iyileştirmeler.}"
-
+if [[ "$DENEME" == "true" ]]; then
   echo
-  echo "yayinlandi. Telefonlar bir sonraki acilislarinda alacak."
-else
+  echo "--- DENEME: hicbir sey yayinlanmadi ---"
+  echo "Uretilecek guncelleme.json:"
+  sed 's/^/  /' guncelleme.json
   echo
-  echo "gh (GitHub CLI) kurulu degil. Kalan iki adim elle:"
+  echo "Yuklenecek dosyalar:"
+  printf '  %s\n' "${YUKLENECEK[@]}"
+  git checkout -- pubspec.yaml guncelleme.json
+  GERI_AL="hayir"
+  trap - EXIT
   echo
-  echo "  1. https://github.com/oktayelb/hatirlaf/releases/new adresinde"
-  echo "     v$SURUM etiketiyle bir surum olusturun ve su dosyalari"
-  echo "     ADLARINI DEGISTIRMEDEN ekleyin:"
-  for A in "${ABILER[@]}"; do echo "       /tmp/hatirlaf-$A.apk"; done
-  echo
-  echo "  2. Dosya yuklendikten SONRA:"
-  echo "       git add pubspec.yaml guncelleme.json"
-  echo "       git commit -m 'surum $SURUM+$YENI_KOD'"
-  echo "       git push"
-  echo
-  echo "Sirayi bozmayin: once APK, sonra guncelleme.json."
+  echo "pubspec.yaml ve guncelleme.json geri alindi."
+  exit 0
 fi
+
+# --- 5. surum commit'i + GitHub surumu -----------------------------------
+#
+# guncelleme.json bilerek DISARIDA birakiliyor; o en sona kaliyor.
+echo
+echo "surum commit'i itiliyor…"
+git add pubspec.yaml
+git commit -q -m "surum $SURUM+$YENI_KOD"
+GERI_AL="hayir"
+git tag "v$SURUM"
+git push --quiet origin main
+git push --quiet origin "v$SURUM"
+
+echo "GitHub surumu olusturuluyor ve APK'lar yukleniyor…"
+gh release create "v$SURUM" "${YUKLENECEK[@]}" \
+  --repo "$DEPO" \
+  --title "hatırlaf $SURUM" \
+  --notes "${NOTLAR:-Küçük iyileştirmeler.}"
+
+# --- 6. yuklenenler gercekten inebiliyor mu? -----------------------------
+#
+# Guvenlik kemeri: guncelleme.json'u itmeden once dosyalarin telefonun
+# kullanacagi ADRESTEN indirilebildigini dogruluyoruz. Burada durursak
+# telefonlar eski surumde kalir, yani kimse zarar gormez.
+echo "yuklenen dosyalar dogrulaniyor…"
+for A in "${ABILER[@]}"; do
+  BEKLENEN="$(stat -c%s "/tmp/hatirlaf-$A.apk")"
+  GORULEN=""
+  for _ in 1 2 3 4 5; do
+    GORULEN="$(curl -sIL "$KOK/hatirlaf-$A.apk" \
+      | tr -d '\r' | awk 'tolower($1)=="content-length:"{v=$2} END{print v}')"
+    [[ "$GORULEN" == "$BEKLENEN" ]] && break
+    sleep 3
+  done
+  if [[ "$GORULEN" != "$BEKLENEN" ]]; then
+    echo >&2
+    echo "hata: $A dosyasi adresinden dogrulanamadi." >&2
+    echo "  beklenen $BEKLENEN bayt, gorulen '${GORULEN:-yok}'" >&2
+    echo >&2
+    echo "guncelleme.json ITILMEDI - telefonlar eski surumde kaliyor," >&2
+    echo "yani kimse zarar gormedi. GitHub surumunu kontrol edip eksik" >&2
+    echo "dosyayi yukleyin, sonra:" >&2
+    echo "  git add guncelleme.json && git commit -m 'guncelleme $SURUM' && git push" >&2
+    exit 1
+  fi
+  echo "  $A ✓"
+done
+
+# --- 7. guncelleme.json: telefonlara "yeni surum var" diyen adim ---------
+echo "guncelleme.json itiliyor…"
+git add guncelleme.json
+git commit -q -m "guncelleme $SURUM"
+git push --quiet origin main
+
+trap - EXIT
+echo
+echo "yayinlandi: hatırlaf $SURUM ($YENI_KOD)"
+echo "Telefonlar internete ciktiklari ilk acilista indirecek,"
+echo "bir sonraki acilista soracak."
