@@ -226,15 +226,22 @@ class _RecordScreenState extends State<RecordScreen> {
                             children: <Widget>[
                               if (!kayitVar) ...<Widget>[
                                 const _BirlikteFotografi(),
-                                const SizedBox(height: 24),
+                                const SizedBox(height: 20),
                               ],
                               _KayitDugmesi(
                                 durum: durum,
                                 seviye: _recorder.seviye,
                                 onBasla: _basla,
                               ),
-                              const SizedBox(height: 32),
-                              _Sayac(durum: durum, sure: _recorder.sure),
+                              const SizedBox(height: 18),
+                              _Sayac(
+                                durum: durum,
+                                sure: _recorder.sure,
+                                // Soru varken yonerge yazisi ekrandan
+                                // dugmeyi tasiriyor; soru zaten ne
+                                // yapilacagini soyluyor.
+                                yonergeGoster: widget.soru == null,
+                              ),
                             ],
                           ),
                         ),
@@ -269,7 +276,7 @@ class _SoruSeridi extends StatelessWidget {
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
       decoration: BoxDecoration(
         color: HatirlaColors.primarySoft,
         borderRadius: BorderRadius.circular(HatirlaSizes.radius),
@@ -278,8 +285,8 @@ class _SoruSeridi extends StatelessWidget {
         soru,
         textAlign: TextAlign.center,
         style: const TextStyle(
-          fontSize: 25,
-          height: 1.35,
+          fontSize: 31,
+          height: 1.3,
           fontWeight: FontWeight.w700,
           color: HatirlaColors.primaryDark,
         ),
@@ -305,14 +312,15 @@ class _BirlikteFotografi extends StatelessWidget {
         borderRadius: BorderRadius.circular(HatirlaSizes.radius),
         border: Border.all(color: HatirlaColors.line, width: 2),
       ),
-      child: Row(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: <Widget>[
           ClipRRect(
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(HatirlaSizes.radius - 8),
             child: Image.asset(
               kBirlikteFotografi,
-              width: 124,
-              height: 100,
+              width: double.infinity,
+              height: 140,
               fit: BoxFit.cover,
               // Gorsel bir sekilde acilmazsa ekranda cerceveli bir
               // bosluk kalmasin.
@@ -320,16 +328,15 @@ class _BirlikteFotografi extends StatelessWidget {
                   const SizedBox.shrink(),
             ),
           ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Text(
-              'Anlattıklarınızı bir gün torunlarınız dinleyecek.',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    fontSize: 20,
-                    height: 1.35,
-                    color: HatirlaColors.inkSoft,
-                    fontWeight: FontWeight.w600,
-                  ),
+          const SizedBox(height: 12),
+          const Text(
+            'Anlattıklarınızı bir gün torunlarınız dinleyecek.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 26,
+              height: 1.3,
+              color: HatirlaColors.inkSoft,
+              fontWeight: FontWeight.w600,
             ),
           ),
         ],
@@ -352,13 +359,13 @@ class _KayitDugmesi extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const double cap = 200;
+    const double cap = 180;
     final bool kaydediyor = durum == KayitDurumu.kaydediyor;
     final bool duraklatildi = durum == KayitDurumu.duraklatildi;
 
     return SizedBox(
-      width: cap + 80,
-      height: cap + 80,
+      width: cap + 70,
+      height: cap + 70,
       child: Stack(
         alignment: Alignment.center,
         children: <Widget>[
@@ -366,8 +373,8 @@ class _KayitDugmesi extends StatelessWidget {
           if (kaydediyor)
             AnimatedContainer(
               duration: const Duration(milliseconds: 140),
-              width: cap + 20 + seviye * 60,
-              height: cap + 20 + seviye * 60,
+              width: cap + 20 + seviye * 44,
+              height: cap + 20 + seviye * 44,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: HatirlaColors.record.withValues(alpha: 0.16),
@@ -401,7 +408,7 @@ class _KayitDugmesi extends StatelessWidget {
                           child: Text(
                             'DOKUNUN',
                             style: TextStyle(
-                              fontSize: 20,
+                              fontSize: 24,
                               letterSpacing: 2,
                               fontWeight: FontWeight.w700,
                               color: Colors.white,
@@ -421,23 +428,33 @@ class _KayitDugmesi extends StatelessWidget {
 }
 
 class _Sayac extends StatelessWidget {
-  const _Sayac({required this.durum, required this.sure});
+  const _Sayac({
+    required this.durum,
+    required this.sure,
+    this.yonergeGoster = true,
+  });
 
   final KayitDurumu durum;
   final Duration sure;
 
+  /// Kayit baslamadan once gosterilen yonerge yazisi.
+  final bool yonergeGoster;
+
   @override
   Widget build(BuildContext context) {
     if (durum == KayitDurumu.bos) {
+      if (!yonergeGoster) return const SizedBox.shrink();
       return Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12),
-        child: Text(
-          'Hazır olduğunuzda kırmızı düğmeye dokunun\nve rahatça anlatın.',
+        child: const Text(
+          'Kırmızı düğmeye dokunun ve anlatın.',
           textAlign: TextAlign.center,
-          style: Theme.of(context)
-              .textTheme
-              .bodyLarge
-              ?.copyWith(color: HatirlaColors.inkSoft),
+          style: TextStyle(
+            fontSize: 27,
+            height: 1.3,
+            fontWeight: FontWeight.w600,
+            color: HatirlaColors.inkSoft,
+          ),
         ),
       );
     }
@@ -458,7 +475,7 @@ class _Sayac extends StatelessWidget {
               ? 'Duraklatıldı'
               : 'Sizi dinliyorum…',
           style: TextStyle(
-            fontSize: 23,
+            fontSize: 28,
             color: durum == KayitDurumu.duraklatildi
                 ? HatirlaColors.inkSoft
                 : HatirlaColors.record,
