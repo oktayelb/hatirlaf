@@ -17,6 +17,27 @@ anahtar kaybolursa tek çıkış kapısı odur, ve kod bu varsayıma dayanıyor.
 kimsenin kaydını indiremesin, silemesin. Uygulama açılışta fazla yetkili
 anahtarı fark edip logda uyarır.
 
+## Hangi sır nereye
+
+İki dosya var ve aradaki fark güvenliğin tamamı:
+
+| Dosya | İçindekiler | APK'ya girer mi? |
+|---|---|---|
+| `.env` | Keystore parolaları, X25519 **gizli** anahtar yolu, B2 hesap parolası | **Hayır.** Yalnızca bu PC'de |
+| `yedek.json` | `B2_KEY_ID`, `B2_APP_KEY`, `B2_BUCKET_ID`, `YEDEK_ALICI_ANAHTARI` | **Evet.** Derlemeye gömülür |
+
+İkisi de `.gitignore`'da. Şablonları: `.env.ornek`, `yedek.json.ornek`.
+
+`yedek.json` içindekiler APK'nın içine gömülür, yani **gizli tutulamaz**
+— parçalayan herkes okur. Bu bir kusur değil, tasarım: bu yüzden oradaki
+B2 anahtarı yalnızca `writeFiles` yetkili olmalı ve oradaki X25519
+anahtarı **açık** olan olmalı. Sızdığında yapılabilecek en kötü şey
+kovaya çöp yüklemektir.
+
+`.env` içindekiler hiçbir derlemeye girmez. Keystore parolaları APK'yı
+*imzalamakta* kullanılır, içine konmaz; gizli X25519 anahtarı yalnızca
+sizin PC'nizde çözmek için durur.
+
 ## Kurulum
 
 ```bash
@@ -26,17 +47,23 @@ tool/anahtar_uret.py ~/hatirlaf-yedek-anahtari.gizli
 # 2. B2'de kova + YALNIZCA writeFiles yetkili uygulama anahtarı
 #    (Backblaze konsolu -> Application Keys -> Add a New Application Key)
 
-# 3. Ayarları yaz
-cp yedek.json.ornek yedek.json    # gitignore'da
-$EDITOR yedek.json
+# 3. Bu PC'de kalacaklar
+cp .env.ornek .env
+$EDITOR .env          # ANDROID_*, YEDEK_GIZLI_ANAHTAR, B2_ACCOUNT_PASSWORD
+
+# 4. Derlemeye girecekler
+cp yedek.json.ornek yedek.json
+$EDITOR yedek.json    # B2_KEY_ID, B2_APP_KEY, B2_BUCKET_ID, YEDEK_ALICI_ANAHTARI
 ```
 
-`yedek.json` dört alan ister: `B2_KEY_ID`, `B2_APP_KEY`, `B2_BUCKET_ID`,
-`YEDEK_ALICI_ANAHTARI` (anahtar üreticinin bastığı base64). Dördü de
-dolu değilse yedekleme tamamen kapalıdır ve uygulama eskisi gibi çalışır.
+`yedek.json`'daki dört alan dolu değilse yedekleme tamamen kapalıdır ve
+uygulama eskisi gibi çalışır. `tool/yayinla.sh` dosya varsa
+`--dart-define-from-file` ile derler, yoksa uyarıp yedeklemesiz sürüm
+üretir.
 
-`tool/yayinla.sh` `yedek.json` varsa `--dart-define-from-file` ile
-derler, yoksa uyarıp yedeklemesiz sürüm üretir.
+`android/key.properties` artık yok; imza parolaları `.env`'e taşındı.
+`android/app/build.gradle.kts` önce `.env`'e, sonra gerçek ortam
+değişkenlerine bakar.
 
 ## Kayıtları alma
 
@@ -44,8 +71,9 @@ derler, yoksa uyarıp yedeklemesiz sürüm üretir.
 # B2'den indirin (b2 CLI, rclone, konsol — nasıl isterseniz)
 b2 sync b2://kovaniz ./gelenler
 
-# Toptan çözün
-tool/yedek_coz.py ~/hatirlaf-yedek-anahtari.gizli --klasor ./gelenler
+# Toptan çözün. Anahtar yolu .env'deki YEDEK_GIZLI_ANAHTAR'dan gelir;
+# istersen ilk argüman olarak da verebilirsin.
+tool/yedek_coz.py --klasor ./gelenler
 ```
 
 Her hatıra iki dosyadır: `<cihaz>/<hatıraId>/ses.m4a.hyz` ve

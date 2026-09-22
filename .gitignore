@@ -50,3 +50,7 @@ app.*.map.json
 /yedek.json
 *.gizli
 *.hyz
+
+# Bu PC'de kalan sirlar: imza parolalari, gizli anahtar yolu, B2 hesap
+# parolasi. Hicbiri derlemeye girmez. Sablonu .env.ornek (o izlenir).
+.env

@@ -86,9 +86,26 @@ fi
 
 # En kritik kontrol: debug anahtariyla imzalanmis APK telefonlara
 # guncelleme olarak kurulamaz ve bu ancak kullanicinin telefonunda anlasilir.
-if [[ ! -f android/key.properties || ! -f android/hatirlaf.jks ]]; then
-  echo "hata: yayin imza anahtari yok (android/key.properties + hatirlaf.jks)." >&2
-  echo "Yedekten geri koyun. Bu anahtar olmadan guncelleme yayinlanamaz." >&2
+IMZA_EKSIK=()
+if [[ -f .env ]]; then
+  # Degerleri kabuga almadan yalnizca varliklarini kontrol et.
+  for A in ANDROID_KEYSTORE ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
+    grep -qE "^[[:space:]]*$A[[:space:]]*=[[:space:]]*[^[:space:]]" .env || IMZA_EKSIK+=("$A")
+  done
+  KS="$(sed -nE 's/^[[:space:]]*ANDROID_KEYSTORE[[:space:]]*=[[:space:]]*//p' .env | head -1 | tr -d '"'"'"'"')"
+  # Acik `if`: kisa devre yapan `[[ ]] && ...` kaliba 1 donduruyor ve
+  # blogun son satiri olursa `set -e` scripti sessizce bitirir.
+  if [[ -n "$KS" && ! -f "$KS" ]]; then
+    IMZA_EKSIK+=("$KS (dosya yok)")
+  fi
+else
+  IMZA_EKSIK+=(".env")
+fi
+
+if (( ${#IMZA_EKSIK[@]} )); then
+  echo "hata: yayin imza ayarlari eksik: ${IMZA_EKSIK[*]}" >&2
+  echo "Yedekten geri koyun. Bu anahtar olmadan guncelleme yayinlanamaz;" >&2
+  echo "debug anahtariyla imzali APK telefonlara KURULAMAZ." >&2
   exit 1
 fi
 

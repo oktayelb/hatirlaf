@@ -7,8 +7,8 @@ Güncelleme zorunludur.
 
 ## Üç kural
 
-**1. İmza anahtarını kaybetmeyin.** `android/hatirlaf.jks` +
-`android/key.properties`, depoda yok. Android farklı imzalı bir APK'yı
+**1. İmza anahtarını kaybetmeyin.** `android/hatirlaf.jks` dosyası ve
+parolaları (`.env` içinde `ANDROID_*`), ikisi de depoda yok. Android farklı imzalı bir APK'yı
 güncelleme olarak kurmaz; anahtar kaybolursa tek çıkış uygulamayı silmek
 ve bu bütün hatıraları siler. Parmak izi:
 

@@ -33,7 +33,7 @@ Ortam: Flutter 3.44.1, JDK 21 (`~/jdk/jdk-21.0.12.1+1`), Android SDK 36
 
 İlk derleme ~10-15 dk sürer: whisper.cpp kaynaktan derleniyor.
 
-Release derlemesi `android/key.properties` + `android/hatirlaf.jks`
+Release derlemesi `.env` (`ANDROID_*`) + `android/hatirlaf.jks`
 ister; bu dosyalar depoda yok, yedekten gelir. Yoksa Gradle debug
 anahtarına düşer ve o APK telefonlara güncelleme olarak kurulamaz.
 

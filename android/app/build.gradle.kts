@@ -1,19 +1,52 @@
-import java.util.Properties
+import java.io.File
 
 plugins {
     id("com.android.application")
     id("dev.flutter.flutter-gradle-plugin")
 }
 
-// Yayin imza anahtari; `android/key.properties` depoda yok, yedekten gelir.
-// Yoksa debug anahtarina dusuyoruz ama o APK guncelleme olarak kurulamaz.
-val imzaAyarlari = Properties().apply {
-    val dosya = rootProject.file("key.properties")
-    if (dosya.exists()) dosya.inputStream().use { load(it) }
+// Yayin imza sirlari depo kokundeki `.env` dosyasinda; depoda yok,
+// yedekten gelir. Bu degerler APK'yi IMZALAMAKTA kullanilir, APK'nin
+// icine girmez -- derlemeye giren sirlar yedek.json'dadir.
+//
+// Once .env, sonra gercek ortam degiskenleri: CI ya da kabuktan
+// gecirmek isteyen dosya olusturmak zorunda kalmasin.
+val depoKoku = rootProject.projectDir.parentFile
+
+val envDegerleri: Map<String, String> = run {
+    val dosya = File(depoKoku, ".env")
+    if (!dosya.exists()) {
+        emptyMap()
+    } else {
+        dosya.readLines()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() && !it.startsWith("#") && it.contains("=") }
+            .associate { satir ->
+                val ad = satir.substringBefore("=").trim()
+                // Tirnakli yazilmis degerler de kabul edilsin.
+                val deger = satir.substringAfter("=").trim()
+                    .removeSurrounding("\"")
+                    .removeSurrounding("'")
+                ad to deger
+            }
+    }
 }
-val imzaVar = imzaAyarlari.getProperty("storeFile")?.let {
-    rootProject.file(it).exists()
-} == true
+
+val sir: (String) -> String? = { ad ->
+    envDegerleri[ad]?.takeIf { it.isNotEmpty() }
+        ?: System.getenv(ad)?.takeIf { it.isNotEmpty() }
+}
+
+// Yol depo koküne gore; mutlak yol da calissin.
+val imzaDosyasi: File? = sir("ANDROID_KEYSTORE")?.let { yol ->
+    val f = File(yol)
+    (if (f.isAbsolute) f else File(depoKoku, yol)).takeIf { it.exists() }
+}
+
+val imzaVar = imzaDosyasi != null &&
+    sir("ANDROID_KEYSTORE_PASSWORD") != null &&
+    sir("ANDROID_KEY_ALIAS") != null &&
+    sir("ANDROID_KEY_PASSWORD") != null
 
 android {
     namespace = "com.hatirla.hatirla"
@@ -40,10 +73,10 @@ android {
     signingConfigs {
         if (imzaVar) {
             create("yayin") {
-                storeFile = rootProject.file(imzaAyarlari.getProperty("storeFile"))
-                storePassword = imzaAyarlari.getProperty("storePassword")
-                keyAlias = imzaAyarlari.getProperty("keyAlias")
-                keyPassword = imzaAyarlari.getProperty("keyPassword")
+                storeFile = imzaDosyasi
+                storePassword = sir("ANDROID_KEYSTORE_PASSWORD")
+                keyAlias = sir("ANDROID_KEY_ALIAS")
+                keyPassword = sir("ANDROID_KEY_PASSWORD")
             }
         }
     }
@@ -54,9 +87,10 @@ android {
                 signingConfigs.getByName("yayin")
             } else {
                 logger.warn(
-                    "UYARI: android/key.properties yok. Release APK debug " +
-                        "anahtariyla imzalaniyor; telefonlara guncelleme " +
-                        "olarak KURULAMAZ. Anahtari yedekten geri koyun.",
+                    "UYARI: .env icindeki imza ayarlari eksik (ANDROID_KEYSTORE, " +
+                        "ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, " +
+                        "ANDROID_KEY_PASSWORD). Release APK debug anahtariyla " +
+                        "imzalaniyor; telefonlara guncelleme olarak KURULAMAZ.",
                 )
                 signingConfigs.getByName("debug")
             }

@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """Telefondan gelen sifreli yedekleri cozer.
 
-    tool/yedek_coz.py <gizli-anahtar> <girdi.hyz> [cikti]
-    tool/yedek_coz.py <gizli-anahtar> --klasor <dizin>
+    tool/yedek_coz.py [gizli-anahtar] <girdi.hyz> [cikti]
+    tool/yedek_coz.py [gizli-anahtar] --klasor <dizin>
 
-Ikinci bicim bir dizindeki butun .hyz dosyalarini cozer; uzantisi
-atilarak yanina yazilir.
+Anahtar verilmezse depo kokundeki .env icindeki YEDEK_GIZLI_ANAHTAR
+kullanilir. Ikinci bicim bir dizindeki butun .hyz dosyalarini cozer;
+uzantisi atilarak yanina yazilir.
 
 Bicim tanimi: lib/services/backup_crypto.dart
 """
@@ -92,6 +93,46 @@ def coz(gizli: X25519PrivateKey, ham: bytes) -> bytes:
             return bytes(cikti)
 
 
+def _env_oku(ad: str) -> str | None:
+    """Depo kokundeki .env'den tek bir deger okur."""
+    kok = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
+    yol = os.path.join(kok, ".env")
+    if not os.path.exists(yol):
+        return None
+    with open(yol, encoding="utf-8") as f:
+        for satir in f:
+            satir = satir.strip()
+            if not satir or satir.startswith("#") or "=" not in satir:
+                continue
+            k, _, v = satir.partition("=")
+            if k.strip() == ad:
+                return v.strip().strip('"').strip("'") or None
+    return None
+
+
+def _anahtar_yolu(verilen: str | None) -> str:
+    """Once komut satiri, sonra .env."""
+    if verilen:
+        return verilen
+    envden = _env_oku("YEDEK_GIZLI_ANAHTAR")
+    if not envden:
+        raise SystemExit(
+            "hata: gizli anahtar verilmedi ve .env icinde "
+            "YEDEK_GIZLI_ANAHTAR yok."
+        )
+    return envden
+
+
+def _anahtar_mi(yol: str) -> bool:
+    """32 baytlik ham bir dosya mi? Ilk argumanin anahtar mi yoksa
+    girdi dosyasi mi oldugunu ayirt etmek icin."""
+    try:
+        return os.path.isfile(os.path.expanduser(yol)) and \
+            os.path.getsize(os.path.expanduser(yol)) == 32
+    except OSError:
+        return False
+
+
 def _anahtari_oku(yol: str) -> X25519PrivateKey:
     with open(os.path.expanduser(yol), "rb") as f:
         ham = f.read()
@@ -113,17 +154,28 @@ def _tek(gizli: X25519PrivateKey, girdi: str, cikti: str) -> None:
 
 
 def main() -> int:
-    if len(sys.argv) < 3:
+    arg = sys.argv[1:]
+    if not arg:
         print(__doc__, file=sys.stderr)
         return 1
 
-    gizli = _anahtari_oku(sys.argv[1])
+    # Ilk arguman ancak 32 baytlik bir dosyaysa anahtardir; degilse
+    # girdi sayilir ve anahtar .env'den gelir.
+    if _anahtar_mi(arg[0]):
+        anahtar, arg = arg[0], arg[1:]
+    else:
+        anahtar = None
+    if not arg:
+        print(__doc__, file=sys.stderr)
+        return 1
 
-    if sys.argv[2] == "--klasor":
-        if len(sys.argv) != 4:
+    gizli = _anahtari_oku(_anahtar_yolu(anahtar))
+
+    if arg[0] == "--klasor":
+        if len(arg) != 2:
             print(__doc__, file=sys.stderr)
             return 1
-        kok = os.path.expanduser(sys.argv[3])
+        kok = os.path.expanduser(arg[1])
         sayi, hata = 0, 0
         for dizin, _, dosyalar in os.walk(kok):
             for ad in sorted(dosyalar):
@@ -140,9 +192,9 @@ def main() -> int:
         print(f"\n{sayi} dosya cozuldu, {hata} hata.")
         return 1 if hata else 0
 
-    girdi = os.path.expanduser(sys.argv[2])
-    if len(sys.argv) >= 4:
-        cikti = os.path.expanduser(sys.argv[3])
+    girdi = os.path.expanduser(arg[0])
+    if len(arg) >= 2:
+        cikti = os.path.expanduser(arg[1])
     elif girdi.endswith(".hyz"):
         cikti = girdi[: -len(".hyz")]
     else:
