@@ -153,10 +153,19 @@ Her hatıra iki dosyadır: `<cihaz>/<hatıraId>/ses.m4a.hyz` ve
 
 ### Kimin kaydı hangisi
 
-Kovadaki klasör adı `<ad>-<kimlik>` (ör. `Dedem Ahmet-05e24e66`). Ad
-telefonu teslim ederken **Ayarlar → Aile Yedeği → Telefonu Adlandır**
-ile bir kez girilir; rastgele kimlik yanında kalır çünkü aynı adı
-taşıyan iki telefon birbirinin üzerine yazardı.
+Kovadaki klasör adı `<ad>-<kimlik>` (ör. `Dedem Ahmet-05e24e66`). Adı
+normalde **kullanıcının kendisi** koyar: uygulama ilk açılışta "Hangi
+akrabamla konuşuyorum?" diye sorar ve seçilen ad (`Anneannem`,
+`Babannem`, `Şükrü Dedem`, `Oktay Dedem`) buraya geçer. Kuran kişi
+**Ayarlar → Aile Yedeği → Adı Değiştir** ile yine elle yazabilir.
+Rastgele kimlik yanında kalır çünkü aynı adı taşıyan iki telefon
+birbirinin üzerine yazardı.
+
+Türkçe harfler klasör adında ASCII karşılıklarına iner (`Şükrü Dedem` →
+`Sukru Dedem-05e24e66`); B2 dosya adında güvensiz her karakter alt
+çizgiye döndüğü için aksi halde `_ukr__Dedem` olurdu. Zaten ASCII olan
+adlar aynen kalır, yani sahadaki telefonların klasörü yerinden
+oynamaz.
 
 Ad girilmemişse klasör yalnız kimliktir. Sonradan eşlemek için indirme
 dizinine `cihazlar.json` koyun:

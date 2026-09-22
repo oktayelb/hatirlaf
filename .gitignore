@@ -65,3 +65,7 @@ app.*.map.json
 /hatirlaf-yedekler/
 *.m4a
 *.wav
+
+# WhatsApp'tan gelen ham fotograflar. Uygulamaya girenlerin kucultulmus
+# kopyalari assets/ altinda duruyor; bunlar depoda durmasin.
+/WhatsApp*/

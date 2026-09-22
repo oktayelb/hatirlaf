@@ -8,8 +8,10 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'screens/home_screen.dart';
+import 'screens/kim_screen.dart';
 import 'screens/welcome_screen.dart';
 import 'services/cover_photo.dart';
+import 'services/kullanici.dart';
 import 'services/store.dart';
 import 'services/transcriber.dart';
 import 'services/updater.dart';
@@ -39,6 +41,7 @@ Future<void> main() async {
   try {
     await MemoryStore.instance.load();
     await CoverPhoto.instance.load();
+    await Kullanici.instance.yukle();
     await WhisperModelManager.instance.init();
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     karsilamaTamam = prefs.getBool(kKarsilamaAnahtari) ?? false;
@@ -61,13 +64,25 @@ Future<void> main() async {
   unawaited(Guncelleyici.instance.baslat());
   unawaited(Yedekleyici.instance.baslat());
 
-  runApp(HatirlaApp(karsilamaTamam: karsilamaTamam));
+  runApp(HatirlaApp(
+    karsilamaTamam: karsilamaTamam,
+    akrabaSecildi: Kullanici.instance.secildi,
+  ));
 }
 
 class HatirlaApp extends StatelessWidget {
-  const HatirlaApp({super.key, required this.karsilamaTamam});
+  const HatirlaApp({
+    super.key,
+    required this.karsilamaTamam,
+    required this.akrabaSecildi,
+  });
 
   final bool karsilamaTamam;
+
+  /// Telefonu kimin kullandigi secildi mi? Secilmediyse her sey bundan
+  /// once geliyor - guncelleme ile gelen, karsilamasi coktan bitmis
+  /// telefonlarda da.
+  final bool akrabaSecildi;
 
   @override
   Widget build(BuildContext context) {
@@ -95,7 +110,9 @@ class HatirlaApp extends StatelessWidget {
           child: child ?? const SizedBox.shrink(),
         );
       },
-      home: karsilamaTamam ? const HomeScreen() : const WelcomeScreen(),
+      home: akrabaSecildi
+          ? (karsilamaTamam ? const HomeScreen() : const WelcomeScreen())
+          : KimSinizScreen(karsilamaTamam: karsilamaTamam),
     );
   }
 }

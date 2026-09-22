@@ -88,8 +88,32 @@ class Yedekleyici extends ChangeNotifier {
   ///
   /// Ikisi birlikte: ad olmadan 30 tane anlamsiz klasor olurdu, kimlik
   /// olmadan ayni adi tasiyan iki telefon birbirinin uzerine yazardi.
-  String get klasorAdi =>
-      _sahip.trim().isEmpty ? _cihaz : '${_sahip.trim()}-$_cihaz';
+  String get klasorAdi => _sahip.trim().isEmpty
+      ? _cihaz
+      : '${asciiyeIndir(_sahip.trim())}-$_cihaz';
+
+  /// Turkce harfleri ASCII karsiliklarina indirir.
+  ///
+  /// B2 dosya adinda guvensiz her karakter alt cizgiye donuyor
+  /// ([YedekAyarlari.dosyaAdi]); dokunmasak "Şükrü Dedem" kovada
+  /// "_ukr__Dedem" olurdu. Yalnizca bu harfleri degistiriyoruz: zaten
+  /// ASCII olan adlar aynen kaliyor, yani sahadaki telefonlarin klasoru
+  /// yerinden oynamiyor.
+  static String asciiyeIndir(String s) {
+    const Map<String, String> harfler = <String, String>{
+      'ç': 'c', 'Ç': 'C',
+      'ğ': 'g', 'Ğ': 'G',
+      'ı': 'i', 'İ': 'I',
+      'ö': 'o', 'Ö': 'O',
+      'ş': 's', 'Ş': 'S',
+      'ü': 'u', 'Ü': 'U',
+    };
+    final StringBuffer b = StringBuffer();
+    for (final String harf in s.split('')) {
+      b.write(harfler[harf] ?? harf);
+    }
+    return b.toString();
+  }
 
   /// Kuran kisi telefonu teslim ederken bir kez yazar.
   Future<void> sahibiKaydet(String ad) async {
