@@ -144,8 +144,20 @@ sed -i "s|^version:.*|version: $SURUM+$YENI_KOD|" pubspec.yaml
 # --- 3. derle ------------------------------------------------------------
 #
 # Mimariye ozel APK'lar: universal 60 MB, arm64'e ozel olan 22 MB.
+#
+# yedek.json gitignore'da: B2 yazma anahtarini tasiyor, depo herkese acik.
+# Yoksa derleme gecerlidir ama yedekleme KAPALI cikar; sessiz gecmeyelim.
+YEDEK_TANIM=()
+if [[ -f yedek.json ]]; then
+  YEDEK_TANIM=(--dart-define-from-file=yedek.json)
+  echo "yedek    : yedek.json bulundu, yedekleme acik"
+else
+  echo "UYARI: yedek.json yok -> bu surumde aile yedegi KAPALI olacak." >&2
+  echo "       Acik olmasi gerekiyorsa yedek.json.ornek'i kopyalayin." >&2
+fi
+
 echo "derleniyor…"
-tool/flutter.sh build apk --release --split-per-abi
+tool/flutter.sh build apk --release --split-per-abi "${YEDEK_TANIM[@]+"${YEDEK_TANIM[@]}"}"
 
 for A in "${ABILER[@]}"; do
   [[ -f "build/app/outputs/flutter-apk/app-$A-release.apk" ]] || {
