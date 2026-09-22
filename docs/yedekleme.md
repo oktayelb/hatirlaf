@@ -188,6 +188,24 @@ eklemek baştan yazmaktan çok daha zor.
 | `tool/yedek_coz.py` | PC'de çözer |
 | `tool/yedek_interop.sh` | Dart ↔ Python biçim doğrulaması |
 
+## Derleme kaynak sınırları
+
+`tool/flutter.sh` derlemeyi CPU ve bellek tavanı altında çalıştırır:
+12 çekirdekli makinede varsayılan **%400 (4 çekirdek)**, `CPUWeight=20`
+(çekişmede kullanıcının uygulamaları kazanır) ve `nice -n 10`.
+
+```bash
+FLUTTER_CPU=200 tool/yayinla.sh feature "..."   # daha da yavas, daha sakin
+```
+
+Gradle daemon systemd kapsamının dışına kaçabildiği için ikinci bir
+savunma var: `android/gradle.properties` içindeki
+`-XX:ActiveProcessorCount=4` JVM'e daha az çekirdeği varmış gibi
+gösterir, böylece GC/JIT/worker havuzları küçülür. `flutter.sh` derleme
+öncesi eski daemon'ı da kapatır ki yenisi sınırların içinde doğsun.
+
+Amaç hız değil: derleme yavaşlasa da makine kullanılabilir kalmalı.
+
 ## Maliyet
 
 B2'de ilk 10 GB ücretsiz, sonrası ~$7/TB/ay. Kayıtlar 64 kbps AAC, yani

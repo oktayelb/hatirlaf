@@ -55,6 +55,30 @@ def env_oku() -> dict:
     return d
 
 
+def _yeniden_dene(islem, ad: str, kez: int = 6):
+    """Gecici ag/TLS hatalarinda tekrar dener.
+
+    B2'ye giderken ara sira TLS el sikismasi yarida kopuyor
+    (WRONG_VERSION_NUMBER / UNEXPECTED_EOF). Kalici hatalari
+    (HTTPError) oldugu gibi birakir: onlari tekrar denemek anlamsiz.
+    """
+    import ssl
+    import time
+    for deneme in range(1, kez + 1):
+        try:
+            return islem()
+        except urllib.error.HTTPError:
+            raise
+        except (urllib.error.URLError, ssl.SSLError, OSError) as e:
+            if deneme == kez:
+                raise
+            bekle = min(15, 2 ** (deneme - 1))
+            print(f"  {ad}: gecici hata ({type(e).__name__}), "
+                  f"{bekle} sn sonra tekrar ({deneme}/{kez - 1})",
+                  file=sys.stderr)
+            time.sleep(bekle)
+
+
 def istek(url: str, govde=None, basliklar=None) -> dict:
     ham = None
     b = dict(basliklar or {})
@@ -62,9 +86,13 @@ def istek(url: str, govde=None, basliklar=None) -> dict:
         ham = json.dumps(govde).encode()
         b["Content-Type"] = "application/json"
     r = urllib.request.Request(url, data=ham, headers=b)
-    try:
+
+    def calistir():
         with urllib.request.urlopen(r, timeout=60) as y:
             return json.loads(y.read().decode())
+
+    try:
+        return _yeniden_dene(calistir, url.rsplit("/", 1)[-1])
     except urllib.error.HTTPError as e:
         govde_metni = e.read().decode(errors="replace")
         try:
@@ -206,20 +234,34 @@ def dogrula(key_id: str, key: str, kova_adi: str) -> bool:
     print("  yazma  : gecti ✓")
 
     # Okuma GECMEMELI. Gecerse anahtar fazla yetkili demektir.
-    okundu = False
+    #
+    # Ag hatasini "reddedildi" saymak olmaz: guvenlik kontrolu ya kesin
+    # gecer ya kesin kalir. Baglanti kurulamadiysa sonuc BELIRSIZdir.
+    r2 = urllib.request.Request(
+        f"{o['downloadUrl']}/file/{kova_adi}/{urllib.parse.quote(ad)}",
+        headers={"Authorization": o["authorizationToken"]},
+    )
+
+    def dene():
+        with urllib.request.urlopen(r2, timeout=60) as y:
+            y.read(1)
+        return "okudu"
+
     try:
-        r2 = urllib.request.Request(
-            f"{o['downloadUrl']}/file/{kova_adi}/{urllib.parse.quote(ad)}",
-            headers={"Authorization": o["authorizationToken"]},
-        )
-        with urllib.request.urlopen(r2, timeout=60):
-            okundu = True
-    except urllib.error.HTTPError as e:
-        print(f"  okuma  : reddedildi ✓ (HTTP {e.code})")
-    if okundu:
+        _yeniden_dene(dene, "okuma denemesi")
         print("  okuma  : GECTI ✗  ANAHTAR FAZLA YETKILI!")
         return False
-    return True
+    except urllib.error.HTTPError as e:
+        if e.code in (401, 403):
+            print(f"  okuma  : reddedildi ✓ (HTTP {e.code})")
+            return True
+        print(f"  okuma  : beklenmedik HTTP {e.code} ✗")
+        return False
+    except Exception as e:  # noqa: BLE001
+        print(f"  okuma  : BELIRSIZ -- baglanilamadi ({type(e).__name__})")
+        print("           Anahtarin okuyamadigi DOGRULANAMADI.")
+        print("           Ag duzelince tekrar calistirin.")
+        return False
 
 
 def deneme_dosyasini_sil(o: dict, kova: str) -> None:

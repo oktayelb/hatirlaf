@@ -38,6 +38,30 @@ def env_oku() -> dict:
     return d
 
 
+def _yeniden_dene(islem, ad: str, kez: int = 6):
+    """Gecici ag/TLS hatalarinda tekrar dener.
+
+    B2'ye giderken ara sira TLS el sikismasi yarida kopuyor
+    (WRONG_VERSION_NUMBER / UNEXPECTED_EOF). Kalici hatalari
+    (HTTPError) oldugu gibi birakir: onlari tekrar denemek anlamsiz.
+    """
+    import ssl
+    import time
+    for deneme in range(1, kez + 1):
+        try:
+            return islem()
+        except urllib.error.HTTPError:
+            raise
+        except (urllib.error.URLError, ssl.SSLError, OSError) as e:
+            if deneme == kez:
+                raise
+            bekle = min(15, 2 ** (deneme - 1))
+            print(f"  {ad}: gecici hata ({type(e).__name__}), "
+                  f"{bekle} sn sonra tekrar ({deneme}/{kez - 1})",
+                  file=sys.stderr)
+            time.sleep(bekle)
+
+
 def istek(url, govde=None, basliklar=None) -> dict:
     ham = None
     b = dict(basliklar or {})
@@ -45,8 +69,12 @@ def istek(url, govde=None, basliklar=None) -> dict:
         ham = json.dumps(govde).encode()
         b["Content-Type"] = "application/json"
     r = urllib.request.Request(url, data=ham, headers=b)
-    with urllib.request.urlopen(r, timeout=60) as y:
-        return json.loads(y.read().decode())
+
+    def calistir():
+        with urllib.request.urlopen(r, timeout=60) as y:
+            return json.loads(y.read().decode())
+
+    return _yeniden_dene(calistir, url.rsplit("/", 1)[-1])
 
 
 def main() -> int:
@@ -79,8 +107,12 @@ def main() -> int:
 
     url = f"{o['downloadUrl']}/file/{kova_adi}/{urllib.parse.quote(nesne)}"
     r = urllib.request.Request(url, headers={"Authorization": o["authorizationToken"]})
-    with urllib.request.urlopen(r, timeout=120) as y:
-        sifreli = y.read()
+
+    def indir():
+        with urllib.request.urlopen(r, timeout=120) as y:
+            return y.read()
+
+    sifreli = _yeniden_dene(indir, "indirme")
     print(f"  indirildi  : {len(sifreli)} bayt")
 
     gizli = _anahtari_oku(env["YEDEK_GIZLI_ANAHTAR"])
