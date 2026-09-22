@@ -31,6 +31,11 @@ dependencies:
   # Guncelleme APK'sinin ozetini dogrulamak icin
   crypto: ^3.0.7
 
+  # Yedekleri telefonda sifrelemek icin (X25519 + AES-GCM).
+  # cryptography_flutter (yerel hizlandirma) bilerek eklenmedi: yerel
+  # eklenti derlemeyi kirilgan yapiyor, sifreleme zaten isolate'te.
+  cryptography: ^2.9.0
+
   # Yardimci
   intl: ^0.20.2
   uuid: ^4.6.0

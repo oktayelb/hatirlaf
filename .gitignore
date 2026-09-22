@@ -43,3 +43,10 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Yedekleme sirlari. yedek.json B2 yazma anahtarini tasiyor; depo herkese
+# acik oldugu icin buraya asla girmemeli. *.gizli X25519 gizli anahtari:
+# kaybolursa yedekler acilamaz, sizarsa hepsi okunur.
+/yedek.json
+*.gizli
+*.hyz
