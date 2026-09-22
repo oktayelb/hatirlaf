@@ -54,3 +54,14 @@ app.*.map.json
 # Bu PC'de kalan sirlar: imza parolalari, gizli anahtar yolu, B2 hesap
 # parolasi. Hicbiri derlemeye girmez. Sablonu .env.ornek (o izlenir).
 .env
+
+# Indirilen yedekler. tool/yedek_indir.py zaten depo icine yazmayi
+# reddediyor ama b2/rclone/tarayici bunu bilmiyor. Cozulmus bir kayit
+# birinin hayat hikayesi; tek bir `git add -A` ile herkese acik depoya
+# gitmesindense burada yakalansin.
+/gelenler/
+/yedekler/
+/indirilenler/
+/hatirlaf-yedekler/
+*.m4a
+*.wav

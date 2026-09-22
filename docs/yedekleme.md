@@ -23,7 +23,7 @@ anahtarı fark edip logda uyarır.
 
 | Dosya | İçindekiler | APK'ya girer mi? |
 |---|---|---|
-| `.env` | Keystore parolaları, X25519 **gizli** anahtar yolu, B2 hesap parolası | **Hayır.** Yalnızca bu PC'de |
+| `.env` | Keystore parolaları, X25519 **gizli** anahtar yolu, B2 master anahtarı, indirme dizini | **Hayır.** Yalnızca bu PC'de |
 | `yedek.json` | `B2_KEY_ID`, `B2_APP_KEY`, `B2_BUCKET_ID`, `YEDEK_ALICI_ANAHTARI` | **Evet.** Derlemeye gömülür |
 
 İkisi de `.gitignore`'da. Şablonları: `.env.ornek`, `yedek.json.ornek`.
@@ -90,13 +90,41 @@ gerekir. Bu script onu gösterir.
 ## Kayıtları alma
 
 ```bash
-# B2'den indirin (b2 CLI, rclone, konsol — nasıl isterseniz)
-b2 sync b2://kovaniz ./gelenler
-
-# Toptan çözün. Anahtar yolu .env'deki YEDEK_GIZLI_ANAHTAR'dan gelir;
-# istersen ilk argüman olarak da verebilirsin.
-tool/yedek_coz.py --klasor ./gelenler
+tool/yedek_indir.py --liste        # ne var, ne kadar yer tutuyor
+tool/yedek_indir.py                # indir + çöz
+tool/yedek_indir.py --sadece-indir # şifreli bırak
 ```
+
+İnen dosyalar **deponun dışına**, `.env`'deki `YEDEK_INDIRME_DIZINI`
+altına gider (öntanımlı `~/hatirlaf-yedekler`, `0700`):
+
+```
+~/hatirlaf-yedekler/
+  sifreli/<cihaz>/<hatıra>/ses.m4a.hyz     B2'den geldiği gibi
+  cozulmus/<cihaz>/<hatıra>/ses.m4a        çözülmüş
+                            bilgi.json
+```
+
+Şifreli kopyalar **saklanır**: çözme hatasında ya da anahtar değişiminde
+tekrar denenebilsin diye. B2'den hiçbir şey silinmez, ve ikinci kez
+çalıştırmak var olanı yeniden indirmez.
+
+### Neden depo dışına
+
+Çözülmüş bir kayıt birinin hayat hikâyesi; depo ise herkese açık. Repo
+içine inseydi tek bir `git add -A` hepsini yayımlardı — `*.hyz`
+`.gitignore`'da ama çözülmüş `ses.m4a` ve `bilgi.json` değildi.
+
+Üç katman:
+
+1. `tool/yedek_indir.py` depo içine yazmayı **reddeder**.
+2. B2'den gelen adlar `..` içerse bile hedef klasörün dışına çıkamaz —
+   adlar telefondan geliyor, indirme tarafı onlara güvenmemeli.
+3. `.gitignore` yine de `/gelenler/`, `/yedekler/`, `/indirilenler/`,
+   `/hatirlaf-yedekler/`, `*.m4a` ve `*.wav` yakalar; `b2 sync` ya da
+   rclone kullanırsanız bu ağ devrede olsun.
+
+Tek tek çözmek için `tool/yedek_coz.py` hâlâ duruyor.
 
 Her hatıra iki dosyadır: `<cihaz>/<hatıraId>/ses.m4a.hyz` ve
 `bilgi.json.hyz` (başlık, tarih, süre, soru, **metin dökümü**). Metin de
@@ -184,6 +212,7 @@ eklemek baştan yazmaktan çok daha zor.
 | `lib/services/uploader.dart` | Kuyruk: şifrele → yükle → işaretle |
 | `tool/b2_kur.py` | B2'yi kurar, `yedek.json`'u yazar, yetkiyi doğrular |
 | `tool/b2_deneme.sh` | Gerçek B2'ye karşı uçtan uca deneme |
+| `tool/yedek_indir.py` | B2'den indirir ve çözer (depo dışına) |
 | `tool/anahtar_uret.py` | Anahtar çifti üretir (tek başına) |
 | `tool/yedek_coz.py` | PC'de çözer |
 | `tool/yedek_interop.sh` | Dart ↔ Python biçim doğrulaması |

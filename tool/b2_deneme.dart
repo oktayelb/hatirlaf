@@ -17,7 +17,9 @@ import 'package:hatirla/services/backup_info.dart';
 
 Future<void> main(List<String> args) async {
   if (args.isEmpty) {
-    stderr.writeln('kullanim: dart run tool/b2_deneme.dart <dizin> [bayt]');
+    stderr.writeln(
+      'kullanim: dart run tool/b2_deneme.dart <dizin> [bayt] [cihaz]',
+    );
     exit(1);
   }
   final Directory kok = Directory(args[0]);
@@ -81,8 +83,11 @@ Future<void> main(List<String> args) async {
       exit(1);
     }
 
+    // Ontanimli "_deneme": yedek_indir.py bu oneki atlar, yani normal
+    // indirmeler deneme cop'uyle karismaz. Indirme yolunu sinamak icin
+    // gercekci bir cihaz adi verilebilir.
     final String ad = YedekAyarlari.dosyaAdi(
-      cihaz: '_deneme',
+      cihaz: args.length > 2 ? args[2] : '_deneme',
       hatiraId: DateTime.now().millisecondsSinceEpoch.toString(),
       dosya: 'ses.m4a',
     );
