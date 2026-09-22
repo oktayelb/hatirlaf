@@ -39,6 +39,15 @@ void main() {
         home: const KimSinizScreen(karsilamaTamam: false),
       );
 
+  // Fotograflar pubspec'ten dusunce ekranda sessizce ikona duserdi;
+  // testte fark edelim.
+  testWidgets('fotograflar pakete giriyor', (WidgetTester tester) async {
+    for (final String yol in <String>[kTorunFotografi, kBirlikteFotografi]) {
+      final ByteData veri = await rootBundle.load(yol);
+      expect(veri.lengthInBytes, greaterThan(0), reason: yol);
+    }
+  });
+
   testWidgets('dort akraba da ekranda ve doğrudan seçilebiliyor',
       (WidgetTester tester) async {
     await tester.pumpWidget(uygulama());

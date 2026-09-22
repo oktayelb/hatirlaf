@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 
+import '../data/akrabalar.dart';
 import '../data/prompts.dart';
 import '../models/memory.dart';
 import '../services/permissions.dart';
@@ -216,18 +217,26 @@ class _RecordScreenState extends State<RecordScreen> {
                   children: <Widget>[
                     if (widget.soru != null) _SoruSeridi(soru: widget.soru!),
                     Expanded(
+                      // Kayit baslamadan once fotograf da giriyor;
+                      // kucuk ekranda tasmasin diye kaydirilabilir.
                       child: Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: <Widget>[
-                            _KayitDugmesi(
-                              durum: durum,
-                              seviye: _recorder.seviye,
-                              onBasla: _basla,
-                            ),
-                            const SizedBox(height: 32),
-                            _Sayac(durum: durum, sure: _recorder.sure),
-                          ],
+                        child: SingleChildScrollView(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: <Widget>[
+                              if (!kayitVar) ...<Widget>[
+                                const _BirlikteFotografi(),
+                                const SizedBox(height: 24),
+                              ],
+                              _KayitDugmesi(
+                                durum: durum,
+                                seviye: _recorder.seviye,
+                                onBasla: _basla,
+                              ),
+                              const SizedBox(height: 32),
+                              _Sayac(durum: durum, sure: _recorder.sure),
+                            ],
+                          ),
                         ),
                       ),
                     ),
@@ -274,6 +283,56 @@ class _SoruSeridi extends StatelessWidget {
           fontWeight: FontWeight.w700,
           color: HatirlaColors.primaryDark,
         ),
+      ),
+    );
+  }
+}
+
+/// Kayda baslamadan once gorunen aile fotografi.
+///
+/// Mikrofona konusmak yabanci bir is; karsida bir yuz varken daha kolay.
+/// Kayit basladigi anda kalkiyor: o andan sonra ekranda yalnizca kirmizi
+/// dugme ve sayac kalmali.
+class _BirlikteFotografi extends StatelessWidget {
+  const _BirlikteFotografi();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: HatirlaColors.card,
+        borderRadius: BorderRadius.circular(HatirlaSizes.radius),
+        border: Border.all(color: HatirlaColors.line, width: 2),
+      ),
+      child: Row(
+        children: <Widget>[
+          ClipRRect(
+            borderRadius: BorderRadius.circular(14),
+            child: Image.asset(
+              kBirlikteFotografi,
+              width: 124,
+              height: 100,
+              fit: BoxFit.cover,
+              // Gorsel bir sekilde acilmazsa ekranda cerceveli bir
+              // bosluk kalmasin.
+              errorBuilder: (BuildContext context, Object e, StackTrace? s) =>
+                  const SizedBox.shrink(),
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Text(
+              'Anlattıklarınızı bir gün torunlarınız dinleyecek.',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    fontSize: 20,
+                    height: 1.35,
+                    color: HatirlaColors.inkSoft,
+                    fontWeight: FontWeight.w600,
+                  ),
+            ),
+          ),
+        ],
       ),
     );
   }
