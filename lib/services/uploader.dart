@@ -88,8 +88,13 @@ class Yedekleyici extends ChangeNotifier {
 
   Future<void> baslat() async {
     // Istemci Flutter'a bagli degil (PC'den denenebilsin diye);
-    // uyarilarini burada uygulamanin gunlugune baglıyoruz.
-    b2Uyari = debugPrint as void Function(String);
+    // uyarilarini burada uygulamanin gunlugune bagliyoruz.
+    //
+    // Sarmalayici, `as` ile donusturmek yerine: debugPrint'in imzasi
+    // `void Function(String?, {int? wrapWidth})`. Bugun cast calisiyor
+    // ama imza degisirse acilista patlar ve baslat() unawaited
+    // cagrildigi icin yedekleme SESSIZCE hic baslamaz.
+    b2Uyari = (String mesaj) => debugPrint(mesaj);
 
     final SharedPreferences ayarlar = await SharedPreferences.getInstance();
     _cihaz = ayarlar.getString(_pCihaz) ?? '';

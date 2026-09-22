@@ -72,6 +72,27 @@ uygulama eskisi gibi çalışır. `tool/yayinla.sh` dosya varsa
 `android/app/build.gradle.kts` önce `.env`'e, sonra gerçek ortam
 değişkenlerine bakar.
 
+## Yayından önce
+
+```bash
+tool/yedek_onkontrol.sh          # hızlı
+tool/yedek_onkontrol.sh --tam    # 3 MB'lık gerçek gidiş-dönüş de yapar
+```
+
+Dört adım: dosyalar yerinde mi, sırlar depoya sızmış mı, **ayar adları
+uygulamaya ulaşıyor mu**, B2 sağlıklı mı.
+
+Üçüncüsü en sinsisi: `yedek.json`'daki bir ad uygulamanın beklediğiyle
+tutmazsa yedekleme **kapalı** derlenir. Hata yok, uyarı yok, uygulama
+normal çalışır — sadece hiçbir kayıt yükselmez, ve bunu aylar sonra
+kovaya bakınca fark edersiniz. `tool/yedek_ayar_dogrula.dart` aynı
+`--define` değerleriyle `YedekAyarlari`'nı gerçekten okur.
+
+`tool/b2_saglik.py` tek başına da çalışır: anahtarın hâlâ yalnızca
+`writeFiles` olduğunu, okumanın reddedildiğini, kovanın `allPrivate`
+kaldığını, gizli anahtarın yerinde durduğunu ve kovanın ne kadar
+dolduğunu söyler.
+
 ## Telefona dokunmadan denemek
 
 ```bash
@@ -213,6 +234,8 @@ eklemek baştan yazmaktan çok daha zor.
 | `tool/b2_kur.py` | B2'yi kurar, `yedek.json`'u yazar, yetkiyi doğrular |
 | `tool/b2_deneme.sh` | Gerçek B2'ye karşı uçtan uca deneme |
 | `tool/yedek_indir.py` | B2'den indirir ve çözer (depo dışına) |
+| `tool/yedek_onkontrol.sh` | Yayından önce her şeyi denetler |
+| `tool/b2_saglik.py` | B2 tarafının sağlık kontrolü |
 | `tool/anahtar_uret.py` | Anahtar çifti üretir (tek başına) |
 | `tool/yedek_coz.py` | PC'de çözer |
 | `tool/yedek_interop.sh` | Dart ↔ Python biçim doğrulaması |
