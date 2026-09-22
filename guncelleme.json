@@ -1,24 +1,24 @@
 {
-  "surumAdi": "1.1.0",
-  "notlar": "Server kayıtları toplayacak",
+  "surumAdi": "1.2.0",
+  "notlar": "Torun Fotoları ve Kişi Seçme",
   "paketler": {
     "arm64-v8a": {
-      "surumKodu": 2003,
-      "apkUrl": "https://github.com/oktayelb/hatirlaf/releases/download/v1.1.0/hatirlaf-arm64-v8a.apk",
-      "sha256": "b50254245759e40b8ca9a1308e13601a7f745eafc478f1807234f0b2aa34df7c",
-      "boyut": 23500892
+      "surumKodu": 2004,
+      "apkUrl": "https://github.com/oktayelb/hatirlaf/releases/download/v1.2.0/hatirlaf-arm64-v8a.apk",
+      "sha256": "4f80a58dc85c8a74f74eaf8a2443a8545fe62c5f74e8b0b34c1579fc8bb15d5b",
+      "boyut": 23664031
     },
     "armeabi-v7a": {
-      "surumKodu": 1003,
-      "apkUrl": "https://github.com/oktayelb/hatirlaf/releases/download/v1.1.0/hatirlaf-armeabi-v7a.apk",
-      "sha256": "028c913fb7b2772d6cbc10758623d654b0bbc5422c1b86e4b0b439eaa120ead6",
-      "boyut": 29889358
+      "surumKodu": 1004,
+      "apkUrl": "https://github.com/oktayelb/hatirlaf/releases/download/v1.2.0/hatirlaf-armeabi-v7a.apk",
+      "sha256": "77ff3fd1b61f2f45efae0f0182a5084786065779cb6419dba505e64ad9624cb1",
+      "boyut": 30051653
     },
     "x86_64": {
-      "surumKodu": 4003,
-      "apkUrl": "https://github.com/oktayelb/hatirlaf/releases/download/v1.1.0/hatirlaf-x86_64.apk",
-      "sha256": "59fd15bf15740ba761241fe7ed774e43b05161d4e66e48b31b73ca3fab9fa85b",
-      "boyut": 23751346
+      "surumKodu": 4004,
+      "apkUrl": "https://github.com/oktayelb/hatirlaf/releases/download/v1.2.0/hatirlaf-x86_64.apk",
+      "sha256": "bc7d69c7d4854b285c5df5a1789471f0f035f20398490d12f46a9a52b8189877",
+      "boyut": 23908593
     }
   }
 }
