@@ -37,6 +37,7 @@ dependencies:
   cryptography: ^2.9.0
 
   # Yardimci
+  meta: ^1.16.0
   intl: ^0.20.2
   uuid: ^4.6.0
   cupertino_icons: ^1.0.8

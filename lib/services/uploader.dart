@@ -87,6 +87,10 @@ class Yedekleyici extends ChangeNotifier {
   B2Istemcisi? _istemci;
 
   Future<void> baslat() async {
+    // Istemci Flutter'a bagli degil (PC'den denenebilsin diye);
+    // uyarilarini burada uygulamanin gunlugune baglıyoruz.
+    b2Uyari = debugPrint as void Function(String);
+
     final SharedPreferences ayarlar = await SharedPreferences.getInstance();
     _cihaz = ayarlar.getString(_pCihaz) ?? '';
     if (_cihaz.isEmpty) {

@@ -2,9 +2,10 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
+import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart' as ozet;
-import 'package:flutter/foundation.dart';
+import 'package:meta/meta.dart';
 
 /// Backblaze B2'ye yazan kucuk istemci.
 ///
@@ -12,6 +13,16 @@ import 'package:flutter/foundation.dart';
 /// APK'yi parcalayan biri kimsenin kaydini indiremesin, silemesin.
 /// Bunun bir bedeli var: `b2_list_parts` cagrilamadigi icin yarim kalmis
 /// buyuk dosyalarin durumu sunucuya sorulamaz, yerelde tutulur.
+/// B2 istemcisinin uyari kanali.
+///
+/// `flutter/foundation` yerine bu: istemci Flutter'a baglanmayinca
+/// `dart run` ile gercek B2'ye karsi PC'den denenebiliyor. Uygulama
+/// acilista bunu [debugPrint]'e baglar.
+void Function(String mesaj) b2Uyari = (String m) {
+  // ignore: avoid_print
+  print(m);
+};
+
 class B2Hatasi implements Exception {
   const B2Hatasi(this.mesaj, {this.kod, this.gecici = false});
 
@@ -125,7 +136,7 @@ class B2Istemcisi {
     if (yeni.fazlaYetkiliMi) {
       // Calismayi engellemiyoruz ama sessiz de gecmiyoruz: bu bir
       // kurulum hatasi ve ancak loglarda goruluyor.
-      debugPrint(
+      b2Uyari(
         'UYARI: B2 anahtari okuma/silme yetkisi tasiyor. '
         'Yalnizca writeFiles olan bir anahtar uretin.',
       );

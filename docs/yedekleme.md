@@ -41,20 +41,27 @@ sizin PC'nizde çözmek için durur.
 ## Kurulum
 
 ```bash
-# 1. Anahtar çifti
-tool/anahtar_uret.py ~/hatirlaf-yedek-anahtari.gizli
-
-# 2. B2'de kova + YALNIZCA writeFiles yetkili uygulama anahtarı
-#    (Backblaze konsolu -> Application Keys -> Add a New Application Key)
-
-# 3. Bu PC'de kalacaklar
 cp .env.ornek .env
-$EDITOR .env          # ANDROID_*, YEDEK_GIZLI_ANAHTAR, B2_ACCOUNT_PASSWORD
+$EDITOR .env    # B2_MASTER_API_KEYID + B2_MASTER_API_KEY, ANDROID_*, YEDEK_GIZLI_ANAHTAR
 
-# 4. Derlemeye girecekler
-cp yedek.json.ornek yedek.json
-$EDITOR yedek.json    # B2_KEY_ID, B2_APP_KEY, B2_BUCKET_ID, YEDEK_ALICI_ANAHTARI
+tool/b2_kur.py --deneme    # ne yapacagini yazar, hicbir sey olusturmaz
+tool/b2_kur.py             # gercekten kurar
 ```
+
+`tool/b2_kur.py` master anahtarla bağlanıp sırayla: X25519 çiftini
+üretir (yoksa), kovayı `allPrivate` olarak açar, **yalnızca
+`writeFiles`** yetkili ve o kovaya kısıtlı yeni bir uygulama anahtarı
+üretir, `yedek.json`'u yazar, sonra o anahtarla **yazmayı dener
+(geçmeli) ve okumayı dener (geçmemeli)**.
+
+Son adım önemli: anahtarın okuyamadığını varsaymak yetmez, kanıtlamak
+gerekir. Okuma geçerse script hata verip durur.
+
+Eski `hatirlaf-yaz-*` anahtarlarını **silmez** — sahadaki eski APK'lar
+hâlâ onları kullanıyor olabilir.
+
+Anahtar çiftini tek başına üretmek isterseniz `tool/anahtar_uret.py`
+hâlâ duruyor.
 
 `yedek.json`'daki dört alan dolu değilse yedekleme tamamen kapalıdır ve
 uygulama eskisi gibi çalışır. `tool/yayinla.sh` dosya varsa
@@ -64,6 +71,21 @@ uygulama eskisi gibi çalışır. `tool/yayinla.sh` dosya varsa
 `android/key.properties` artık yok; imza parolaları `.env`'e taşındı.
 `android/app/build.gradle.kts` önce `.env`'e, sonra gerçek ortam
 değişkenlerine bakar.
+
+## Telefona dokunmadan denemek
+
+```bash
+tool/b2_deneme.sh          # 3 MiB
+tool/b2_deneme.sh 30000000 # ~30 MB, bir saatlik kayıt kadar
+```
+
+Üretimdeki kodun ta kendisiyle (benzetim değil): Dart şifreler ve
+uygulamanın kısıtlı anahtarıyla B2'ye yükler, Python master anahtarla
+indirip çözer ve kaynakla bayt bayt karşılaştırır. Deneme nesnesi
+sonunda silinir.
+
+Şifrelemenin çalıştığını görmek yetmez; **geri dönebildiğini** görmek
+gerekir. Bu script onu gösterir.
 
 ## Kayıtları alma
 
@@ -160,7 +182,9 @@ eklemek baştan yazmaktan çok daha zor.
 | `lib/services/b2_client.dart` | B2 REST istemcisi |
 | `lib/services/backup_info.dart` | Derleme zamanı ayarları, dosya adları |
 | `lib/services/uploader.dart` | Kuyruk: şifrele → yükle → işaretle |
-| `tool/anahtar_uret.py` | Anahtar çifti üretir |
+| `tool/b2_kur.py` | B2'yi kurar, `yedek.json`'u yazar, yetkiyi doğrular |
+| `tool/b2_deneme.sh` | Gerçek B2'ye karşı uçtan uca deneme |
+| `tool/anahtar_uret.py` | Anahtar çifti üretir (tek başına) |
 | `tool/yedek_coz.py` | PC'de çözer |
 | `tool/yedek_interop.sh` | Dart ↔ Python biçim doğrulaması |
 
