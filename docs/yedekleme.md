@@ -151,6 +151,32 @@ Her hatıra iki dosyadır: `<cihaz>/<hatıraId>/ses.m4a.hyz` ve
 `bilgi.json.hyz` (başlık, tarih, süre, soru, **metin dökümü**). Metin de
 şifrelenir: aranabilir olduğu için sesten daha hassas.
 
+### Kimin kaydı hangisi
+
+Kovadaki klasör adı `<ad>-<kimlik>` (ör. `Dedem Ahmet-05e24e66`). Ad
+telefonu teslim ederken **Ayarlar → Aile Yedeği → Telefonu Adlandır**
+ile bir kez girilir; rastgele kimlik yanında kalır çünkü aynı adı
+taşıyan iki telefon birbirinin üzerine yazardı.
+
+Ad girilmemişse klasör yalnız kimliktir. Sonradan eşlemek için indirme
+dizinine `cihazlar.json` koyun:
+
+```json
+{ "05e24e66": "Dedem Ahmet" }
+```
+
+İsim çözme sırası: `cihazlar.json` → telefonda girilen ad → ham kimlik.
+Eşleme telefondakini ezer, yani adı burada da düzeltebilirsiniz.
+
+Çözülmüş kayıtlar kişiye göre klasörlenir (`cozulmus/<kişi>/...`). Adı
+sonradan değiştirirseniz eski klasör yerinde kalır; `--yeniden-coz`
+`cozulmus/`'u silip baştan kurar — `sifreli/` durduğu için veri kaybı
+değildir.
+
+**Uygulama verisi silinirse** telefon yeni bir rastgele kimlik üretir ve
+o kişinin kayıtları iki klasöre bölünür. Ad aynı kaldığı için hangisinin
+kim olduğu yine bellidir.
+
 Çözücü tek bozuk dosyada durmaz, atlar ve sonunda kaç hata olduğunu
 söyler.
 

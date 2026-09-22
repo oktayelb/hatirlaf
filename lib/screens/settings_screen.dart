@@ -599,6 +599,51 @@ class _YedekBolumu extends StatelessWidget {
     }
   }
 
+  /// Kuran kisi telefonu teslim ederken bir kez doldurur. Kayitlar
+  /// kovaya bu adla gider; yoksa elinizde 30 tane rastgele kimlik olur
+  /// ve hangisinin kim oldugunu bilemezsiniz.
+  static Future<void> _adiSor(BuildContext context, String mevcut) async {
+    final TextEditingController kutu = TextEditingController(text: mevcut);
+    final String? sonuc = await showDialog<String>(
+      context: context,
+      builder: (BuildContext c) => AlertDialog(
+        title: const Text('Bu telefon kimin?'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            const Text(
+              'Kayıtların hangi telefondan geldiğini ayırt etmek için. '
+              'Örnek: Dedem Ahmet',
+              style: TextStyle(fontSize: 17, color: HatirlaColors.inkSoft),
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: kutu,
+              autofocus: true,
+              textCapitalization: TextCapitalization.words,
+              style: const TextStyle(fontSize: 21),
+              decoration: const InputDecoration(border: OutlineInputBorder()),
+              onSubmitted: (String v) => Navigator.of(c).pop(v),
+            ),
+          ],
+        ),
+        actions: <Widget>[
+          TextButton(
+            onPressed: () => Navigator.of(c).pop(),
+            child: const Text('Vazgeç', style: TextStyle(fontSize: 19)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(c).pop(kutu.text),
+            child: const Text('Kaydet', style: TextStyle(fontSize: 19)),
+          ),
+        ],
+      ),
+    );
+    kutu.dispose();
+    if (sonuc != null) await Yedekleyici.instance.sahibiKaydet(sonuc);
+  }
+
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
@@ -613,8 +658,15 @@ class _YedekBolumu extends StatelessWidget {
                 ('Durum', _asamaMetni(y)),
                 ('Gönderilen', '${y.yuklenenSayisi}'),
                 ('Bekleyen', '${y.bekleyenSayisi}'),
+                ('Telefon', y.sahip.isEmpty ? '— (adsız)' : y.sahip),
                 ('Cihaz', y.cihaz.isEmpty ? '—' : y.cihaz),
               ],
+            ),
+            const SizedBox(height: 14),
+            CerceveliButon(
+              yazi: y.sahip.isEmpty ? 'Telefonu Adlandır' : 'Adı Değiştir',
+              ikon: Icons.badge_outlined,
+              onPressed: () => _adiSor(context, y.sahip),
             ),
             if (y.hata != null) ...<Widget>[
               const SizedBox(height: 14),

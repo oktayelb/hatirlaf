@@ -59,6 +59,7 @@ class Yedekleyici extends ChangeNotifier {
   static final Yedekleyici instance = Yedekleyici._();
 
   static const String _pCihaz = 'yedek_cihaz';
+  static const String _pSahip = 'yedek_sahip';
   static const String _pYuklenen = 'yedek_yuklenen';
   static const String _pSonDeneme = 'yedek_son_deneme';
 
@@ -69,6 +70,7 @@ class Yedekleyici extends ChangeNotifier {
   YedekAsamasi _asama = YedekAsamasi.bos;
   String? _hata;
   String _cihaz = '';
+  String _sahip = '';
   Set<String> _yuklenen = <String>{};
   bool _mesgul = false;
   int _kalan = 0;
@@ -78,6 +80,24 @@ class Yedekleyici extends ChangeNotifier {
   YedekAsamasi get asama => _asama;
   String? get hata => _hata;
   String get cihaz => _cihaz;
+
+  /// Telefonu kuran kisinin yazdigi ad ("Dedem Ahmet"). Bos olabilir.
+  String get sahip => _sahip;
+
+  /// Kovadaki klasor adi: okunabilir ad + rastgele kimlik.
+  ///
+  /// Ikisi birlikte: ad olmadan 30 tane anlamsiz klasor olurdu, kimlik
+  /// olmadan ayni adi tasiyan iki telefon birbirinin uzerine yazardi.
+  String get klasorAdi =>
+      _sahip.trim().isEmpty ? _cihaz : '${_sahip.trim()}-$_cihaz';
+
+  /// Kuran kisi telefonu teslim ederken bir kez yazar.
+  Future<void> sahibiKaydet(String ad) async {
+    _sahip = ad.trim();
+    final SharedPreferences ayarlar = await SharedPreferences.getInstance();
+    await ayarlar.setString(_pSahip, _sahip);
+    notifyListeners();
+  }
   int get bekleyenSayisi => _kalan;
   double? get ilerleme => _ilerleme;
   DateTime? get sonDeneme => _sonDeneme;
@@ -110,6 +130,7 @@ class Yedekleyici extends ChangeNotifier {
       _cihaz = const Uuid().v4().substring(0, 8);
       await ayarlar.setString(_pCihaz, _cihaz);
     }
+    _sahip = ayarlar.getString(_pSahip) ?? '';
     _yuklenen = (ayarlar.getStringList(_pYuklenen) ?? <String>[]).toSet();
     final int? damga = ayarlar.getInt(_pSonDeneme);
     if (damga != null) {
@@ -231,6 +252,7 @@ class Yedekleyici extends ChangeNotifier {
         json.encode(<String, dynamic>{
           ...m.toJson(),
           'cihaz': _cihaz,
+          'sahip': _sahip,
           'yuklendi': DateTime.now().toIso8601String(),
         }),
         flush: true,
@@ -253,11 +275,11 @@ class Yedekleyici extends ChangeNotifier {
       await c.yukle(
         dosya: sesSifreli,
         ad: YedekAyarlari.dosyaAdi(
-          cihaz: _cihaz,
+          cihaz: klasorAdi,
           hatiraId: m.id,
           dosya: 'ses.m4a',
         ),
-        bilgiler: <String, String>{'hatira': m.id, 'cihaz': _cihaz},
+        bilgiler: <String, String>{'hatira': m.id, 'cihaz': klasorAdi},
         ilerleme: (int y, int t) {
           _ilerleme = t > 0 ? y / t : null;
           notifyListeners();
@@ -274,11 +296,11 @@ class Yedekleyici extends ChangeNotifier {
       await c.yukle(
         dosya: bilgiSifreli,
         ad: YedekAyarlari.dosyaAdi(
-          cihaz: _cihaz,
+          cihaz: klasorAdi,
           hatiraId: m.id,
           dosya: 'bilgi.json',
         ),
-        bilgiler: <String, String>{'hatira': m.id, 'cihaz': _cihaz},
+        bilgiler: <String, String>{'hatira': m.id, 'cihaz': klasorAdi},
       );
 
       // Ses VE bilgi gectikten sonra isaretle: yarim yuklenmis bir
