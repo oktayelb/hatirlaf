@@ -10,7 +10,10 @@ fazla iki seviye gezinme, teknik olmayan hata mesajları.
 ## Kurulum (telefona)
 
 APK'yi telefona aktarıp dokunun; "bilinmeyen kaynak" uyarısına izin
-verin. Karşılama ekranı mikrofon iznini ve yazıya çevirme paketini
+verin. Uygulama önce "Hangi akrabamla konuşuyorum?" diye sorar;
+kullanıcı kendisini dört seçenekten biriyle tanıtır (Anneannem,
+Babannem, Şükrü Dedem, Oktay Dedem) ve bu ad yedeklerde de kullanılır.
+Ardından karşılama ekranı mikrofon iznini ve yazıya çevirme paketini
 (~142 MB, Wi-Fi'de) halleder. Paket indirilmezse kayıt yine alınır,
 sadece yazıya çevrilmez; sonradan Ayarlar'dan indirilebilir.
 
@@ -53,12 +56,14 @@ Ayrıntılar ve tuzaklar: [docs/guncelleme.md](docs/guncelleme.md).
 lib/
 ├── main.dart, theme.dart
 ├── data/prompts.dart      soru kütüphanesi
+├── data/akrabalar.dart    telefonu kullanan akraba (kimlik)
 ├── models/memory.dart
 ├── services/              store, recorder, player, transcriber,
-│                          whisper_model_manager, cover_photo,
+│                          whisper_model_manager, cover_photo, kullanici,
 │                          updater, update_info, network, permissions
-├── screens/               welcome, home, record, memory, question,
+├── screens/               kim, welcome, home, record, memory, question,
 │                          settings, help, update
+├── assets/                oktay.jpg (soruyu soran yüz), birlikte.jpg
 ├── widgets/
 └── utils/format.dart
 ```

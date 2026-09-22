@@ -59,34 +59,36 @@ class KimSinizScreen extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
-                const SizedBox(height: 24),
-                const Center(child: _TorunYuzu()),
                 const SizedBox(height: 16),
+                const Center(child: _TorunYuzu()),
+                const SizedBox(height: 10),
                 Text(
                   '$kTorunAdi soruyor',
                   textAlign: TextAlign.center,
                   style: const TextStyle(
-                    fontSize: 21,
+                    fontSize: 20,
                     fontWeight: FontWeight.w600,
                     color: HatirlaColors.inkSoft,
                   ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 10),
                 const _Balon(soru: 'Hangi akrabamla konuşuyorum?'),
-                const SizedBox(height: 18),
-                Text(
-                  'Bu telefon hatıralarınızı kaydedecek. Başlamadan önce '
-                  'sizi tanıyayım: aşağıdakilerden hangisisiniz?',
+                const SizedBox(height: 14),
+                // Tek satir: dort secenegin de kaydirmadan gorunmesi,
+                // uzun bir aciklamadan daha onemli.
+                const Text(
+                  'Aşağıdan kendinizi seçin.',
                   textAlign: TextAlign.center,
-                  style: Theme.of(context)
-                      .textTheme
-                      .bodyLarge
-                      ?.copyWith(color: HatirlaColors.inkSoft),
+                  style: TextStyle(
+                    fontSize: 21,
+                    height: 1.3,
+                    color: HatirlaColors.inkSoft,
+                  ),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 18),
                 for (final Akraba a in Akraba.values) ...<Widget>[
                   _AkrabaDugmesi(akraba: a, onSec: () => _sec(context, a)),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 12),
                 ],
               ],
             ),
@@ -105,8 +107,8 @@ class _TorunYuzu extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 148,
-      width: 148,
+      height: 104,
+      width: 104,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
         color: HatirlaColors.primarySoft,
@@ -118,7 +120,7 @@ class _TorunYuzu extends StatelessWidget {
           fit: BoxFit.cover,
           errorBuilder: (BuildContext context, Object e, StackTrace? s) =>
               const Icon(Icons.person_rounded,
-                  size: 76, color: HatirlaColors.primary),
+                  size: 56, color: HatirlaColors.primary),
         ),
       ),
     );
@@ -135,7 +137,7 @@ class _Balon extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 20),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       decoration: BoxDecoration(
         color: HatirlaColors.primarySoft,
         borderRadius: BorderRadius.circular(HatirlaSizes.radius),
@@ -145,7 +147,7 @@ class _Balon extends StatelessWidget {
         soru,
         textAlign: TextAlign.center,
         style: const TextStyle(
-          fontSize: 30,
+          fontSize: 27,
           height: 1.25,
           fontWeight: FontWeight.w700,
           color: HatirlaColors.primaryDark,
@@ -184,8 +186,8 @@ class _AkrabaDugmesi extends StatelessWidget {
             onSec();
           },
           child: Container(
-            constraints: const BoxConstraints(minHeight: 88),
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+            constraints: const BoxConstraints(minHeight: 84),
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(HatirlaSizes.radius),
               border: Border.all(color: HatirlaColors.primary, width: 2.5),
