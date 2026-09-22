@@ -1,12 +1,29 @@
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hatirla/services/b2_client.dart';
+import 'package:hatirla/services/recorder.dart';
 import 'package:hatirla/services/uploader.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  setUp(() => SharedPreferences.setMockInitialValues(<String, Object>{}));
+  // Recorder tekili kurulurken AudioRecorder() yerli kanala gidiyor;
+  // testte eklenti yok. Kanali sahteleyip yalnizca durum mantigini
+  // sinayabiliyoruz.
+  const MethodChannel kayitKanali =
+      MethodChannel('com.llfbandit.record/messages');
+
+  setUp(() {
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(kayitKanali, (MethodCall c) async => null);
+  });
+
+  tearDown(() {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(kayitKanali, null);
+  });
 
   group('acilis', () {
     // baslat() main.dart'ta unawaited cagriliyor: burada atilan bir
@@ -41,6 +58,36 @@ void main() {
       });
       await Yedekleyici.instance.baslat();
       expect(Yedekleyici.instance.sonDeneme, isNull);
+    });
+  });
+
+  group('mesguliyet', () {
+    test('bos durumda mesgul degil', () {
+      expect(Yedekleyici.mesgulMu, isFalse);
+    });
+
+    test('kayit sirasinda mesgul sayiliyor', () async {
+      // Kayit uygulamanin asil isi; yukleme sira beklemeli.
+      Recorder.instance.testIcinDurum(KayitDurumu.kaydediyor);
+      expect(Yedekleyici.mesgulMu, isTrue);
+
+      Recorder.instance.testIcinDurum(KayitDurumu.duraklatildi);
+      expect(Yedekleyici.mesgulMu, isTrue,
+          reason: 'duraklatilmis kayit da surmekte sayilir');
+
+      Recorder.instance.testIcinDurum(KayitDurumu.bos);
+      expect(Yedekleyici.mesgulMu, isFalse);
+    });
+
+    test('mesgulken degerlendir() yukleme baslatmiyor', () async {
+      // Asama burada `bos` kalir: ayarlar olmadigi icin degerlendir()
+      // daha en basta donuyor. Onemli olan hicbir sey baslatmamasi.
+      Recorder.instance.testIcinDurum(KayitDurumu.kaydediyor);
+      await Yedekleyici.instance.baslat();
+      await Yedekleyici.instance.degerlendir(elle: true);
+      expect(Yedekleyici.instance.hata, isNull);
+      expect(Yedekleyici.instance.asama, YedekAsamasi.bos);
+      Recorder.instance.testIcinDurum(KayitDurumu.bos);
     });
   });
 

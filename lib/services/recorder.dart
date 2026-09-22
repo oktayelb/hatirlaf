@@ -20,6 +20,13 @@ class Recorder extends ChangeNotifier {
   KayitDurumu _durum = KayitDurumu.bos;
   KayitDurumu get durum => _durum;
 
+  /// Yalnizca testler icin: gercek mikrofona dokunmadan durumu kurar.
+  @visibleForTesting
+  void testIcinDurum(KayitDurumu d) {
+    _durum = d;
+    notifyListeners();
+  }
+
   String? _dosyaYolu;
   String? get dosyaYolu => _dosyaYolu;
 

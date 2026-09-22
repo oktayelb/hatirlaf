@@ -13,7 +13,9 @@ import 'b2_client.dart';
 import 'backup_crypto.dart';
 import 'backup_info.dart';
 import 'network.dart';
+import 'recorder.dart';
 import 'store.dart';
+import 'transcriber.dart';
 
 enum YedekAsamasi { bos, sifreliyor, yukleniyor, bekliyor, hata }
 
@@ -84,6 +86,10 @@ class Yedekleyici extends ChangeNotifier {
   /// Ayarlar eksikse yedekleme tamamen kapali.
   bool get acikMi => YedekAyarlari.kurulu;
 
+  /// Telefon su an daha onemli bir isle mesgul mu?
+  static bool get mesgulMu =>
+      Recorder.instance.durum != KayitDurumu.bos || Transcriber.instance.mesgul;
+
   B2Istemcisi? _istemci;
 
   Future<void> baslat() async {
@@ -149,6 +155,14 @@ class Yedekleyici extends ChangeNotifier {
   Future<void> degerlendir({bool elle = false}) async {
     if (!acikMi || _mesgul) return;
 
+    // Uygulamanin asil isi kayit almak. Yukleme (isolate'te sifreleme +
+    // ag) yasli bir telefonda kaydi kekeletebilir; sira bekleyebilir,
+    // kayit bekleyemez.
+    if (mesgulMu) {
+      _durumaGec(YedekAsamasi.bekliyor);
+      return;
+    }
+
     // Ucuz kontroller once: depo her cevirme adiminda haber veriyor ve
     // _bekleyenler() hatira basina bir disk erisimi demek.
     if (!elle) {
@@ -176,6 +190,7 @@ class Yedekleyici extends ChangeNotifier {
     _mesgul = true;
     try {
       for (final Memory m in sira) {
+        if (mesgulMu) break;
         if (!elle && !Ag.instance.durum.internetVar) break;
         final bool oldu = await _hatirayiYukle(m);
         if (!oldu) break;
@@ -247,7 +262,11 @@ class Yedekleyici extends ChangeNotifier {
           _ilerleme = t > 0 ? y / t : null;
           notifyListeners();
         },
+        // Yukleme sirasinda kayit baslarsa parcalar arasinda birakip
+        // cikiyoruz; yarim kalan hatira isaretlenmedigi icin sonra
+        // bastan denenir.
         devamEdilsinMi: () async =>
+            !mesgulMu &&
             Ag.instance.durum.internetVar &&
             (!YedekAyarlari.yalnizcaKablosuz || Ag.instance.durum.sayacsiz),
       );
