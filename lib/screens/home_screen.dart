@@ -11,6 +11,7 @@ import '../services/recorder.dart';
 import '../services/store.dart';
 import '../services/transcriber.dart';
 import '../services/updater.dart';
+import '../services/uploader.dart';
 import '../services/whisper_model_manager.dart';
 import '../theme.dart';
 import '../widgets/common.dart';
@@ -556,6 +557,8 @@ class _GuncellemeGozcusuState extends State<_GuncellemeGozcusu>
     Guncelleyici.instance.oturumaGirildi();
     // Uygulama gunlerce arka planda kalmis olabilir; donunce yeniden bak.
     unawaited(Guncelleyici.instance.degerlendir());
+    // Yedekleme sessiz: kosullar uygun degilse kendi doner.
+    unawaited(Yedekleyici.instance.degerlendir());
     _belkiAc();
   }
 

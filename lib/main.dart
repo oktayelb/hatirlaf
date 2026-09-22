@@ -13,6 +13,7 @@ import 'services/cover_photo.dart';
 import 'services/store.dart';
 import 'services/transcriber.dart';
 import 'services/updater.dart';
+import 'services/uploader.dart';
 import 'services/whisper_model_manager.dart';
 import 'theme.dart';
 
@@ -58,6 +59,7 @@ Future<void> main() async {
 
   // Bilerek beklenmiyor: agi olmayan telefonda acilisi geciktirmesin.
   unawaited(Guncelleyici.instance.baslat());
+  unawaited(Yedekleyici.instance.baslat());
 
   runApp(HatirlaApp(karsilamaTamam: karsilamaTamam));
 }

@@ -7,6 +7,7 @@ import '../models/memory.dart';
 import '../services/permissions.dart';
 import '../services/store.dart';
 import '../services/updater.dart';
+import '../services/uploader.dart';
 import '../services/whisper_model_manager.dart';
 import '../theme.dart';
 import '../utils/format.dart';
@@ -170,11 +171,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const _GuncellemeBolumu(),
             const SizedBox(height: 34),
 
-            const Center(
+            if (Yedekleyici.instance.acikMi) ...<Widget>[
+              const BolumBasligi('Aile Yedeği',
+                  ikon: Icons.lock_outline_rounded),
+              const SizedBox(height: 14),
+              const _YedekBolumu(),
+              const SizedBox(height: 34),
+            ],
+
+            Center(
               child: Text(
-                'Sesiniz telefonunuzdan dışarı çıkmaz.',
+                // Yedekleme acikken "disari cikmaz" demek dogru degil.
+                // Bu ekran dogruyu soylemek zorunda: kayitlar gercekten
+                // telefondan cikiyor.
+                Yedekleyici.instance.acikMi
+                    ? 'Kayıtlarınız şifrelenerek yalnızca uygulamayı '
+                        'kuran aile üyenize ulaşır. Başka kimse açamaz.'
+                    : 'Sesiniz telefonunuzdan dışarı çıkmaz.',
                 textAlign: TextAlign.center,
-                style: TextStyle(
+                style: const TextStyle(
                     fontSize: 18, height: 1.5, color: HatirlaColors.inkSoft),
               ),
             ),
@@ -560,5 +575,64 @@ class _GuncellemeBolumuState extends State<_GuncellemeBolumu> {
     if (gecen.inHours < 1) return '${gecen.inMinutes} dakika önce';
     if (gecen.inHours < 24) return '${gecen.inHours} saat önce';
     return '${Bicim.gunlukTarih(t)}, ${Bicim.saat(t)}';
+  }
+}
+
+/// Yedekleme durumu; kuran kisi icin. Kullaniciya bir sey sorulmaz,
+/// burasi yalnizca "neden yuklenmedi?" sorusunun cevabi.
+class _YedekBolumu extends StatelessWidget {
+  const _YedekBolumu();
+
+  static String _asamaMetni(Yedekleyici y) {
+    switch (y.asama) {
+      case YedekAsamasi.bos:
+        return y.bekleyenSayisi == 0 ? 'Hepsi gönderildi' : 'Sırada';
+      case YedekAsamasi.sifreliyor:
+        return 'Şifreleniyor';
+      case YedekAsamasi.yukleniyor:
+        final double? i = y.ilerleme;
+        return i == null ? 'Gönderiliyor' : 'Gönderiliyor %${(i * 100).round()}';
+      case YedekAsamasi.bekliyor:
+        return 'Wi-Fi bekleniyor';
+      case YedekAsamasi.hata:
+        return 'Aksadı';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: Yedekleyici.instance,
+      builder: (BuildContext context, _) {
+        final Yedekleyici y = Yedekleyici.instance;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            _BilgiKutusu(
+              satirlar: <(String, String)>[
+                ('Durum', _asamaMetni(y)),
+                ('Gönderilen', '${y.yuklenenSayisi}'),
+                ('Bekleyen', '${y.bekleyenSayisi}'),
+                ('Cihaz', y.cihaz.isEmpty ? '—' : y.cihaz),
+              ],
+            ),
+            if (y.hata != null) ...<Widget>[
+              const SizedBox(height: 14),
+              Text(
+                y.hata!,
+                style: const TextStyle(
+                    fontSize: 17, color: HatirlaColors.inkSoft),
+              ),
+            ],
+            const SizedBox(height: 14),
+            CerceveliButon(
+              yazi: 'Şimdi Gönder',
+              ikon: Icons.cloud_upload_outlined,
+              onPressed: () => Yedekleyici.instance.tekrarDene(),
+            ),
+          ],
+        );
+      },
+    );
   }
 }
