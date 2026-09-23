@@ -1,49 +1,49 @@
 {
-  "surumAdi": "1.4.0",
-  "notlar": "Uzun kayıtlar artık yarıda kesilmiyor.",
+  "surumAdi": "1.5.0",
+  "notlar": "Konuşmalar artık çok daha doğru yazıya çevriliyor. Bunun için yeni yazı paketi bir kereliğine indirilecek (190 MB, Wi-Fi'de).",
   "paketler": {
     "arm64-v8a": {
-      "surumKodu": 2006,
-      "apkUrl": "https://github.com/oktayelb/hatirlaf/releases/download/v1.4.0/hatirlaf-arm64-v8a.apk",
-      "sha256": "978570d2b76f5efe53d0b93b8159c18e815d3aa3553cff76666926df211e62a8",
-      "boyut": 23985068,
+      "surumKodu": 2007,
+      "apkUrl": "https://github.com/oktayelb/hatirlaf/releases/download/v1.5.0/hatirlaf-arm64-v8a.apk",
+      "sha256": "231587f381ddefad14c626d3aee72f2256b2a0665d185661e5b253fa92cbba53",
+      "boyut": 23980572,
       "yamalar": [
         {
-          "kaynakSurumKodu": 2005,
-          "kaynakSha256": "b53a3d080c3ac52f25e836af9cb22e682f792ad1ff948f051707f75b64425fdb",
-          "url": "https://github.com/oktayelb/hatirlaf/releases/download/v1.4.0/hatirlaf-arm64-v8a-2005.yama",
-          "sha256": "fa3debf156a038f46955db2130af05cc2c43ef3ab7d3b0694e2e7af14d3ab9cf",
-          "boyut": 5261821
+          "kaynakSurumKodu": 2006,
+          "kaynakSha256": "978570d2b76f5efe53d0b93b8159c18e815d3aa3553cff76666926df211e62a8",
+          "url": "https://github.com/oktayelb/hatirlaf/releases/download/v1.5.0/hatirlaf-arm64-v8a-2006.yama",
+          "sha256": "82c889ad7c89b0109c85566b99f0afd56279ecae78e917c695a6593b2aaa5d91",
+          "boyut": 2919432
         }
       ]
     },
     "armeabi-v7a": {
-      "surumKodu": 1006,
-      "apkUrl": "https://github.com/oktayelb/hatirlaf/releases/download/v1.4.0/hatirlaf-armeabi-v7a.apk",
-      "sha256": "5ec66d3bd225e0888d01e2575304b90857351063619df925c4fb238fb193ec93",
-      "boyut": 30374534,
+      "surumKodu": 1007,
+      "apkUrl": "https://github.com/oktayelb/hatirlaf/releases/download/v1.5.0/hatirlaf-armeabi-v7a.apk",
+      "sha256": "1a2ad526d200fab265c17d39238d548f4c4b5d6ecbade62e1c5d6ff9a7c54ff6",
+      "boyut": 30370546,
       "yamalar": [
         {
-          "kaynakSurumKodu": 1005,
-          "kaynakSha256": "24aafe8a8ac9ad82d78ab79db75280ef6473a556356d8860748ec28d31c4c663",
-          "url": "https://github.com/oktayelb/hatirlaf/releases/download/v1.4.0/hatirlaf-armeabi-v7a-1005.yama",
-          "sha256": "3671ae406f2c5706da80c6d6ea39231757807ed6e39668057d2bd128b8dd9ea0",
-          "boyut": 5599800
+          "kaynakSurumKodu": 1006,
+          "kaynakSha256": "5ec66d3bd225e0888d01e2575304b90857351063619df925c4fb238fb193ec93",
+          "url": "https://github.com/oktayelb/hatirlaf/releases/download/v1.5.0/hatirlaf-armeabi-v7a-1006.yama",
+          "sha256": "ba3ca08480132f8da24bf2995995abd5af44852011ebf5bf7b4144e01b1cfb52",
+          "boyut": 3257466
         }
       ]
     },
     "x86_64": {
-      "surumKodu": 4006,
-      "apkUrl": "https://github.com/oktayelb/hatirlaf/releases/download/v1.4.0/hatirlaf-x86_64.apk",
-      "sha256": "51cafef5c8eacb663764b748a2f55f0eb72f524905528af92eea5732c5576095",
-      "boyut": 24234462,
+      "surumKodu": 4007,
+      "apkUrl": "https://github.com/oktayelb/hatirlaf/releases/download/v1.5.0/hatirlaf-x86_64.apk",
+      "sha256": "3ffa1cc8485d35eb556905a826685d254b62091cd22082f263b1ce90c39f8c3a",
+      "boyut": 24230006,
       "yamalar": [
         {
-          "kaynakSurumKodu": 4005,
-          "kaynakSha256": "e2576ee529be58b86b0f2d781400ffab5c62c0b2c8012631004c120fdd299096",
-          "url": "https://github.com/oktayelb/hatirlaf/releases/download/v1.4.0/hatirlaf-x86_64-4005.yama",
-          "sha256": "e997591ec23d17e2bb2c26c93e1fca0ffcce2b540bc7e5b6655c6896d63f4221",
-          "boyut": 5304616
+          "kaynakSurumKodu": 4006,
+          "kaynakSha256": "51cafef5c8eacb663764b748a2f55f0eb72f524905528af92eea5732c5576095",
+          "url": "https://github.com/oktayelb/hatirlaf/releases/download/v1.5.0/hatirlaf-x86_64-4006.yama",
+          "sha256": "687ba12dd3d3bf3393bdaeaf60e3919496f01a3efa656d0bc6682a3de01534a1",
+          "boyut": 2961653
         }
       ]
     }
