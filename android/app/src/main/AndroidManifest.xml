@@ -6,6 +6,11 @@
     <uses-permission android:name="android.permission.INTERNET"/>
     <!-- Kayit sirasinda ekranin kapanmamasi icin -->
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
+    <!-- Kayit surerken surecin oldurulmemesi icin. wakelock ekrani acik
+         tutar ama sureci tutmaz; uzun bir hatira anlatilirken telefon
+         uygulamayi toplarsa kayit kaybolurdu. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE"/>
     <!-- Guncellemeyi yalnizca sayacsiz aglarda (Wi-Fi) indirmek icin -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
     <!-- Yeni surumu kendi kendine kurabilmek icin. Uygulama magazasi
@@ -41,6 +46,12 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <!-- Kayit boyunca calisir; tek isi sureci ayakta tutmak. -->
+        <service
+            android:name=".KayitServisi"
+            android:exported="false"
+            android:foregroundServiceType="microphone"/>
+
         <!-- PackageInstaller kurulum sonucunu buraya bildirir.
              exported=false: yalnizca sistem ve biz tetikleyebiliriz. -->
         <receiver

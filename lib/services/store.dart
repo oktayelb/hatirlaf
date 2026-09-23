@@ -98,7 +98,10 @@ class MemoryStore extends ChangeNotifier {
             .whereType<File>()
             .toList();
         final File? audio = files
-            .where((File f) => f.path.endsWith('.m4a') || f.path.endsWith('.wav'))
+            .where((File f) =>
+                f.path.endsWith('.aac') ||
+                f.path.endsWith('.m4a') ||
+                f.path.endsWith('.wav'))
             .firstOrNull;
         if (audio == null) continue;
         final DateTime when = audio.statSync().modified;
@@ -131,18 +134,12 @@ class MemoryStore extends ChangeNotifier {
     return null;
   }
 
-  /// Yeni hatira klasoru olusturur ve ses dosyasinin yazilacagi yolu doner.
-  Future<({String id, String audioPath, String audioRelPath})> prepareNew(
-    String id,
-  ) async {
+  /// Yeni hatira klasoru olusturur ve yolunu doner. Ses dosyasinin adini
+  /// kayit bicimi belirledigi icin ([Recorder.basla]) burada secilmiyor.
+  Future<({String id, String klasor})> prepareNew(String id) async {
     final Directory dir = Directory('${memoriesDir.path}/$id');
     if (!dir.existsSync()) dir.createSync(recursive: true);
-    const String fileName = 'ses.m4a';
-    return (
-      id: id,
-      audioPath: '${dir.path}/$fileName',
-      audioRelPath: '$memoriesDirName/$id/$fileName',
-    );
+    return (id: id, klasor: dir.path);
   }
 
   Future<void> add(Memory memory) async {

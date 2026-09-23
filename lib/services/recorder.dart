@@ -1,10 +1,13 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
+import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:record/record.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
+
+import 'kayit_servisi.dart';
 
 /// Kayit ekraninin durumu.
 enum KayitDurumu { bos, kaydediyor, duraklatildi }
@@ -42,8 +45,24 @@ class Recorder extends ChangeNotifier {
   DateTime? _baslangic;
   Duration _birikmis = Duration.zero;
 
-  /// AAC/m4a: whisper donusumu kendisi yapiyor, sikistirilmis saklamak
-  /// 1 saatlik hatirayi 500 MB yerine ~30 MB'a indiriyor.
+  /// Akis modunda sesi diske yazan uclu.
+  IOSink? _cikti;
+  StreamSubscription<Uint8List>? _sesAbone;
+  Timer? _bosaltma;
+  bool _ciktiKapaniyor = false;
+
+  /// Diske ne siklikta bosaltilir. Surec oldurulurse kaybedilen, en fazla
+  /// bu kadarlik ses olur.
+  static const Duration _bosaltmaAraligi = Duration(seconds: 2);
+
+  /// AAC 64 kbps: whisper donusumu kendisi yapiyor, sikistirilmis
+  /// saklamak 1 saatlik hatirayi 500 MB yerine ~30 MB'a indiriyor.
+  ///
+  /// Ses dosyaya degil akisa aliniyor ([startStream]) ve ADTS cerceveleri
+  /// diske biz yaziyoruz. Sebep bicimde: `record` dosyaya yazarken MPEG-4
+  /// kullaniyor, orada sure ve cerceve tablosu `moov` atomunda ve en sona
+  /// yaziliyor -- kayit yarida kesilirse dosya hic acilmiyor. ADTS'te her
+  /// cerceve kendi uzunlugunu tasir, yani yarim dosya da gecerlidir.
   static const RecordConfig _config = RecordConfig(
     encoder: AudioEncoder.aacLc,
     bitRate: 64000,
@@ -73,21 +92,36 @@ class Recorder extends ChangeNotifier {
     }
   }
 
-  /// Kaydi baslatir. Basarisiz olursa `false` doner.
-  Future<bool> basla(String hedefYol) async {
-    if (_durum != KayitDurumu.bos) return false;
-    try {
-      final Directory parent = File(hedefYol).parent;
-      if (!parent.existsSync()) parent.createSync(recursive: true);
+  /// Akis modunda ADTS, dosya modunda MPEG-4 yazilir; ad bicimi belli
+  /// etsin ki sonradan bakan biri hangisi oldugunu bilsin.
+  static const String akisDosyaAdi = 'ses.aac';
+  static const String dosyaDosyaAdi = 'ses.m4a';
 
-      try {
-        await _recorder.start(_config, path: hedefYol);
-      } catch (e) {
-        debugPrint('voiceRecognition kaynagi acilmadi, varsayilana geciliyor: $e');
-        await _recorder.start(_yedekConfig, path: hedefYol);
+  /// Kaydi baslatir. Basarisiz olursa `false` doner.
+  ///
+  /// [klasorYolu] hatiranin klasoru; dosya adini kayit bicimi belirledigi
+  /// icin yolu cagiran degil buradaki kod seciyor ([dosyaYolu]).
+  Future<bool> basla(String klasorYolu) async {
+    if (_durum != KayitDurumu.bos) return false;
+
+    // Servis mikrofondan once aciliyor: Android 14 mikrofon turundeki on
+    // plan servisini uygulama on plandayken istiyor.
+    await KayitServisi.basla();
+
+    try {
+      final Directory klasor = Directory(klasorYolu);
+      if (!klasor.existsSync()) klasor.createSync(recursive: true);
+
+      String? yol = await _akisaBasla(klasorYolu);
+      // Akis desteklenmeyen bir cihaz olursa kayit hic alinamamaktansa
+      // eski yoldan, dosyaya alinsin.
+      yol ??= await _dosyayaBasla(klasorYolu);
+      if (yol == null) {
+        await KayitServisi.bitir();
+        return false;
       }
 
-      _dosyaYolu = hedefYol;
+      _dosyaYolu = yol;
       _durum = KayitDurumu.kaydediyor;
       _sure = Duration.zero;
       _birikmis = Duration.zero;
@@ -102,6 +136,102 @@ class Recorder extends ChangeNotifier {
       debugPrint('Kayit baslatilamadi: $e');
       await _temizle();
       return false;
+    }
+  }
+
+  /// Akis modu: `record` ADTS cerceveleri veriyor, diske biz yaziyoruz.
+  /// Cihaz desteklemiyorsa `null` doner.
+  Future<String?> _akisaBasla(String klasorYolu) async {
+    final String yol = '$klasorYolu/$akisDosyaAdi';
+    try {
+      Stream<Uint8List> akis;
+      try {
+        akis = await _recorder.startStream(_config);
+      } catch (e) {
+        debugPrint('voiceRecognition kaynagi acilmadi, varsayilana geciliyor: $e');
+        akis = await _recorder.startStream(_yedekConfig);
+      }
+
+      _ciktiKapaniyor = false;
+      _cikti = File(yol).openWrite();
+      _sesAbone = akis.listen(
+        (Uint8List parca) {
+          if (_ciktiKapaniyor) return;
+          _cikti?.add(parca);
+        },
+        onError: (Object e) => debugPrint('Ses akisi hatasi: $e'),
+        cancelOnError: false,
+      );
+      _bosaltma = Timer.periodic(_bosaltmaAraligi, (_) => _diskeBosalt());
+      return yol;
+    } catch (e) {
+      debugPrint('Akis modunda kayit baslatilamadi: $e');
+      await _akisiKapat();
+      try {
+        await _recorder.cancel();
+      } catch (_) {
+        // Zaten baslamamis olabilir.
+      }
+      try {
+        final File yarim = File(yol);
+        if (yarim.existsSync()) await yarim.delete();
+      } catch (_) {
+        // Onemli degil: dosya moduna gecerken adi da degisiyor.
+      }
+      return null;
+    }
+  }
+
+  /// Eski yol: `record` dogrudan dosyaya yazar. Yarida kesilirse dosya
+  /// acilmaz, o yuzden yalnizca akis calismadiginda kullanilir.
+  Future<String?> _dosyayaBasla(String klasorYolu) async {
+    final String yol = '$klasorYolu/$dosyaDosyaAdi';
+    try {
+      try {
+        await _recorder.start(_config, path: yol);
+      } catch (e) {
+        debugPrint('voiceRecognition kaynagi acilmadi, varsayilana geciliyor: $e');
+        await _recorder.start(_yedekConfig, path: yol);
+      }
+      return yol;
+    } catch (e) {
+      debugPrint('Dosya modunda kayit baslatilamadi: $e');
+      return null;
+    }
+  }
+
+  /// Yazilanlari isletim sistemine gecirir. Surec oldurulurse buraya
+  /// kadari saglam kalir.
+  void _diskeBosalt() {
+    final IOSink? cikti = _cikti;
+    if (cikti == null || _ciktiKapaniyor) return;
+    unawaited(
+      cikti.flush().catchError(
+        (Object e) => debugPrint('Ses diske bosaltilamadi: $e'),
+      ),
+    );
+  }
+
+  Future<void> _akisiKapat() async {
+    _bosaltma?.cancel();
+    _bosaltma = null;
+    _ciktiKapaniyor = true;
+
+    try {
+      await _sesAbone?.cancel();
+    } catch (e) {
+      debugPrint('Ses akisi kapatilamadi: $e');
+    }
+    _sesAbone = null;
+
+    final IOSink? cikti = _cikti;
+    _cikti = null;
+    if (cikti == null) return;
+    try {
+      await cikti.flush();
+      await cikti.close();
+    } catch (e) {
+      debugPrint('Ses dosyasi kapatilamadi: $e');
     }
   }
 
@@ -137,9 +267,11 @@ class Recorder extends ChangeNotifier {
   Future<({String yol, Duration sure})?> bitir() async {
     if (_durum == KayitDurumu.bos) return null;
     final Duration kayitSuresi = _sure;
+    final String? beklenen = _dosyaYolu;
     try {
+      // Once kayit durur, sonra dosya kapanir: son cerceveler de insin.
       final String? yol = await _recorder.stop();
-      final String? sonuc = yol ?? _dosyaYolu;
+      final String? sonuc = yol ?? beklenen;
       await _temizle();
       if (sonuc == null || !File(sonuc).existsSync()) return null;
       // Cok kisa ya da bos dosya.
@@ -206,6 +338,8 @@ class Recorder extends ChangeNotifier {
     _sayac = null;
     await _genlik?.cancel();
     _genlik = null;
+    await _akisiKapat();
+    await KayitServisi.bitir();
     _durum = KayitDurumu.bos;
     _seviye = 0;
     _baslangic = null;
@@ -218,7 +352,9 @@ class Recorder extends ChangeNotifier {
   @override
   void dispose() {
     _sayac?.cancel();
+    _bosaltma?.cancel();
     _genlik?.cancel();
+    _sesAbone?.cancel();
     _recorder.dispose();
     super.dispose();
   }

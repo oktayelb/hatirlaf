@@ -12,6 +12,7 @@ import 'screens/kim_screen.dart';
 import 'screens/welcome_screen.dart';
 import 'services/cover_photo.dart';
 import 'services/kullanici.dart';
+import 'services/kurtarma.dart';
 import 'services/store.dart';
 import 'services/transcriber.dart';
 import 'services/updater.dart';
@@ -40,6 +41,9 @@ Future<void> main() async {
   bool karsilamaTamam = false;
   try {
     await MemoryStore.instance.load();
+    // Telefon kayit sirasinda uygulamayi oldurduyse hatira diskte yarim
+    // durur; dizine girmeden once onu geri alalim.
+    await Kurtarma.tara();
     await CoverPhoto.instance.load();
     await Kullanici.instance.yukle();
     await WhisperModelManager.instance.init();

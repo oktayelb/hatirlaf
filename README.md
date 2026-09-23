@@ -50,6 +50,9 @@ tool/yayinla.sh feature "Fotoğraf eklenebiliyor."
 Sürüm numarasını script hesaplar (`bug`/`feature`/`version`).
 Ayrıntılar ve tuzaklar: [docs/guncelleme.md](docs/guncelleme.md).
 
+Kayıt yolu ve yarım kalan kaydın kurtarılması:
+[docs/kayit.md](docs/kayit.md).
+
 ## Yapı
 
 ```
@@ -58,9 +61,10 @@ lib/
 ├── data/prompts.dart      soru kütüphanesi
 ├── data/akrabalar.dart    telefonu kullanan akraba (kimlik)
 ├── models/memory.dart
-├── services/              store, recorder, player, transcriber,
-│                          whisper_model_manager, cover_photo, kullanici,
-│                          updater, update_info, yama, network, permissions
+├── services/              store, recorder, kurtarma, adts, kayit_servisi,
+│                          player, transcriber, whisper_model_manager,
+│                          cover_photo, kullanici, updater, update_info,
+│                          yama, network, permissions
 ├── screens/               kim, welcome, home, record, memory, question,
 │                          settings, help, update
 ├── assets/                oktay.jpg (soruyu soran yüz), birlikte.jpg
@@ -82,8 +86,9 @@ kurtarır.
 - iOS derlenmedi (Mac gerekiyor).
 - Uzun kayıtlar yavaş çevrilir; kuyruk arka planda çalışır ama uygulama
   açık kalmalı.
-- Kayıt arka plana alınırsa Android 14+ süreci öldürebilir; wakelock var,
-  foreground service yok.
+- Kayıt sırasında elektrik kesintisi gibi işletim sisteminin de çöktüğü
+  durumlarda diske boşaltılmamış son saniyeler gider. Süreç öldürülmesine
+  karşı koruma var: [docs/kayit.md](docs/kayit.md).
 - Proje klasöründeki `ı` karakteri Dart analiz sunucusunu çökertiyor;
   `flutter analyze` ve IDE tamamlama bu klasörde çalışmaz. Derleme
   etkilenmez.

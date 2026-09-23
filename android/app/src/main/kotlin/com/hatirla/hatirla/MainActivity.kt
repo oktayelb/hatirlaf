@@ -20,6 +20,7 @@ class MainActivity : FlutterActivity() {
         const val IZIN_KANALI = "hatirla/izin"
         const val GUNCELLEME_KANALI = "hatirla/guncelleme"
         const val AG_KANALI = "hatirla/ag"
+        const val KAYIT_KANALI = "hatirla/kayit"
     }
 
     private var guncelleyici: Guncelleyici? = null
@@ -104,6 +105,15 @@ class MainActivity : FlutterActivity() {
                     }
                 }
 
+                else -> result.notImplemented()
+            }
+        }
+
+        // Kayit boyunca surecin oldurulmesini engelleyen on plan servisi.
+        MethodChannel(mesajci, KAYIT_KANALI).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "basla" -> result.success(KayitServisi.basla(applicationContext))
+                "bitir" -> result.success(KayitServisi.bitir(applicationContext))
                 else -> result.notImplemented()
             }
         }

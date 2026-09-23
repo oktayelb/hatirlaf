@@ -6,6 +6,7 @@ import 'package:uuid/uuid.dart';
 import '../data/akrabalar.dart';
 import '../data/prompts.dart';
 import '../models/memory.dart';
+import '../services/kurtarma.dart';
 import '../services/permissions.dart';
 import '../services/player.dart';
 import '../services/recorder.dart';
@@ -31,6 +32,14 @@ class RecordScreen extends StatefulWidget {
 class _RecordScreenState extends State<RecordScreen> {
   final Recorder _recorder = Recorder.instance;
   String? _id;
+  String? _klasor;
+
+  /// Baslik ve tarih kayit BASLARKEN belirleniyor: yarida kesilen bir
+  /// kayit da ayni adla kurtarilsin diye isaret dosyasina yazilmalari
+  /// gerekiyor.
+  String _baslik = '';
+  DateTime _baslangic = DateTime.now();
+
   bool _kaydediliyor = false;
 
   @override
@@ -44,7 +53,12 @@ class _RecordScreenState extends State<RecordScreen> {
   void dispose() {
     // Ekran bir sekilde kapanirsa yarim kayit birakma.
     if (_recorder.durum != KayitDurumu.bos) {
-      unawaited(_recorder.iptal());
+      final String? klasor = _klasor;
+      unawaited(
+        _recorder.iptal().then((_) async {
+          if (klasor != null) await Kurtarma.bitti(klasor);
+        }),
+      );
     }
     super.dispose();
   }
@@ -58,7 +72,7 @@ class _RecordScreenState extends State<RecordScreen> {
     }
 
     final String id = const Uuid().v4();
-    final ({String audioPath, String audioRelPath, String id}) hazirlik;
+    final ({String id, String klasor}) hazirlik;
     try {
       hazirlik = await MemoryStore.instance.prepareNew(id);
     } catch (e) {
@@ -74,7 +88,7 @@ class _RecordScreenState extends State<RecordScreen> {
       return;
     }
 
-    final bool ok = await _recorder.basla(hazirlik.audioPath);
+    final bool ok = await _recorder.basla(hazirlik.klasor);
     if (!mounted) return;
     if (!ok) {
       await bilgiGoster(
@@ -87,7 +101,28 @@ class _RecordScreenState extends State<RecordScreen> {
       );
       return;
     }
-    setState(() => _id = id);
+
+    final DateTime simdi = DateTime.now();
+    final String baslik = widget.soru != null
+        ? Sorular.soruyuBasligaCevir(widget.soru!)
+        : '${Bicim.gunlukTarih(simdi)} hatırası';
+
+    // Telefon uygulamayi oldururse hatirayi bu isaretten kurtaracagiz.
+    await Kurtarma.basladi(
+      klasor: hazirlik.klasor,
+      id: id,
+      baslik: baslik,
+      sesDosyasi: (_recorder.dosyaYolu ?? '').split('/').last,
+      soru: widget.soru,
+    );
+
+    if (!mounted) return;
+    setState(() {
+      _id = id;
+      _klasor = hazirlik.klasor;
+      _baslik = baslik;
+      _baslangic = simdi;
+    });
   }
 
   Future<void> _izinUyarisi() async {
@@ -118,13 +153,22 @@ class _RecordScreenState extends State<RecordScreen> {
     if (_kaydediliyor) return;
     setState(() => _kaydediliyor = true);
 
+    final String? klasor = _klasor;
     final ({Duration sure, String yol})? sonuc = await _recorder.bitir();
+
+    // Ses dosyasi artik tamam: dizine yazilamadan kapanilsa bile kurtarilir.
+    if (sonuc != null && klasor != null) {
+      await Kurtarma.tamamlandi(klasor: klasor, sure: sonuc.sure);
+    }
     if (!mounted) return;
 
     if (sonuc == null || _id == null) {
+      if (klasor != null) await Kurtarma.bitti(klasor);
+      if (!mounted) return;
       setState(() {
         _kaydediliyor = false;
         _id = null;
+        _klasor = null;
       });
       await bilgiGoster(
         context,
@@ -137,13 +181,10 @@ class _RecordScreenState extends State<RecordScreen> {
     }
 
     final String id = _id!;
-    final DateTime simdi = DateTime.now();
     final Memory memory = Memory(
       id: id,
-      title: widget.soru != null
-          ? Sorular.soruyuBasligaCevir(widget.soru!)
-          : '${Bicim.gunlukTarih(simdi)} hatırası',
-      createdAt: simdi,
+      title: _baslik,
+      createdAt: _baslangic,
       audioRelPath:
           '${MemoryStore.memoriesDirName}/$id/${sonuc.yol.split('/').last}',
       durationMs: sonuc.sure.inMilliseconds,
@@ -151,6 +192,8 @@ class _RecordScreenState extends State<RecordScreen> {
     );
 
     await MemoryStore.instance.add(memory);
+    // Hatira dizine girdi; isaret artik gereksiz.
+    if (klasor != null) await Kurtarma.bitti(klasor);
     Transcriber.instance.enqueue(id);
 
     if (!mounted) return;
@@ -173,9 +216,14 @@ class _RecordScreenState extends State<RecordScreen> {
       tehlikeli: true,
     );
     if (!emin || !mounted) return;
+    final String? klasor = _klasor;
     await _recorder.iptal();
+    if (klasor != null) await Kurtarma.bitti(klasor);
     if (!mounted) return;
-    setState(() => _id = null);
+    setState(() {
+      _id = null;
+      _klasor = null;
+    });
     Navigator.of(context).pop();
   }
 

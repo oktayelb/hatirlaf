@@ -301,7 +301,9 @@ class Yedekleyici extends ChangeNotifier {
         ad: YedekAyarlari.dosyaAdi(
           cihaz: klasorAdi,
           hatiraId: m.id,
-          dosya: 'ses.m4a',
+          // Gercek ad: kayit bicimi cihaza gore degisebiliyor (aac/m4a)
+          // ve cozulen yedegin uzantisi yanlis olmasin.
+          dosya: ses.path.split(Platform.pathSeparator).last,
         ),
         bilgiler: <String, String>{'hatira': m.id, 'cihaz': klasorAdi},
         ilerleme: (int y, int t) {
