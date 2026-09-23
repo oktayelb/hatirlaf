@@ -1,24 +1,51 @@
 {
-  "surumAdi": "1.2.0",
-  "notlar": "Torun Fotoları ve Kişi Seçme",
+  "surumAdi": "1.3.0",
+  "notlar": "Güncellemeler artık çok daha küçük iniyor.",
   "paketler": {
     "arm64-v8a": {
-      "surumKodu": 2004,
-      "apkUrl": "https://github.com/oktayelb/hatirlaf/releases/download/v1.2.0/hatirlaf-arm64-v8a.apk",
-      "sha256": "4f80a58dc85c8a74f74eaf8a2443a8545fe62c5f74e8b0b34c1579fc8bb15d5b",
-      "boyut": 23664031
+      "surumKodu": 2005,
+      "apkUrl": "https://github.com/oktayelb/hatirlaf/releases/download/v1.3.0/hatirlaf-arm64-v8a.apk",
+      "sha256": "b53a3d080c3ac52f25e836af9cb22e682f792ad1ff948f051707f75b64425fdb",
+      "boyut": 23971256,
+      "yamalar": [
+        {
+          "kaynakSurumKodu": 2004,
+          "kaynakSha256": "4f80a58dc85c8a74f74eaf8a2443a8545fe62c5f74e8b0b34c1579fc8bb15d5b",
+          "url": "https://github.com/oktayelb/hatirlaf/releases/download/v1.3.0/hatirlaf-arm64-v8a-2004.yama",
+          "sha256": "8566c92ebde85d7b909823a706c11d9ac571e838bc86e63f0c9e92874a3850da",
+          "boyut": 5693272
+        }
+      ]
     },
     "armeabi-v7a": {
-      "surumKodu": 1004,
-      "apkUrl": "https://github.com/oktayelb/hatirlaf/releases/download/v1.2.0/hatirlaf-armeabi-v7a.apk",
-      "sha256": "77ff3fd1b61f2f45efae0f0182a5084786065779cb6419dba505e64ad9624cb1",
-      "boyut": 30051653
+      "surumKodu": 1005,
+      "apkUrl": "https://github.com/oktayelb/hatirlaf/releases/download/v1.3.0/hatirlaf-armeabi-v7a.apk",
+      "sha256": "24aafe8a8ac9ad82d78ab79db75280ef6473a556356d8860748ec28d31c4c663",
+      "boyut": 30359786,
+      "yamalar": [
+        {
+          "kaynakSurumKodu": 1004,
+          "kaynakSha256": "77ff3fd1b61f2f45efae0f0182a5084786065779cb6419dba505e64ad9624cb1",
+          "url": "https://github.com/oktayelb/hatirlaf/releases/download/v1.3.0/hatirlaf-armeabi-v7a-1004.yama",
+          "sha256": "45eecd04b8f122c486609df08bd22f07d52fa35d1883134f608525f477326e1f",
+          "boyut": 6029739
+        }
+      ]
     },
     "x86_64": {
-      "surumKodu": 4004,
-      "apkUrl": "https://github.com/oktayelb/hatirlaf/releases/download/v1.2.0/hatirlaf-x86_64.apk",
-      "sha256": "bc7d69c7d4854b285c5df5a1789471f0f035f20398490d12f46a9a52b8189877",
-      "boyut": 23908593
+      "surumKodu": 4005,
+      "apkUrl": "https://github.com/oktayelb/hatirlaf/releases/download/v1.3.0/hatirlaf-x86_64.apk",
+      "sha256": "e2576ee529be58b86b0f2d781400ffab5c62c0b2c8012631004c120fdd299096",
+      "boyut": 24216262,
+      "yamalar": [
+        {
+          "kaynakSurumKodu": 4004,
+          "kaynakSha256": "bc7d69c7d4854b285c5df5a1789471f0f035f20398490d12f46a9a52b8189877",
+          "url": "https://github.com/oktayelb/hatirlaf/releases/download/v1.3.0/hatirlaf-x86_64-4004.yama",
+          "sha256": "25ec4e89c1118c1cefd213427c521144ffa096dac07d0affa9ba59514b451d5b",
+          "boyut": 5731567
+        }
+      ]
     }
   }
 }
