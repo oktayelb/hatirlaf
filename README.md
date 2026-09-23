@@ -14,7 +14,7 @@ verin. Uygulama önce "Hangi akrabamla konuşuyorum?" diye sorar;
 kullanıcı kendisini dört seçenekten biriyle tanıtır (Anneannem,
 Babannem, Şükrü Dedem, Oktay Dedem) ve bu ad yedeklerde de kullanılır.
 Ardından karşılama ekranı mikrofon iznini ve yazıya çevirme paketini
-(~142 MB, Wi-Fi'de) halleder. Paket indirilmezse kayıt yine alınır,
+(~190 MB, Wi-Fi'de) halleder. Paket indirilmezse kayıt yine alınır,
 sadece yazıya çevrilmez; sonradan Ayarlar'dan indirilebilir.
 
 ## Geliştirme

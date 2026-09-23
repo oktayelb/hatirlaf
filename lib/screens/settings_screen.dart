@@ -200,7 +200,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 }
 
-/// Model indirme / kalite secimi.
+/// Yaziya cevirme paketinin indirilmesi. Tek model var, secenek yok.
 class _ModelBolumu extends StatelessWidget {
   const _ModelBolumu();
 
@@ -289,113 +289,14 @@ class _ModelBolumu extends StatelessWidget {
               const SizedBox(height: 14),
               BuyukButon(
                 yazi: 'Paketi İndir',
-                altYazi: 'Yaklaşık ${mm.kalite.yaklasikMb} MB',
+                altYazi: 'Yaklaşık ${WhisperModelManager.yaklasikMb} MB',
                 ikon: Icons.cloud_download_rounded,
                 onPressed: () => mm.download(),
               ),
             ],
-            const SizedBox(height: 24),
-            Text(
-              'Yazıya çevirme kalitesi',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 12),
-            for (final SesKalitesi q in SesKalitesi.values)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: _KaliteSecenegi(
-                  kalite: q,
-                  secili: mm.kalite == q,
-                  onTap: iniyor
-                      ? null
-                      : () async {
-                          await mm.setKalite(q);
-                          if (!context.mounted) return;
-                          if (!await mm.isReady()) {
-                            if (!context.mounted) return;
-                            final bool indir = await onayIste(
-                              context,
-                              baslik: '${q.baslik} kalite paketi',
-                              mesaj: 'Bu kalite için ${q.yaklasikMb} MB’lık '
-                                  'yeni bir paket inmesi gerekiyor. '
-                                  'Şimdi indirelim mi?',
-                              evetYazi: 'İndir',
-                              evetIkon: Icons.cloud_download_rounded,
-                            );
-                            if (indir) await mm.download();
-                          }
-                        },
-                ),
-              ),
           ],
         );
       },
-    );
-  }
-}
-
-class _KaliteSecenegi extends StatelessWidget {
-  const _KaliteSecenegi({
-    required this.kalite,
-    required this.secili,
-    required this.onTap,
-  });
-
-  final SesKalitesi kalite;
-  final bool secili;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: secili ? HatirlaColors.primarySoft : HatirlaColors.card,
-      borderRadius: BorderRadius.circular(18),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(18),
-        child: Container(
-          padding: const EdgeInsets.all(18),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(
-              color: secili ? HatirlaColors.primary : HatirlaColors.line,
-              width: secili ? 3 : 2,
-            ),
-          ),
-          child: Row(
-            children: <Widget>[
-              Icon(
-                secili
-                    ? Icons.radio_button_checked_rounded
-                    : Icons.radio_button_unchecked_rounded,
-                size: 34,
-                color: secili ? HatirlaColors.primary : HatirlaColors.inkSoft,
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Text(
-                      '${kalite.baslik}  (${kalite.yaklasikMb} MB)',
-                      style: const TextStyle(
-                          fontSize: 22, fontWeight: FontWeight.w700),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      kalite.aciklama,
-                      style: const TextStyle(
-                          fontSize: 19,
-                          height: 1.35,
-                          color: HatirlaColors.inkSoft),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }

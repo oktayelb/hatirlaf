@@ -192,7 +192,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
               'kesmeyin.';
         } else {
           metin = 'Söylediklerinizi yazıya çevirebilmek için bir kereliğine '
-              '${mm.kalite.yaklasikMb} MB’lık bir paket indirmemiz gerekiyor.\n\n'
+              '${WhisperModelManager.yaklasikMb} MB’lık bir paket indirmemiz gerekiyor.\n\n'
               'Mümkünse Wi-Fi’ye bağlıyken indirin. Bir daha '
               'istenmeyecek.';
         }

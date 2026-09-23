@@ -16,7 +16,11 @@ class Transcriber extends ChangeNotifier {
 
   static final Transcriber instance = Transcriber._();
 
-  final WhisperController _whisper = WhisperController();
+  /// Model dosyasi (q5_1) whisper_ggml'in enum'unda olmadigi icin
+  /// WhisperController degil, yol alan alt seviye API kullaniliyor.
+  /// `model` alani burada kullanilmiyor; dosyayi `modelPath` belirliyor.
+  static const Whisper _whisper = Whisper(model: WhisperModel.small);
+
   final Queue<String> _kuyruk = Queue<String>();
   final Set<String> _kuyruktakiler = <String>{};
 
@@ -76,7 +80,7 @@ class Transcriber extends ChangeNotifier {
       _aktifId = null;
       _yuzde = 0;
       notifyListeners();
-      // Modeli birak: 150-500 MB RAM'i bosa tutmayalim.
+      // Modeli birak: ~600 MB RAM'i bosa tutmayalim.
       try {
         await _whisper.releaseModel();
       } catch (_) {}
@@ -122,16 +126,19 @@ class Transcriber extends ChangeNotifier {
     );
 
     try {
-      // TranscribeResult disariya aciklanmadigi icin tip cikarimi.
-      final sonuc = await _whisper.transcribe(
-        model: mm.model,
-        audioPath: sesYolu,
-        lang: 'tr',
-        // Noktalamali bir ornek, whisper'in ciktisini da noktalamali yapiyor.
-        initialPrompt:
-            'Aşağıda Türkçe anlatılmış bir hatıra var. Noktalama işaretleriyle yazalım.',
-        suppressNonSpeechTokens: true,
-        keepModelLoaded: true,
+      final WhisperTranscribeResponse sonuc = await _whisper.transcribe(
+        modelPath: await mm.modelPath(),
+        transcribeRequest: TranscribeRequest(
+          audio: sesYolu,
+          language: 'tr',
+          isNoTimestamps: true,
+          isRealtime: true,
+          // Noktalamali bir ornek, whisper'in ciktisini da noktalamali yapiyor.
+          initialPrompt:
+              'Aşağıda Türkçe anlatılmış bir hatıra var. Noktalama işaretleriyle yazalım.',
+          suppressNonSpeechTokens: true,
+          keepModelLoaded: true,
+        ),
         onProgress: (int p) {
           _yuzde = p.clamp(0, 100);
           notifyListeners();
@@ -142,17 +149,7 @@ class Transcriber extends ChangeNotifier {
       memory = store.byId(id);
       if (memory == null) return;
 
-      final String metin = (sonuc?.transcription.text ?? '').trim();
-
-      if (sonuc == null) {
-        await store.update(
-          memory.copyWith(
-            status: TranscriptStatus.hata,
-            errorMessage: 'Konuşma yazıya çevrilemedi. Tekrar deneyebilirsiniz.',
-          ),
-        );
-        return;
-      }
+      final String metin = sonuc.text.trim();
 
       await store.update(
         memory.copyWith(

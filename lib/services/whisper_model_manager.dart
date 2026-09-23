@@ -2,58 +2,42 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:whisper_ggml/whisper_ggml.dart';
-
-/// Ses tanima kalitesi secenekleri. Model buyudukce Turkce dogrulugu artar
-/// ama yavaslar; `tiny` Turkce'de cok zayif oldugu icin sunulmuyor.
-enum SesKalitesi {
-  normal(
-    model: WhisperModel.base,
-    baslik: 'Normal',
-    aciklama: 'Her telefonda hızlı çalışır. Çoğu hatıra için yeterli.',
-    yaklasikMb: 142,
-  ),
-  yuksek(
-    model: WhisperModel.small,
-    baslik: 'Yüksek',
-    aciklama: 'Daha doğru yazar, daha uzun sürer. Yeni telefonlar için.',
-    yaklasikMb: 466,
-  );
-
-  const SesKalitesi({
-    required this.model,
-    required this.baslik,
-    required this.aciklama,
-    required this.yaklasikMb,
-  });
-
-  final WhisperModel model;
-  final String baslik;
-  final String aciklama;
-  final int yaklasikMb;
-
-  static SesKalitesi fromName(String? name) => SesKalitesi.values.firstWhere(
-        (SesKalitesi q) => q.name == name,
-        orElse: () => SesKalitesi.normal,
-      );
-}
 
 /// Indirme durumu.
 enum IndirmeDurumu { yok, iniyor, hazir, hata }
 
-/// Whisper model dosyasini indirir, saklar ve durumunu bildirir.
+/// Yaziya cevirme paketini indirir, saklar ve durumunu bildirir.
+///
+/// Tek model var, kullaniciya secenek sorulmuyor: `small` modelinin q5_1
+/// nicemlenmis hali. Gerekce:
+///
+/// - Turkce'de model buyudukce kazanc buyuk. Whisper makalesinin FLEURS
+///   olcumunde `base` %27,5 WER yapiyor, `small` %15,9 — yani eski
+///   "Normal" secenegi her dort kelimeden birini yanlis yaziyordu.
+/// - q5_1 nicemleme `small`'in dogrulugunu pratikte degistirmiyor ama
+///   dosyayi 466 MB'dan 190 MB'a indiriyor: eski "Normal"den (142 MB)
+///   biraz buyuk, eski "Yuksek"ten cok kucuk.
+/// - Geriye tek bir makul secenek kalinca secim ekrani da gereksizdi.
 class WhisperModelManager extends ChangeNotifier {
   WhisperModelManager._();
 
   static final WhisperModelManager instance = WhisperModelManager._();
 
-  static const String _prefsKey = 'ses_kalitesi';
+  /// whisper_ggml'in `WhisperModel` enum'unda nicemlenmis varyantlar yok.
+  /// Dosyayi kendimiz indirip alt seviye API'ye yol olarak veriyoruz;
+  /// bkz. transcriber.dart.
+  static const String modelDosya = 'ggml-small-q5_1.bin';
 
-  final WhisperController _controller = WhisperController();
+  static final Uri modelUri = Uri.parse(
+    'https://huggingface.co/ggerganov/whisper.cpp/resolve/main/$modelDosya',
+  );
 
-  SesKalitesi _kalite = SesKalitesi.normal;
-  SesKalitesi get kalite => _kalite;
+  /// Sunucudaki dosyanin tam boyutu (2026-09'da dogrulandi).
+  static const int modelBayt = 190085487;
+
+  /// Kullaniciya gosterilecek kaba boyut.
+  static const int yaklasikMb = 190;
 
   IndirmeDurumu _durum = IndirmeDurumu.yok;
   IndirmeDurumu get durum => _durum;
@@ -72,44 +56,33 @@ class WhisperModelManager extends ChangeNotifier {
 
   HttpClient? _client;
   bool _iptal = false;
-
-  WhisperModel get model => _kalite.model;
+  String? _dizin;
 
   Future<void> init() async {
-    final SharedPreferences prefs = await SharedPreferences.getInstance();
-    _kalite = SesKalitesi.fromName(prefs.getString(_prefsKey));
     _durum = await isReady() ? IndirmeDurumu.hazir : IndirmeDurumu.yok;
     notifyListeners();
   }
 
-  Future<String> modelPath([SesKalitesi? q]) =>
-      _controller.getPath((q ?? _kalite).model);
+  /// Model dosyasinin telefondaki yolu. Klasor whisper_ggml'inkiyle ayni
+  /// kalsin diye paketin kendi cozumunu kullaniyoruz.
+  Future<String> modelPath() async {
+    _dizin ??= await WhisperController.getModelDir();
+    return '$_dizin/$modelDosya';
+  }
 
   /// Boyut da kontrol edilir: yarim dosyayi "hazir" saymak whisper.cpp'yi
-  /// acilista cokertiyor.
-  Future<bool> isReady([SesKalitesi? q]) async {
+  /// acilista cokertiyor. Indirme zaten `.yarim` uzerinden gidiyor, bu
+  /// ikinci savunma. Tam esitlik aranmiyor ki dosya sunucuda bir gun
+  /// yeniden yuklenirse uygulama kilitlenmesin.
+  Future<bool> isReady() async {
     try {
-      final File f = File(await modelPath(q));
+      final File f = File(await modelPath());
       if (!f.existsSync()) return false;
-      final int len = await f.length();
-      // Beklenen boyutun %90'indan kucukse dosya yarim demektir.
-      final int minimum = ((q ?? _kalite).yaklasikMb * 1024 * 1024 * 0.9).round();
-      return len >= minimum;
+      return await f.length() >= modelBayt * 0.95;
     } catch (e) {
       debugPrint('Model kontrolu basarisiz: $e');
       return false;
     }
-  }
-
-  Future<void> setKalite(SesKalitesi q) async {
-    if (q == _kalite) return;
-    _kalite = q;
-    final SharedPreferences prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_prefsKey, q.name);
-    _durum = await isReady() ? IndirmeDurumu.hazir : IndirmeDurumu.yok;
-    _ilerleme = null;
-    _hata = null;
-    notifyListeners();
   }
 
   void iptalEt() {
@@ -147,7 +120,7 @@ class WhisperModelManager extends ChangeNotifier {
         ..connectionTimeout = const Duration(seconds: 30)
         ..idleTimeout = const Duration(seconds: 30);
 
-      final HttpClientRequest req = await _client!.getUrl(model.modelUri);
+      final HttpClientRequest req = await _client!.getUrl(modelUri);
       final HttpClientResponse res = await req.close();
 
       if (res.statusCode != HttpStatus.ok) {
@@ -214,17 +187,15 @@ class WhisperModelManager extends ChangeNotifier {
   }
 
   /// Indirilen modeli siler (Ayarlar'dan yer acmak icin).
-  Future<void> modelSil(SesKalitesi q) async {
+  Future<void> modelSil() async {
     try {
-      final File f = File(await modelPath(q));
+      final File f = File(await modelPath());
       if (f.existsSync()) await f.delete();
     } catch (e) {
       debugPrint('Model silinemedi: $e');
     }
-    if (q == _kalite) {
-      _durum = IndirmeDurumu.yok;
-      _ilerleme = null;
-    }
+    _durum = IndirmeDurumu.yok;
+    _ilerleme = null;
     notifyListeners();
   }
 }
