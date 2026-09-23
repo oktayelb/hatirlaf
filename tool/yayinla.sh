@@ -117,6 +117,19 @@ if [[ -z "$AAPT" ]]; then
   exit 1
 fi
 
+# Uretilen her yama, yayindan once telefondaki kodla dogrulaniyor.
+DART=""
+if command -v flutter >/dev/null; then
+  DART="$(dirname "$(readlink -f "$(command -v flutter)")")/dart"
+fi
+if [[ ! -x "$DART" ]]; then
+  DART="$(command -v dart || true)"
+fi
+if [[ -z "$DART" ]]; then
+  echo "hata: dart bulunamadi (Flutter SDK'sinin bin klasoru)." >&2
+  exit 1
+fi
+
 if [[ "$DENEME" == "false" ]]; then
   if ! command -v gh >/dev/null; then
     echo "hata: gh (GitHub CLI) kurulu degil." >&2
@@ -181,17 +194,45 @@ for A in "${ABILER[@]}"; do
     echo "hata: app-$A-release.apk olusmadi" >&2; exit 1; }
 done
 
+# --- 3.5 fark yamalari icin onceki surumun APK'lari ----------------------
+#
+# Telefon tam APK yerine yamayi indirip kendi kurulu APK'sina uyguluyor:
+# 22 MB yerine ~3 MB. Yama yalnizca bir onceki surumden gecerli; surum
+# atlayan telefon tam APK'ya duser. Indirilen APK'lar saklaniyor, sonraki
+# yayinda yeniden inmesin.
+ONCEKI="$(git tag -l 'v*' --sort=-v:refname | head -1)"
+ESKI_DIZIN="yok"
+if [[ -n "$ONCEKI" ]]; then
+  ESKI_DIZIN="build/eski-apk/$ONCEKI"
+  mkdir -p "$ESKI_DIZIN"
+  for A in "${ABILER[@]}"; do
+    if [[ ! -f "$ESKI_DIZIN/hatirlaf-$A.apk" ]]; then
+      echo "onceki surum ($ONCEKI) $A APK'si indiriliyor…"
+      gh release download "$ONCEKI" --repo "$DEPO" \
+        --pattern "hatirlaf-$A.apk" --dir "$ESKI_DIZIN" 2>/dev/null || {
+          echo "  uyari: $ONCEKI icinde $A yok; bu mimariye yama uretilmeyecek" >&2
+        }
+    fi
+  done
+else
+  echo "onceki surum yok; yama uretilmeyecek"
+fi
+
+rm -rf build/yama
+mkdir -p build/yama
+
 # --- 4. guncelleme.json --------------------------------------------------
-python3 - "$AAPT" "$SURUM" "$NOTLAR" "$KOK" "${ABILER[@]}" <<'PY'
+python3 - "$AAPT" "$SURUM" "$NOTLAR" "$KOK" "$ESKI_DIZIN" "${ABILER[@]}" <<'PY'
 import hashlib, io, json, os, re, subprocess, sys
 
-aapt, surum, notlar, kok = sys.argv[1:5]
-abiler = sys.argv[5:]
+sys.path.insert(0, "tool")
+import yama_uret
 
-paketler = {}
-for a in abiler:
-    yol = f"build/app/outputs/flutter-apk/app-{a}-release.apk"
+aapt, surum, notlar, kok, eski_dizin = sys.argv[1:6]
+abiler = sys.argv[6:]
 
+
+def surum_kodu(yol):
     basligi = subprocess.run(
         [aapt, "dump", "badging", yol],
         capture_output=True, text=True, check=True,
@@ -199,7 +240,14 @@ for a in abiler:
     esles = re.search(r"versionCode='(\d+)'", basligi)
     if not esles:
         sys.exit(f"hata: {yol} icindeki versionCode okunamadi")
-    kod = int(esles.group(1))
+    return int(esles.group(1))
+
+
+paketler = {}
+for a in abiler:
+    yol = f"build/app/outputs/flutter-apk/app-{a}-release.apk"
+
+    kod = surum_kodu(yol)
 
     ozet = hashlib.sha256()
     with open(yol, "rb") as f:
@@ -214,6 +262,28 @@ for a in abiler:
         "boyut": boyut,
     }
     print(f"  {a:<14} kod={kod:<6} {boyut / 1048576:5.1f} MB  {ozet.hexdigest()[:16]}…")
+
+    # Bir onceki surumden bu surume yama. Uretilemezse yayin durmaz:
+    # o mimarideki telefonlar eskisi gibi tam APK indirir.
+    eski_apk = f"{eski_dizin}/hatirlaf-{a}.apk"
+    if eski_dizin == "yok" or not os.path.isfile(eski_apk):
+        continue
+    try:
+        eski_kod = surum_kodu(eski_apk)
+        cikti = f"build/yama/hatirlaf-{a}-{eski_kod}.yama"
+        bilgi = yama_uret.uret(eski_apk, yol, cikti)
+        paketler[a]["yamalar"] = [{
+            "kaynakSurumKodu": eski_kod,
+            "kaynakSha256": bilgi["kaynakSha256"],
+            "url": f"{kok}/{os.path.basename(cikti)}",
+            "sha256": bilgi["sha256"],
+            "boyut": bilgi["boyut"],
+        }]
+        print(f"  {'':<14} yama {eski_kod} -> {kod}: "
+              f"{bilgi['boyut'] / 1048576:5.2f} MB "
+              f"(tam APK'nin %{bilgi['boyut'] * 100 / boyut:.0f}'i)")
+    except Exception as e:
+        print(f"  uyari: {a} yamasi uretilemedi: {e}", file=sys.stderr)
 
 if not paketler:
     sys.exit("hata: hicbir paket uretilmedi")
@@ -233,6 +303,31 @@ for A in "${ABILER[@]}"; do
   cp "build/app/outputs/flutter-apk/app-$A-release.apk" "/tmp/hatirlaf-$A.apk"
   YUKLENECEK+=("/tmp/hatirlaf-$A.apk")
 done
+
+# --- 4.5 yamalari telefondaki kodla dogrula ------------------------------
+#
+# Yamayi ureten Python ile uygulayan Dart ayri yerlerde duruyor; ikisi
+# birbirinden ayrilirsa telefon yamayi cope atar ve tam APK indirir -- yani
+# kimse zarar gormez ama fayda da yok olur. Sessizce olmasin: yamayi burada
+# telefondaki koda uygulatip cikan APK'nin ozetini karsilastiriyoruz.
+if compgen -G "build/yama/*.yama" >/dev/null; then
+  echo "yamalar telefondaki kodla dogrulaniyor…"
+  for A in "${ABILER[@]}"; do
+    # Eslesmeyen glob oldugu gibi kalir; -f onu eliyor.
+    BULUNAN=(build/yama/hatirlaf-"$A"-*.yama)
+    if [[ ! -f "${BULUNAN[0]}" ]]; then
+      continue
+    fi
+    HEDEF_OZET="$(python3 -c "
+import json
+print(json.load(open('guncelleme.json'))['paketler']['$A']['sha256'])
+")"
+    echo "  $A"
+    "$DART" run tool/yama_dogrula.dart \
+      "$ESKI_DIZIN/hatirlaf-$A.apk" "${BULUNAN[0]}" "$HEDEF_OZET"
+    YUKLENECEK+=("${BULUNAN[0]}")
+  done
+fi
 
 if [[ "$DENEME" == "true" ]]; then
   echo
@@ -272,11 +367,12 @@ gh release create "v$SURUM" "${YUKLENECEK[@]}" \
 #
 # Burada durursak telefonlar eski surumde kalir, kimse zarar gormez.
 echo "yuklenen dosyalar dogrulaniyor…"
-for A in "${ABILER[@]}"; do
-  BEKLENEN="$(stat -c%s "/tmp/hatirlaf-$A.apk")"
+for DOSYA in "${YUKLENECEK[@]}"; do
+  AD="$(basename "$DOSYA")"
+  BEKLENEN="$(stat -c%s "$DOSYA")"
   GORULEN=""
   for _ in 1 2 3 4 5; do
-    GORULEN="$(curl -sIL "$KOK/hatirlaf-$A.apk" \
+    GORULEN="$(curl -sIL "$KOK/$AD" \
       | tr -d '\r' | awk 'tolower($1)=="content-length:"{v=$2} END{print v}' \
       || true)"
     [[ "$GORULEN" == "$BEKLENEN" ]] && break
@@ -284,7 +380,7 @@ for A in "${ABILER[@]}"; do
   done
   if [[ "$GORULEN" != "$BEKLENEN" ]]; then
     echo >&2
-    echo "hata: $A dosyasi adresinden dogrulanamadi." >&2
+    echo "hata: $AD dosyasi adresinden dogrulanamadi." >&2
     echo "  beklenen $BEKLENEN bayt, gorulen '${GORULEN:-yok}'" >&2
     echo >&2
     echo "guncelleme.json ITILMEDI - telefonlar eski surumde kaliyor," >&2
@@ -293,7 +389,7 @@ for A in "${ABILER[@]}"; do
     echo "  git add guncelleme.json && git commit -m 'guncelleme $SURUM' && git push" >&2
     exit 1
   fi
-  echo "  $A ✓"
+  echo "  $AD ✓"
 done
 
 # --- 7. guncelleme.json: telefonlara "yeni surum var" diyen adim ---------

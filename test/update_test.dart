@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:hatirla/services/network.dart';
 import 'package:hatirla/services/update_info.dart';
+import 'package:hatirla/services/yama.dart';
 
 /// 64 hanelik gecerli ozetler. Varsayilan parametre olarak kullanildigi
 /// icin sabit olmak zorunda; `'a' * 64` derlenmiyor.
@@ -10,6 +11,8 @@ const String _ozetArm64 =
     'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 const String _ozetArm32 =
     'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+const String _ozetYama =
+    'cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc';
 
 const String _kok =
     'https://github.com/oktayelb/hatirlaf/releases/download/v1.0.1';
@@ -23,10 +26,29 @@ Map<String, Object?> _paket({
   Object? apkUrl = '$_kok/hatirlaf-arm64-v8a.apk',
   Object? sha256 = _ozetArm64,
   Object? boyut = 23000000,
+  Object? yamalar,
 }) {
   return <String, Object?>{
     'surumKodu': surumKodu,
     'apkUrl': apkUrl,
+    'sha256': sha256,
+    'boyut': boyut,
+    if (yamalar != null) 'yamalar': yamalar,
+  };
+}
+
+/// Bir onceki surumden bu surume gecerli bir yama kaydi.
+Map<String, Object?> _yama({
+  Object? kaynakSurumKodu = 2001,
+  Object? kaynakSha256 = _ozetArm32,
+  Object? url = '$_kok/hatirlaf-arm64-v8a-2001.yama',
+  Object? sha256 = _ozetYama,
+  Object? boyut = 3000000,
+}) {
+  return <String, Object?>{
+    'kaynakSurumKodu': kaynakSurumKodu,
+    'kaynakSha256': kaynakSha256,
+    'url': url,
     'sha256': sha256,
     'boyut': boyut,
   };
@@ -229,6 +251,83 @@ void main() {
         tekPaketle(_paket(boyut: GuncellemeKaynagi.enBuyukApkBayt + 1)),
         isNull,
       );
+    });
+  });
+
+  group('yama kayitlari', () {
+    GuncellemeBilgisi? yamayla(Object? yamalar) => GuncellemeBilgisi.cozumle(
+          _json(
+            paketler: <String, Object?>{
+              'arm64-v8a': _paket(yamalar: yamalar),
+            },
+          ),
+          _yeniTelefon,
+        );
+
+    test('kurulu surume uyan yama bulunur', () {
+      final GuncellemeBilgisi? b = yamayla(<Object?>[_yama()]);
+      expect(b!.paket.yamalar, hasLength(1));
+
+      final GuncellemeYamasi? y = b.yamaBul(2001);
+      expect(y, isNotNull);
+      expect(y!.kaynakSurumKodu, 2001);
+      expect(y.kaynakSha256, _ozetArm32);
+      expect(y.boyut, 3000000);
+    });
+
+    // Bir surum atlayan telefon yamayi kullanamaz, tam APK indirmeli.
+    test('baska surumden gelen telefon icin yama yok', () {
+      expect(yamayla(<Object?>[_yama()])!.yamaBul(1999), isNull);
+    });
+
+    test('yama alani hic yoksa sorun cikmaz', () {
+      final GuncellemeBilgisi? b = yamayla(null);
+      expect(b, isNotNull);
+      expect(b!.paket.yamalar, isEmpty);
+      expect(b.yamaBul(2001), isNull);
+    });
+
+    // Bozuk bir yama kaydi guncellemeyi iptal ettirmemeli: o telefon
+    // eskisi gibi tam APK indirir.
+    test('bozuk yama kaydi atlanir, paket gecerli kalir', () {
+      for (final Object? bozuk in <Object?>[
+        'liste degil',
+        <Object?>['kayit degil'],
+        <Object?>[_yama(kaynakSurumKodu: null)],
+        <Object?>[_yama(kaynakSha256: 'kisa')],
+        <Object?>[_yama(sha256: null)],
+        <Object?>[_yama(boyut: 0)],
+        <Object?>[_yama(boyut: -1)],
+        <Object?>[_yama(url: 'https://kotuadam.example/x.yama')],
+        <Object?>[_yama(url: 'http://github.com/oktayelb/hatirlaf/releases/x')],
+        // Kendisinden kendisine ya da ileriden geriye yama anlamsiz.
+        <Object?>[_yama(kaynakSurumKodu: 2002)],
+        <Object?>[_yama(kaynakSurumKodu: 2003)],
+      ]) {
+        final GuncellemeBilgisi? b = yamayla(bozuk);
+        expect(b, isNotNull, reason: '$bozuk');
+        expect(b!.surumKodu, 2002, reason: '$bozuk');
+        expect(b.paket.yamalar, isEmpty, reason: '$bozuk');
+      }
+    });
+
+    test('akil disi buyuklukteki yama reddedilir', () {
+      expect(
+        yamayla(<Object?>[_yama(boyut: Yama.enBuyukYamaBayt + 1)])!
+            .paket
+            .yamalar,
+        isEmpty,
+      );
+    });
+
+    test('birden fazla yama arasindan dogru olani secilir', () {
+      final GuncellemeBilgisi? b = yamayla(<Object?>[
+        _yama(kaynakSurumKodu: 2000),
+        _yama(kaynakSurumKodu: 2001),
+      ]);
+      expect(b!.paket.yamalar, hasLength(2));
+      expect(b.yamaBul(2000)!.kaynakSurumKodu, 2000);
+      expect(b.yamaBul(2001)!.kaynakSurumKodu, 2001);
     });
   });
 

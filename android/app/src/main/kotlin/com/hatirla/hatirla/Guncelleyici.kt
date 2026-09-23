@@ -50,6 +50,19 @@ class Guncelleyici(private val activity: Activity) {
     /** Cihazin mimarileri, tercih sirasiyla. Her mimari icin ayri APK var. */
     fun abiler(): List<String> = Build.SUPPORTED_ABIS?.toList() ?: emptyList()
 
+    /**
+     * Kurulu APK'nin diskteki yolu. Fark guncellemesi bunu kaynak alarak
+     * yeni APK'yi uretiyor: uygulama kendi APK'sini okuyabiliyor.
+     */
+    fun kuruluApkYolu(): String? {
+        return try {
+            activity.applicationInfo.sourceDir
+        } catch (e: Exception) {
+            Log.w(ETIKET, "Kurulu APK yolu okunamadi", e)
+            null
+        }
+    }
+
     fun surumAdi(): String {
         return try {
             activity.packageManager

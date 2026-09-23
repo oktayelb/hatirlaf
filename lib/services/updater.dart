@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'network.dart';
 import 'update_info.dart';
+import 'yama.dart';
 
 enum GuncellemeAsamasi { bos, denetleniyor, indiriliyor, hazir, kuruluyor, hata }
 
@@ -41,6 +42,11 @@ class Guncelleyici extends ChangeNotifier {
   /// Cihazin mimarileri, tercih sirasiyla; hangi APK'nin inecegini belirler.
   List<String> _abiler = const <String>[];
   List<String> get abiler => _abiler;
+
+  /// Kurulu APK'nin diskteki yolu. Fark guncellemesinin kaynagi: yeni APK
+  /// bunun uzerine yama uygulanarak uretiliyor.
+  String? _kuruluApkYolu;
+  String? get kuruluApkYolu => _kuruluApkYolu;
 
   GuncellemeAsamasi _asama = GuncellemeAsamasi.bos;
   GuncellemeAsamasi get asama => _asama;
@@ -121,6 +127,8 @@ class Guncelleyici extends ChangeNotifier {
               ?.whereType<String>()
               .toList(growable: false) ??
           const <String>[];
+      final String? apkYolu = surum?['apkYolu'] as String?;
+      _kuruluApkYolu = apkYolu != null && apkYolu.isNotEmpty ? apkYolu : null;
       if (_mevcutSurumKodu <= 0 || _abiler.isEmpty) return;
 
       final SharedPreferences ayarlar = await SharedPreferences.getInstance();
@@ -265,9 +273,86 @@ class Guncelleyici extends ChangeNotifier {
     }
   }
 
-  /// APK'yi indirir, dogrular ve [GuncellemeAsamasi.hazir]'a gecer.
-  /// Yarim inen dosya silinmez; `Range` ile kaldigi yerden devam eder.
+  /// Yeni surumu diske indirir.
+  ///
+  /// Once fark yamasi denenir: APK'larin %87'si iki surum arasinda ayni
+  /// kaldigi icin 22 MB yerine ~3 MB iniyor ve degismeyen kisim kurulu
+  /// APK'dan kopyalaniyor. Yamanin tutmadigi her durumda -- yama yok,
+  /// kurulu APK baska bir dosya, inen yama bozuk -- sessizce tam APK'ya
+  /// dusulur; kullanici ikisini de ayirt edemez.
   Future<void> _indir(GuncellemeBilgisi b, {required bool elle}) async {
+    final GuncellemeYamasi? yama = b.yamaBul(_mevcutSurumKodu);
+    if (yama != null && _kuruluApkYolu != null) {
+      if (await _yamayiDene(b, yama, elle: elle) != _YamaSonuc.basarisiz) {
+        return;
+      }
+    }
+    await _tamIndir(b, elle: elle);
+  }
+
+  /// Yamayi indirip kurulu APK'ya uygular. [_YamaSonuc.basarisiz] donerse
+  /// cagiran tam APK'ya dusmeli; [_YamaSonuc.iptal] "sonra devam edecegiz"
+  /// demek.
+  Future<_YamaSonuc> _yamayiDene(
+    GuncellemeBilgisi b,
+    GuncellemeYamasi y, {
+    required bool elle,
+  }) async {
+    final Directory klasor = Directory(await _klasor());
+    final File hedef = File(_apkYolu(klasor.path, b.surumKodu));
+    final File yama = File(_yamaYolu(klasor.path, b.surumKodu));
+    final File yarim = File('${yama.path}.yarim');
+    final File kurulu = File(_kuruluApkYolu!);
+
+    if (!kurulu.existsSync()) return _YamaSonuc.basarisiz;
+
+    _indirmeIptal = false;
+    _asama = GuncellemeAsamasi.indiriliyor;
+    _hata = null;
+    _toplamBayt = y.boyut;
+    _inenBayt = 0;
+    _ilerleme = null;
+    notifyListeners();
+
+    try {
+      if (!klasor.existsSync()) klasor.createSync(recursive: true);
+      await _sessizSil(hedef);
+
+      await _cek(Uri.parse(y.url), yarim, y.boyut, elle: elle);
+
+      if (!await _ozetDogruMu(yarim, y.sha256)) {
+        await _sessizSil(yarim);
+        throw const FormatException('İnen yama bozuk');
+      }
+      await yarim.rename(yama.path);
+
+      await Yama.uygula(kaynak: kurulu, yama: yama, hedef: hedef);
+      await _sessizSil(yama);
+
+      // Karar yine manifest'in ozetinde: yamadan cikan APK da tam inen APK
+      // kadar dogrulanmadan kurulmaz.
+      if (!await _ozetDogruMu(hedef, b.sha256)) {
+        await _sessizSil(hedef);
+        throw const FormatException('Yamadan çıkan APK tutmadı');
+      }
+
+      _hazirla(b);
+      return _YamaSonuc.tamam;
+    } catch (e) {
+      if (e is _Iptal) {
+        // Yarim yama diskte kaliyor: sonraki denemede devam edecek.
+        _bosaAl();
+        return _YamaSonuc.iptal;
+      }
+      debugPrint('Yama kullanilamadi, tam APK indirilecek: $e');
+      await _sessizSil(yama);
+      await _sessizSil(hedef);
+      return _YamaSonuc.basarisiz;
+    }
+  }
+
+  /// APK'yi bastan indirir, dogrular ve [GuncellemeAsamasi.hazir]'a gecer.
+  Future<void> _tamIndir(GuncellemeBilgisi b, {required bool elle}) async {
     final Directory klasor = Directory(await _klasor());
     final File hedef = File(_apkYolu(klasor.path, b.surumKodu));
     final File yarim = File('${hedef.path}.yarim');
@@ -280,16 +365,47 @@ class Guncelleyici extends ChangeNotifier {
     _ilerleme = null;
     notifyListeners();
 
-    IOSink? akis;
-    int baslangic = 0;
     try {
       if (!klasor.existsSync()) klasor.createSync(recursive: true);
       // Buraya gelindiyse hedef ya yok ya da ozeti tutmuyor.
       await _sessizSil(hedef);
 
+      await _cek(Uri.parse(b.apkUrl), yarim, b.boyut, elle: elle);
+
+      // Dogrulama tasimadan once: bozuk dosya asil adi almasin, yoksa
+      // sonraki acilista "hazir" sanilir.
+      if (!await _ozetDogruMu(yarim, b.sha256)) {
+        await _sessizSil(yarim);
+        throw const FormatException('İnen dosya bozuk');
+      }
+
+      await yarim.rename(hedef.path);
+      _hazirla(b);
+    } catch (e) {
+      if (e is _Iptal) {
+        // Yarim dosya bilerek kaliyor: sonraki denemede devam edecek.
+        _bosaAl();
+        return;
+      }
+      debugPrint('Guncelleme indirilemedi: $e');
+      _hataKur(_teknikMesaj(e));
+    }
+  }
+
+  /// [adres]'i [yarim] dosyasina indirir. Yarim inen dosya silinmez;
+  /// `Range` ile kaldigi yerden devam edilir. Iptalde [_Iptal] firlatir.
+  Future<void> _cek(
+    Uri adres,
+    File yarim,
+    int boyut, {
+    required bool elle,
+  }) async {
+    IOSink? akis;
+    int baslangic = 0;
+    try {
       if (yarim.existsSync()) {
         final int uzunluk = await yarim.length();
-        if (uzunluk > 0 && uzunluk < b.boyut) {
+        if (uzunluk > 0 && uzunluk < boyut) {
           baslangic = uzunluk;
         } else {
           // Bos ya da beklenenden buyuk: guvenilmez.
@@ -301,8 +417,7 @@ class Guncelleyici extends ChangeNotifier {
         ..connectionTimeout = const Duration(seconds: 30)
         ..idleTimeout = const Duration(seconds: 30);
 
-      final HttpClientRequest istek =
-          await _istemci!.getUrl(Uri.parse(b.apkUrl));
+      final HttpClientRequest istek = await _istemci!.getUrl(adres);
       if (baslangic > 0) {
         istek.headers.set(HttpHeaders.rangeHeader, 'bytes=$baslangic-');
       }
@@ -330,7 +445,7 @@ class Guncelleyici extends ChangeNotifier {
 
         akis.add(parca);
         _inenBayt += parca.length;
-        if (_inenBayt > b.boyut) {
+        if (_inenBayt > boyut) {
           throw const FormatException('Dosya beklenenden büyük');
         }
         _ilerleme = _toplamBayt > 0 ? _inenBayt / _toplamBayt : null;
@@ -345,32 +460,15 @@ class Guncelleyici extends ChangeNotifier {
       await akis.close();
       akis = null;
 
-      if (await yarim.length() != b.boyut) {
+      if (await yarim.length() != boyut) {
         throw const HttpException('İndirme yarıda kesildi');
       }
-      // Dogrulama tasimadan once: bozuk dosya asil adi almasin, yoksa
-      // sonraki acilista "hazir" sanilir.
-      if (!await _ozetDogruMu(yarim, b.sha256)) {
-        await _sessizSil(yarim);
-        throw const FormatException('İnen dosya bozuk');
-      }
-
-      await yarim.rename(hedef.path);
-      _hazirla(b);
-    } catch (e) {
+    } finally {
       try {
         await akis?.close();
-      } catch (_) {
-        // Zaten kapanmis olabilir.
+      } catch (e) {
+        debugPrint('Indirme akisi kapatilamadi: $e');
       }
-      if (e is _Iptal) {
-        // Yarim dosya bilerek kaliyor: sonraki denemede devam edecek.
-        _bosaAl();
-        return;
-      }
-      debugPrint('Guncelleme indirilemedi: $e');
-      _hataKur(_teknikMesaj(e));
-    } finally {
       _istemci?.close();
       _istemci = null;
     }
@@ -548,6 +646,9 @@ class Guncelleyici extends ChangeNotifier {
   static String _apkYolu(String klasor, int surumKodu) =>
       '$klasor/hatirlaf-$surumKodu.apk';
 
+  static String _yamaYolu(String klasor, int surumKodu) =>
+      '$klasor/hatirlaf-$surumKodu.yama';
+
   /// Kurulmus ya da artik beklenmeyen APK'lari siler; 45 MB telefonda
   /// oylece durmasin. [hepsi] ise beklenen surum de silinir.
   Future<void> _eskiDosyalariTemizle({bool hepsi = false}) async {
@@ -571,7 +672,7 @@ class Guncelleyici extends ChangeNotifier {
 
   static int? _dosyadanSurumKodu(String yol) {
     final RegExpMatch? e =
-        RegExp(r'hatirlaf-(\d+)\.apk(\.yarim)?$').firstMatch(yol);
+        RegExp(r'hatirlaf-(\d+)\.(apk|yama)(\.yarim)?$').firstMatch(yol);
     return e == null ? null : int.tryParse(e.group(1)!);
   }
 
@@ -615,3 +716,6 @@ class Guncelleyici extends ChangeNotifier {
 class _Iptal implements Exception {
   const _Iptal();
 }
+
+/// Fark guncellemesi denemesinin sonucu.
+enum _YamaSonuc { tamam, iptal, basarisiz }

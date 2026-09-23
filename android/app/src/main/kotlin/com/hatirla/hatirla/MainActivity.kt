@@ -74,6 +74,7 @@ class MainActivity : FlutterActivity() {
                         "surumKodu" to g.surumKodu(),
                         "surumAdi" to g.surumAdi(),
                         "abiler" to g.abiler(),
+                        "apkYolu" to g.kuruluApkYolu(),
                     ),
                 )
 

@@ -60,7 +60,7 @@ lib/
 ├── models/memory.dart
 ├── services/              store, recorder, player, transcriber,
 │                          whisper_model_manager, cover_photo, kullanici,
-│                          updater, update_info, network, permissions
+│                          updater, update_info, yama, network, permissions
 ├── screens/               kim, welcome, home, record, memory, question,
 │                          settings, help, update
 ├── assets/                oktay.jpg (soruyu soran yüz), birlikte.jpg

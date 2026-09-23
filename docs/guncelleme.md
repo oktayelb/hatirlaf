@@ -5,6 +5,10 @@ GitHub sürüm ekleri. Telefon manifest'i okur, kendi mimarisinin APK'sını
 sessizce indirir, sha256 doğrular ve sonraki açılışta bir kez sorar.
 Güncelleme zorunludur.
 
+Tam APK inmiyor: bir önceki sürümden geliyorsa telefon ~3 MB'lık bir
+fark yaması indirip kendi kurulu APK'sına uyguluyor (aşağıda
+[Fark güncellemesi](#fark-güncellemesi)).
+
 ## Üç kural
 
 **1. İmza anahtarını kaybetmeyin.** `android/hatirlaf.jks` dosyası ve
@@ -57,11 +61,24 @@ Elle yayınlarken sıra aynı kalmalı.
       "surumKodu": 2002,
       "apkUrl": "https://github.com/oktayelb/hatirlaf/releases/download/v1.0.1/hatirlaf-arm64-v8a.apk",
       "sha256": "…64 hane…",
-      "boyut": 23404032
+      "boyut": 23404032,
+      "yamalar": [
+        {
+          "kaynakSurumKodu": 2001,
+          "kaynakSha256": "…kurulu APK'nın özeti…",
+          "url": "https://github.com/oktayelb/hatirlaf/releases/download/v1.0.1/hatirlaf-arm64-v8a-2001.yama",
+          "sha256": "…64 hane…",
+          "boyut": 3041692
+        }
+      ]
     }
   }
 }
 ```
+
+`yamalar` isteğe bağlı: bozuk ya da eksik bir kayıt güncellemeyi iptal
+ettirmez, o telefon tam APK indirir. Eski sürümler alanı zaten yok
+sayar.
 
 Karar **yalnızca** `surumKodu`'na bakar; `surumAdi` sadece etikettir.
 `apkUrl` yalnızca `https://github.com/oktayelb/hatirlaf/releases/…`
@@ -69,6 +86,49 @@ altında olabilir (depo adı değişirse `GuncellemeKaynagi` sabitleri de
 değişmeli). Adresler `latest`'e değil etikete sabitlenir: `latest`
 hareketli bir hedef, yeni sürümde eski manifest'in adresi kayar ve sha256
 tutmaz. Bozuk manifest sessizce yok sayılır.
+
+## Fark güncellemesi
+
+APK bir zip ve iki sürüm arasında girdilerin neredeyse hepsi bayt bayt
+aynı kalıyor — 1.1.0 → 1.2.0'da 560 girdinin 554'ü, 19.7 MB. Değişmeyen
+kısım telefonda zaten duruyor: kurulu APK'nın kendisi
+(`applicationInfo.sourceDir`, uygulama kendi APK'sını okuyabiliyor).
+
+Yama bu yüzden iki komuttan ibaret: "şunu kurulu APK'nın şu ofsetinden
+kopyala", "şunu benden al". Ölçülen: **2.90 MB yama, 22.6 MB APK
+yerine** — %87 az. Yamanın kendisi neredeyse tamamen `libapp.so`
+(Dart kodu); o her sürümde baştan derlendiği için yama boyutu
+değişikliğin büyüklüğünden çok etkilenmiyor.
+
+Bicim ve komutlar: `lib/services/yama.dart` sınıf belgesinde.
+
+### Yanlış giderse
+
+Her aşamada sessizce tam APK'ya düşülür; kullanıcı ikisini ayırt edemez:
+
+| Durum | Ne olur |
+|---|---|
+| Manifest'te yama yok / kurulu sürüme uymuyor | Tam APK |
+| Kurulu APK yamanın beklediği dosya değil (`kaynakSha256`) | Tam APK |
+| İnen yama bozuk (`sha256`) | Tam APK |
+| Yama uygulanamadı (bozuk komut, sınır dışı ofset) | Tam APK |
+| Çıkan APK manifest'in özetini tutmuyor | Tam APK |
+
+Son satır önemli: yamadan çıkan APK da tam inen APK kadar doğrulanıyor.
+Bozuk bir yamanın maliyeti 3 MB boşa trafik, asla hatalı kurulum değil.
+
+### Üretimi
+
+`yayinla.sh` bir önceki etiketin APK'larını indirip (`build/eski-apk/`
+altında saklanır) her mimari için yama üretir, sonra **telefondaki kodla
+doğrular**: `tool/yama_dogrula.dart` yamayı `lib/services/yama.dart` ile
+uygulayıp çıkan dosyanın sha256'sını karşılaştırır. Tutmazsa yayınlama
+orada durur — üretici Python ile uygulayıcı Dart birbirinden ayrılırsa
+bunu kullanıcının telefonunda değil burada öğrenelim.
+
+Yalnızca bir önceki sürümden yama üretiliyor: güncelleme zorunlu ve 20
+saatte bir denetleniyor, telefonlar neredeyse her zaman N-1'de. Sürüm
+atlayan telefon tam APK indirir.
 
 ## Telefonda
 
@@ -79,7 +139,9 @@ edilebilir işlem yok. Soru yalnızca APK inip özeti doğrulandıktan sonra,
 | Durum | Davranış |
 |---|---|
 | İnternet yok | Sessizlik; başarısız denetim damga bırakmaz |
-| Mobil veri | İner (~22 MB) |
+| Mobil veri | İner (yama ~3 MB, tam APK ~22 MB) |
+| Bir önceki sürümden geliyor | Yama iner, kurulu APK'ya uygulanır |
+| Sürüm atlamış / yama tutmadı | Sessizce tam APK'ya düşer |
 | İndirme kesildi | `Range` ile kaldığı yerden devam |
 | sha256 tutmuyor | Dosya atılır, asla kurulmaz |
 | Kullanım sırasında indi | Sonraki açılışta sorulur |
@@ -87,7 +149,8 @@ edilebilir işlem yok. Soru yalnızca APK inip özeti doğrulandıktan sonra,
 | İmza uyuşmuyor | "Aileden biri yardım etsin"; asla "silip kurun" denmez |
 
 Denetim aralığı en az 20 saat. Diskte:
-`<app support>/guncelleme/hatirlaf-<surumKodu>.apk` (yarım inen `.yarim`)
+`<app support>/guncelleme/hatirlaf-<surumKodu>.apk` (yarım inen `.yarim`,
+inen yama `.yama`)
 ve `SharedPreferences`: `guncelleme_son_denetim`, `guncelleme_son_bilgi`. Manifest
 diskte tutulduğu için dün inmiş bir güncelleme bugün internetsiz de
 kurulabilir. Telefonun saati geri alınabildiği için zaman damgaları
@@ -111,7 +174,8 @@ geleceğe karşı korumalı.
 | Dosya | İşi |
 |---|---|
 | `lib/services/update_info.dart` | Manifest çözümleme, mimari seçimi, adres kısıtı (saf) |
-| `lib/services/updater.dart` | Durum makinesi: denetle → indir → doğrula → kur |
+| `lib/services/updater.dart` | Durum makinesi: denetle → (yama\|tam) indir → doğrula → kur |
+| `lib/services/yama.dart` | Yamayı kurulu APK'ya uygular (Flutter'a bağımlı değil) |
 | `lib/services/network.dart` | Ağ durumu akışı |
 | `lib/screens/update_screen.dart` | Kullanıcının gördüğü tek ekran |
 | `lib/screens/home_screen.dart` | `_GuncellemeGozcusu` |
@@ -119,6 +183,8 @@ geleceğe karşı korumalı.
 | `android/.../KurulumAlicisi.kt` | Kurulum sonucu |
 | `android/.../AgGozcusu.kt` | Ağ durumu (`EventChannel`) |
 | `tool/yayinla.sh` | Yayınlama |
+| `tool/yama_uret.py` | İki APK arasında yama üretir |
+| `tool/yama_dogrula.dart` | Yamayı telefondaki kodla dener, yayını durdurabilir |
 
 Kanallar: `hatirla/guncelleme` (MethodChannel), `hatirla/ag`
 (EventChannel).
@@ -138,7 +204,8 @@ adb shell appops set com.hatirla.hatirla REQUEST_INSTALL_PACKAGES allow
 adb logcat -s KurulumAlicisi:V
 ```
 
-Bitince yamaları geri alın; duruyorken `flutter test` kırmızı yanar.
+Bitince bu değişiklikleri geri alın; duruyorken `flutter test`
+kırmızı yanar.
 
 ## Sorun giderme
 
