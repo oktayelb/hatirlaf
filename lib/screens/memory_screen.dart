@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import '../models/memory.dart';
@@ -60,7 +61,7 @@ class _MemoryScreenState extends State<MemoryScreen> {
           'Bu işlem geri alınamaz.',
       evetYazi: 'Kalıcı Olarak Sil',
       hayirYazi: 'Vazgeç',
-      evetIkon: Icons.delete_forever_rounded,
+      evetIkon: CupertinoIcons.trash_fill,
       tehlikeli: true,
     );
     if (!emin || !mounted) return;
@@ -78,9 +79,9 @@ class _MemoryScreenState extends State<MemoryScreen> {
         final Memory? memory = _memory;
         if (memory == null) {
           // Hatira silinmisse (ornegin baska ekrandan) geri don.
-          return Scaffold(
-            appBar: AppBar(title: const Text('Hatıra')),
-            body: const Center(
+          return const Scaffold(
+            appBar: UstCubuk(baslik: 'Hatıra'),
+            body: Center(
               child: Padding(
                 padding: EdgeInsets.all(28),
                 child: Text(
@@ -94,25 +95,26 @@ class _MemoryScreenState extends State<MemoryScreen> {
         }
 
         return Scaffold(
-          appBar: AppBar(title: const Text('Hatıra')),
+          appBar: const UstCubuk(baslik: 'Hatıra'),
           body: SafeArea(
+            top: false,
             child: ListView(
               padding: const EdgeInsets.fromLTRB(
-                  HatirlaSizes.gutter, 4, HatirlaSizes.gutter, 32),
+                  HatirlaSizes.gutter, 4, HatirlaSizes.gutter, 36),
               children: <Widget>[
                 if (widget.yeniKaydedildi) const _KaydedildiSeridi(),
-                _Tarih(memory: memory),
+                _Baslik(memory: memory),
                 const SizedBox(height: 20),
                 _Oynatici(memory: memory),
-                const SizedBox(height: 22),
+                const SizedBox(height: 32),
                 _YaziBolumu(
                   memory: memory,
                   onDuzelt: () => _yaziyiDuzelt(memory),
                 ),
-                const SizedBox(height: 28),
-                CerceveliButon(
+                const SizedBox(height: 32),
+                IkincilButon(
                   yazi: 'Bu Hatırayı Sil',
-                  ikon: Icons.delete_outline_rounded,
+                  ikon: CupertinoIcons.trash,
                   renk: HatirlaColors.record,
                   onPressed: () => _sil(memory),
                 ),
@@ -130,44 +132,67 @@ class _KaydedildiSeridi extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 18),
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: const Color(0xFFE6F2E8),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: HatirlaColors.confirm, width: 2),
+    return TweenAnimationBuilder<double>(
+      tween: Tween<double>(begin: 0, end: 1),
+      duration: const Duration(milliseconds: 500),
+      curve: Curves.easeOutBack,
+      builder: (BuildContext context, double t, Widget? child) => Opacity(
+        opacity: t.clamp(0.0, 1.0),
+        child: Transform.translate(
+          offset: Offset(0, (1 - t) * -16),
+          child: child,
+        ),
       ),
-      child: Row(
-        children: <Widget>[
-          const Icon(Icons.check_circle_rounded,
-              color: HatirlaColors.confirm, size: 34),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              'Hatıranız kaydedildi. Teşekkürler!',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    color: const Color(0xFF1E5B2E),
-                  ),
-            ),
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 20),
+        child: Kart(
+          renk: HatirlaColors.confirmSoft,
+          golge: false,
+          padding: const EdgeInsets.all(18),
+          child: Row(
+            children: <Widget>[
+              const Icon(CupertinoIcons.checkmark_circle_fill,
+                  color: HatirlaColors.confirm, size: 34),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Hatıranız kaydedildi. Teşekkürler!',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        color: const Color(0xFF1B6B2F),
+                      ),
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
 }
 
-/// Hatiranin ne zaman kaydedildigi; baslik listede zaten var.
-class _Tarih extends StatelessWidget {
-  const _Tarih({required this.memory});
+class _Baslik extends StatelessWidget {
+  const _Baslik({required this.memory});
 
   final Memory memory;
 
   @override
   Widget build(BuildContext context) {
-    return Text(
-      '${Bicim.uzunTarih(memory.createdAt)} • ${Bicim.saat(memory.createdAt)}',
-      style: const TextStyle(fontSize: 20, color: HatirlaColors.inkSoft),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            memory.title,
+            style: Theme.of(context).textTheme.headlineMedium,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '${Bicim.uzunTarih(memory.createdAt)} · ${Bicim.saat(memory.createdAt)}',
+            style: const TextStyle(fontSize: 19, color: HatirlaColors.inkSoft),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -193,30 +218,31 @@ class _Oynatici extends StatelessWidget {
         final double enFazla = uzunluk.inMilliseconds.toDouble();
         final double deger =
             konum.inMilliseconds.clamp(0, enFazla.toInt()).toDouble();
+        const TextStyle zamanYazisi = TextStyle(
+          fontSize: 19,
+          fontWeight: FontWeight.w600,
+          fontFeatures: <FontFeature>[FontFeature.tabularFigures()],
+          color: HatirlaColors.inkSoft,
+        );
 
-        return Container(
-          padding: const EdgeInsets.fromLTRB(18, 20, 18, 14),
-          decoration: BoxDecoration(
-            color: HatirlaColors.card,
-            borderRadius: BorderRadius.circular(HatirlaSizes.radius),
-            border: Border.all(color: HatirlaColors.line, width: 2),
-          ),
+        return Kart(
+          padding: const EdgeInsets.fromLTRB(16, 24, 16, 14),
           child: Column(
             children: <Widget>[
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: <Widget>[
                   _YuvarlakDugme(
-                    ikon: Icons.replay_10_rounded,
+                    ikon: CupertinoIcons.gobackward_10,
                     etiket: '10 saniye geri',
-                    cap: 64,
+                    cap: 66,
                     onTap: bu ? () => p.geriSar() : null,
                   ),
-                  const SizedBox(width: 20),
+                  const SizedBox(width: 22),
                   _YuvarlakDugme(
                     ikon: caliyor
-                        ? Icons.pause_rounded
-                        : Icons.play_arrow_rounded,
+                        ? CupertinoIcons.pause_fill
+                        : CupertinoIcons.play_fill,
                     etiket: caliyor ? 'Duraklat' : 'Dinle',
                     cap: 100,
                     dolu: true,
@@ -230,46 +256,30 @@ class _Oynatici extends StatelessWidget {
                       }
                     },
                   ),
-                  const SizedBox(width: 20),
+                  const SizedBox(width: 22),
                   _YuvarlakDugme(
-                    ikon: Icons.forward_10_rounded,
+                    ikon: CupertinoIcons.goforward_10,
                     etiket: '10 saniye ileri',
-                    cap: 64,
+                    cap: 66,
                     onTap: bu ? () => p.ileriSar() : null,
                   ),
                 ],
               ),
-              const SizedBox(height: 10),
-              SliderTheme(
-                data: SliderTheme.of(context).copyWith(
-                  trackHeight: 12,
-                  thumbShape:
-                      const RoundSliderThumbShape(enabledThumbRadius: 16),
-                  overlayShape:
-                      const RoundSliderOverlayShape(overlayRadius: 30),
-                  activeTrackColor: HatirlaColors.primary,
-                  inactiveTrackColor: HatirlaColors.paperDark,
-                  thumbColor: HatirlaColors.primary,
-                ),
-                child: Slider(
-                  value: enFazla <= 0 ? 0 : deger,
-                  max: enFazla <= 0 ? 1 : enFazla,
-                  onChanged: bu && enFazla > 0
-                      ? (double v) => p.sar(Duration(milliseconds: v.round()))
-                      : null,
-                ),
+              const SizedBox(height: 14),
+              Slider(
+                value: enFazla <= 0 ? 0 : deger,
+                max: enFazla <= 0 ? 1 : enFazla,
+                onChanged: bu && enFazla > 0
+                    ? (double v) => p.sar(Duration(milliseconds: v.round()))
+                    : null,
               ),
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 10),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: <Widget>[
-                    Text(Bicim.sayac(konum),
-                        style: const TextStyle(
-                            fontSize: 20, color: HatirlaColors.inkSoft)),
-                    Text(Bicim.sayac(uzunluk),
-                        style: const TextStyle(
-                            fontSize: 20, color: HatirlaColors.inkSoft)),
+                    Text(Bicim.sayac(konum), style: zamanYazisi),
+                    Text(Bicim.sayac(uzunluk), style: zamanYazisi),
                   ],
                 ),
               ),
@@ -299,26 +309,50 @@ class _YuvarlakDugme extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bool aktif = onTap != null;
+    final Color arka = dolu
+        ? HatirlaColors.primary
+        : (aktif ? HatirlaColors.primarySoft : HatirlaColors.paper);
+    final Color on = dolu
+        ? Colors.white
+        : (aktif ? HatirlaColors.primary : HatirlaColors.chevron);
+    final bool oynat = ikon == CupertinoIcons.play_fill;
     return Semantics(
       button: true,
+      enabled: aktif,
       label: etiket,
-      child: SizedBox(
-        width: cap,
-        height: cap,
-        child: Material(
-          color: dolu
-              ? HatirlaColors.primary
-              : (aktif ? HatirlaColors.primarySoft : HatirlaColors.paperDark),
-          shape: const CircleBorder(),
-          child: InkWell(
-            customBorder: const CircleBorder(),
-            onTap: onTap,
-            child: Icon(
-              ikon,
-              size: cap * 0.55,
-              color: dolu
-                  ? Colors.white
-                  : (aktif ? HatirlaColors.primaryDark : HatirlaColors.line),
+      onTap: onTap,
+      excludeSemantics: true,
+      child: Basilabilir(
+        onTap: onTap,
+        olcek: 0.9,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 250),
+          width: cap,
+          height: cap,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: arka,
+            boxShadow: dolu
+                ? <BoxShadow>[
+                    BoxShadow(
+                      color: HatirlaColors.primary.withValues(alpha: 0.3),
+                      blurRadius: 20,
+                      offset: const Offset(0, 8),
+                    ),
+                  ]
+                : null,
+          ),
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 200),
+            transitionBuilder: (Widget child, Animation<double> a) =>
+                ScaleTransition(
+              scale: a,
+              child: FadeTransition(opacity: a, child: child),
+            ),
+            child: Padding(
+              key: ValueKey<IconData>(ikon),
+              padding: EdgeInsets.only(left: oynat ? cap * 0.06 : 0),
+              child: Icon(ikon, size: cap * 0.46, color: on),
             ),
           ),
         ),
@@ -339,26 +373,25 @@ class _YaziBolumu extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        const BolumBasligi('Anlattıklarınız', ikon: Icons.menu_book_rounded),
-        const SizedBox(height: 14),
-        Container(
-          width: double.infinity,
+        const BolumBasligi('Anlattıklarınız'),
+        const SizedBox(height: 12),
+        Kart(
           padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: HatirlaColors.card,
-            borderRadius: BorderRadius.circular(HatirlaSizes.radius),
-            border: Border.all(color: HatirlaColors.line, width: 2),
+          child: AnimatedSize(
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOutCubic,
+            alignment: Alignment.topCenter,
+            child: _icerik(context),
           ),
-          child: _icerik(context),
         ),
         if (memory.status == TranscriptStatus.hazir) ...<Widget>[
-          const SizedBox(height: 10),
+          const SizedBox(height: 4),
           Align(
             alignment: Alignment.centerLeft,
-            child: TextButton.icon(
+            child: DuzButon(
+              yazi: 'Yazıyı düzelt',
+              ikon: CupertinoIcons.pencil,
               onPressed: onDuzelt,
-              icon: const Icon(Icons.edit_note_rounded, size: 28),
-              label: const Text('Yazıyı düzelt'),
             ),
           ),
         ],
@@ -371,15 +404,18 @@ class _YaziBolumu extends StatelessWidget {
       case TranscriptStatus.hazir:
         if (!memory.hasTranscript) {
           return const _BilgiSatiri(
-            ikon: Icons.volume_off_rounded,
+            ikon: CupertinoIcons.speaker_slash_fill,
             baslik: 'Konuşma duyulmadı',
             aciklama: 'Kayıtta anlaşılır bir konuşma bulunamadı. '
                 'Ses kaydını yine de dinleyebilirsiniz.',
           );
         }
-        return SelectableText(
-          memory.transcript,
-          style: const TextStyle(fontSize: 23, height: 1.65),
+        return SizedBox(
+          width: double.infinity,
+          child: SelectableText(
+            memory.transcript,
+            style: const TextStyle(fontSize: 22, height: 1.65),
+          ),
         );
 
       case TranscriptStatus.cevriliyor:
@@ -392,7 +428,7 @@ class _YaziBolumu extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
                 _BilgiSatiri(
-                  ikon: Icons.edit_note_rounded,
+                  ikon: CupertinoIcons.pencil,
                   baslik: bu && yuzde > 0
                       ? 'Yazıya çevriliyor… %$yuzde'
                       : 'Yazıya çevriliyor…',
@@ -400,14 +436,7 @@ class _YaziBolumu extends StatelessWidget {
                       'dakika sürebilir. Uygulamayı kapatmadan bekleyin.',
                 ),
                 const SizedBox(height: 16),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(10),
-                  child: LinearProgressIndicator(
-                    value: bu && yuzde > 0 ? yuzde / 100 : null,
-                    minHeight: 16,
-                    backgroundColor: HatirlaColors.paperDark,
-                  ),
-                ),
+                IlerlemeCubugu(deger: bu && yuzde > 0 ? yuzde / 100 : null),
               ],
             );
           },
@@ -415,7 +444,7 @@ class _YaziBolumu extends StatelessWidget {
 
       case TranscriptStatus.bekliyor:
         return const _BilgiSatiri(
-          ikon: Icons.schedule_rounded,
+          ikon: CupertinoIcons.clock_fill,
           baslik: 'Sırada bekliyor',
           aciklama: 'Diğer kayıt bittiğinde bu hatıra da yazıya çevrilecek.',
         );
@@ -425,16 +454,16 @@ class _YaziBolumu extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
             _BilgiSatiri(
-              ikon: Icons.error_outline_rounded,
+              ikon: CupertinoIcons.exclamationmark_circle_fill,
               baslik: 'Yazıya çevrilemedi',
               aciklama: memory.errorMessage ??
                   'Bir sorun oldu. Ses kaydınız güvende, tekrar deneyebilirsiniz.',
               renk: HatirlaColors.record,
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 18),
             BuyukButon(
               yazi: 'Tekrar Dene',
-              ikon: Icons.refresh_rounded,
+              ikon: CupertinoIcons.arrow_clockwise,
               yukseklik: 76,
               onPressed: () => Transcriber.instance.retry(memory.id),
             ),
@@ -463,7 +492,15 @@ class _BilgiSatiri extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        Icon(ikon, size: 32, color: c),
+        Container(
+          width: 48,
+          height: 48,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: c.withValues(alpha: 0.1),
+          ),
+          child: Icon(ikon, size: 26, color: c),
+        ),
         const SizedBox(width: 14),
         Expanded(
           child: Column(
@@ -472,7 +509,11 @@ class _BilgiSatiri extends StatelessWidget {
               Text(
                 baslik,
                 style: TextStyle(
-                    fontSize: 23, fontWeight: FontWeight.w700, color: c),
+                  fontSize: 22,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -0.2,
+                  color: c,
+                ),
               ),
               const SizedBox(height: 6),
               Text(
@@ -498,10 +539,12 @@ class _YaziDuzeltEkrani extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Yazıyı Düzelt')),
+      appBar: const UstCubuk(baslik: 'Yazıyı Düzelt'),
       body: SafeArea(
+        top: false,
         child: Padding(
-          padding: const EdgeInsets.all(HatirlaSizes.gutter),
+          padding: const EdgeInsets.fromLTRB(
+              HatirlaSizes.gutter, 4, HatirlaSizes.gutter, HatirlaSizes.gutter),
           child: Column(
             children: <Widget>[
               Expanded(
@@ -521,7 +564,7 @@ class _YaziDuzeltEkrani extends StatelessWidget {
               const SizedBox(height: 16),
               BuyukButon(
                 yazi: 'Kaydet',
-                ikon: Icons.check_rounded,
+                ikon: CupertinoIcons.checkmark_alt,
                 renk: HatirlaColors.confirm,
                 onPressed: () =>
                     Navigator.of(context).pop(controller.text.trim()),
