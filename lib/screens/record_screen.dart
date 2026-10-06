@@ -281,24 +281,29 @@ class _RecordScreenState extends State<RecordScreen> {
                               alan.maxHeight >= dugmeIcinGereken;
                           return Column(
                             children: <Widget>[
-                              AnimatedSize(
-                                duration: const Duration(milliseconds: 380),
-                                curve: Curves.easeInOutCubic,
-                                child: AnimatedSwitcher(
-                                  duration: const Duration(milliseconds: 250),
-                                  child: fotografSigar
-                                      ? const Padding(
-                                          key: ValueKey<bool>(true),
-                                          padding: EdgeInsets.only(
-                                            top: 12,
-                                            bottom: 8,
+                              ConstrainedBox(
+                                constraints: BoxConstraints(
+                                  maxHeight: alan.maxHeight / 2,
+                                ),
+                                child: AnimatedSize(
+                                  duration: const Duration(milliseconds: 380),
+                                  curve: Curves.easeInOutCubic,
+                                  child: AnimatedSwitcher(
+                                    duration: const Duration(milliseconds: 250),
+                                    child: fotografSigar
+                                        ? const Padding(
+                                            key: ValueKey<bool>(true),
+                                            padding: EdgeInsets.only(
+                                              top: 12,
+                                              bottom: 8,
+                                            ),
+                                            child: _BirlikteFotografi(),
+                                          )
+                                        : const SizedBox(
+                                            key: ValueKey<bool>(false),
+                                            width: double.infinity,
                                           ),
-                                          child: _BirlikteFotografi(),
-                                        )
-                                      : const SizedBox(
-                                          key: ValueKey<bool>(false),
-                                          width: double.infinity,
-                                        ),
+                                  ),
                                 ),
                               ),
                               Expanded(
@@ -410,15 +415,19 @@ class _BirlikteFotografi extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
-        CerceveliFoto(
-          yukseklik: 140,
-          foto: Image.asset(
-            kBirlikteFotografi,
-            fit: BoxFit.cover,
-            // Gorsel bir sekilde acilmazsa ekranda cerceveli bir
-            // bosluk kalmasin.
-            errorBuilder: (BuildContext context, Object e, StackTrace? s) =>
-                const SizedBox.shrink(),
+        Flexible(
+          child: AspectRatio(
+            aspectRatio: kBirlikteFotografiOrani,
+            child: CerceveliFoto(
+              foto: Image.asset(
+                kBirlikteFotografi,
+                fit: BoxFit.cover,
+                // Gorsel bir sekilde acilmazsa ekranda cerceveli bir
+                // bosluk kalmasin.
+                errorBuilder: (BuildContext context, Object e, StackTrace? s) =>
+                    const SizedBox.shrink(),
+              ),
+            ),
           ),
         ),
         const SizedBox(height: 14),

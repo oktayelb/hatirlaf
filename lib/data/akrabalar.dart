@@ -41,3 +41,5 @@ const String kTorunFotografi = 'assets/oktay.jpg';
 
 /// Torunla birlikte cekilmis fotograf.
 const String kBirlikteFotografi = 'assets/birlikte.jpg';
+
+const double kBirlikteFotografiOrani = 760 / 697;
