@@ -54,3 +54,13 @@ flutter:
   assets:
     - assets/oktay.jpg
     - assets/birlikte.jpg
+    - assets/fonts/OFL.txt
+
+  fonts:
+    - family: HatirlaSans
+      fonts:
+        - asset: assets/fonts/HatirlaSans-Regular.ttf
+        - asset: assets/fonts/HatirlaSans-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/HatirlaSans-Bold.ttf
+          weight: 700

@@ -1,5 +1,7 @@
+import 'dart:math' as math;
+
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../data/akrabalar.dart';
 import '../services/kullanici.dart';
@@ -34,7 +36,7 @@ class KimSinizScreen extends StatelessWidget {
           'başka birini seçebilirsiniz.',
       evetYazi: 'Evet, benim',
       hayirYazi: 'Hayır, değilim',
-      evetIkon: Icons.check_rounded,
+      evetIkon: CupertinoIcons.checkmark_alt,
     );
     if (!dogru || !context.mounted) return;
 
@@ -53,45 +55,42 @@ class KimSinizScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: <Widget>[
-                const SizedBox(height: 16),
-                const Center(child: _TorunYuzu()),
-                const SizedBox(height: 10),
-                Text(
-                  '$kTorunAdi soruyor',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w600,
-                    color: HatirlaColors.inkSoft,
-                  ),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              const Center(child: _TorunYuzu()),
+              const SizedBox(height: 10),
+              Text(
+                '$kTorunAdi soruyor',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 19,
+                  fontWeight: FontWeight.w600,
+                  color: HatirlaColors.inkSoft,
                 ),
-                const SizedBox(height: 10),
-                const _Balon(soru: 'Hangi akrabamla konuşuyorum?'),
-                const SizedBox(height: 14),
-                // Tek satir: dort secenegin de kaydirmadan gorunmesi,
-                // uzun bir aciklamadan daha onemli.
-                const Text(
-                  'Aşağıdan kendinizi seçin.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 21,
-                    height: 1.3,
-                    color: HatirlaColors.inkSoft,
-                  ),
+              ),
+              const SizedBox(height: 4),
+              const _Balon(soru: 'Hangi akrabamla konuşuyorum?'),
+              const SizedBox(height: 14),
+              // Tek satir: dort secenegin de kaydirmadan gorunmesi,
+              // uzun bir aciklamadan daha onemli.
+              const Text(
+                'Aşağıdan kendinizi seçin.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 21,
+                  height: 1.3,
+                  color: HatirlaColors.inkSoft,
                 ),
-                const SizedBox(height: 18),
-                for (final Akraba a in Akraba.values) ...<Widget>[
-                  _AkrabaDugmesi(akraba: a, onSec: () => _sec(context, a)),
-                  const SizedBox(height: 12),
-                ],
+              ),
+              const SizedBox(height: 16),
+              for (final Akraba a in Akraba.values) ...<Widget>[
+                _AkrabaDugmesi(akraba: a, onSec: () => _sec(context, a)),
+                const SizedBox(height: 12),
               ],
-            ),
+            ],
           ),
         ),
       ),
@@ -106,21 +105,18 @@ class _TorunYuzu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 104,
-      width: 104,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: HatirlaColors.primarySoft,
-        border: Border.all(color: HatirlaColors.primary, width: 3),
-      ),
-      child: ClipOval(
-        child: Image.asset(
-          kTorunFotografi,
-          fit: BoxFit.cover,
-          errorBuilder: (BuildContext context, Object e, StackTrace? s) =>
-              const Icon(Icons.person_rounded,
-                  size: 56, color: HatirlaColors.primary),
+    return CerceveliFoto(
+      genislik: 112,
+      yukseklik: 100,
+      yaricap: 30,
+      foto: Image.asset(
+        kTorunFotografi,
+        fit: BoxFit.cover,
+        errorBuilder: (BuildContext context, Object e, StackTrace? s) =>
+            const ColoredBox(
+          color: HatirlaColors.primarySoft,
+          child: Icon(CupertinoIcons.person_fill,
+              size: 56, color: HatirlaColors.primary),
         ),
       ),
     );
@@ -134,25 +130,49 @@ class _Balon extends StatelessWidget {
 
   final String soru;
 
+  static const Color _balonRengi = Color(0xFFE9E9EB);
+
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-      decoration: BoxDecoration(
-        color: HatirlaColors.primarySoft,
-        borderRadius: BorderRadius.circular(HatirlaSizes.radius),
-        border: Border.all(color: HatirlaColors.line, width: 2),
-      ),
-      child: Text(
-        soru,
-        textAlign: TextAlign.center,
-        style: const TextStyle(
-          fontSize: 27,
-          height: 1.25,
-          fontWeight: FontWeight.w700,
-          color: HatirlaColors.primaryDark,
+    return Stack(
+      alignment: Alignment.topCenter,
+      clipBehavior: Clip.none,
+      children: <Widget>[
+        Container(
+          width: double.infinity,
+          margin: const EdgeInsets.only(top: 9),
+          padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 16),
+          decoration: ShapeDecoration(
+            color: _balonRengi,
+            shape: yumusakKose(26),
+          ),
+          child: Text(
+            soru,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 27,
+              height: 1.25,
+              fontWeight: FontWeight.w700,
+              letterSpacing: -0.4,
+              color: HatirlaColors.ink,
+            ),
+          ),
         ),
-      ),
+        Positioned(
+          top: 0,
+          child: Transform.rotate(
+            angle: math.pi / 4,
+            child: Container(
+              width: 18,
+              height: 18,
+              decoration: BoxDecoration(
+                color: _balonRengi,
+                borderRadius: BorderRadius.circular(3),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -176,40 +196,43 @@ class _AkrabaDugmesi extends StatelessWidget {
     return Semantics(
       button: true,
       label: akraba.ad,
-      child: Material(
-        color: HatirlaColors.card,
-        borderRadius: BorderRadius.circular(HatirlaSizes.radius),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(HatirlaSizes.radius),
-          onTap: () {
-            HapticFeedback.mediumImpact();
-            onSec();
-          },
-          child: Container(
-            constraints: const BoxConstraints(minHeight: 84),
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(HatirlaSizes.radius),
-              border: Border.all(color: HatirlaColors.primary, width: 2.5),
-            ),
-            child: Row(
-              children: <Widget>[
-                Icon(_ikonlar[akraba], size: 40, color: HatirlaColors.primary),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Text(
-                    akraba.ad,
-                    style: const TextStyle(
-                      fontSize: 26,
-                      fontWeight: FontWeight.w700,
-                      color: HatirlaColors.ink,
-                    ),
+      onTap: onSec,
+      excludeSemantics: true,
+      child: Kart(
+        onTap: onSec,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 60),
+          child: Row(
+            children: <Widget>[
+              Container(
+                width: 56,
+                height: 56,
+                decoration: const BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: <Color>[Color(0xFFA8AEBA), Color(0xFF858A96)],
                   ),
                 ),
-                const Icon(Icons.chevron_right_rounded,
-                    size: 36, color: HatirlaColors.primary),
-              ],
-            ),
+                child: Icon(_ikonlar[akraba], size: 36, color: Colors.white),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Text(
+                  akraba.ad,
+                  style: const TextStyle(
+                    fontSize: 25,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.4,
+                    color: HatirlaColors.ink,
+                  ),
+                ),
+              ),
+              const Icon(CupertinoIcons.chevron_forward,
+                  size: 28, color: HatirlaColors.chevron),
+            ],
           ),
         ),
       ),

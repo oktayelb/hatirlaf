@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:audio_session/audio_session.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -25,6 +26,7 @@ const String kKarsilamaAnahtari = 'karsilama_tamamlandi';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  LicenseRegistry.addLicense(_yaziTipiLisansi);
 
   // Dikey sabit.
   await SystemChrome.setPreferredOrientations(<DeviceOrientation>[
@@ -74,6 +76,11 @@ Future<void> main() async {
   ));
 }
 
+Stream<LicenseEntry> _yaziTipiLisansi() async* {
+  final String metin = await rootBundle.loadString('assets/fonts/OFL.txt');
+  yield LicenseEntryWithLineBreaks(<String>[kYaziTipi], metin);
+}
+
 class HatirlaApp extends StatelessWidget {
   const HatirlaApp({
     super.key,
@@ -94,6 +101,7 @@ class HatirlaApp extends StatelessWidget {
       title: 'hatırlaf',
       debugShowCheckedModeBanner: false,
       theme: buildHatirlaTheme(),
+      scrollBehavior: const HatirlaKaydirma(),
       locale: const Locale('tr', 'TR'),
       supportedLocales: const <Locale>[Locale('tr', 'TR')],
       localizationsDelegates: const <LocalizationsDelegate<dynamic>>[

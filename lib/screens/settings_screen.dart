@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -105,81 +106,86 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Ayarlar')),
+      appBar: const UstCubuk(baslik: 'Ayarlar'),
       body: SafeArea(
+        top: false,
         child: ListView(
-          padding: const EdgeInsets.all(HatirlaSizes.gutter),
+          padding: const EdgeInsets.fromLTRB(
+              HatirlaSizes.gutter, 8, HatirlaSizes.gutter, 32),
           children: <Widget>[
-            const BolumBasligi('Yardım', ikon: Icons.help_outline_rounded),
-            const SizedBox(height: 14),
-            CerceveliButon(
-              yazi: 'Nasıl Kullanılır?',
-              ikon: Icons.menu_book_rounded,
-              onPressed: () => Navigator.of(context).push(
-                MaterialPageRoute<void>(builder: (_) => const HelpScreen()),
-              ),
+            Grup(
+              satirlar: <Widget>[
+                GrupSatiri(
+                  baslik: 'Nasıl Kullanılır?',
+                  ikon: CupertinoIcons.book_fill,
+                  ikonRengi: const Color(0xFF0A7AFF),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(builder: (_) => const HelpScreen()),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 30),
+            const SizedBox(height: 32),
 
-            const BolumBasligi('Yazıya Çevirme', ikon: Icons.edit_note_rounded),
-            const SizedBox(height: 14),
+            const BolumBasligi('Yazıya Çevirme'),
+            const SizedBox(height: 12),
             const _ModelBolumu(),
-            const SizedBox(height: 30),
+            const SizedBox(height: 32),
 
-            const BolumBasligi('Hatıra Defteri',
-                ikon: Icons.auto_stories_rounded),
-            const SizedBox(height: 14),
             ListenableBuilder(
               listenable: MemoryStore.instance,
-              builder: (BuildContext context, _) => _BilgiKutusu(
-                satirlar: <(String, String)>[
-                  ('Hatıra sayısı', '${MemoryStore.instance.memories.length}'),
-                  (
-                    'Kapladığı yer',
-                    _kullanilanYer == null
+              builder: (BuildContext context, _) => Grup(
+                baslik: 'Hatıra Defteri',
+                satirlar: <Widget>[
+                  GrupSatiri(
+                    baslik: 'Hatıra sayısı',
+                    ikon: CupertinoIcons.book_fill,
+                    ikonRengi: HatirlaColors.primary,
+                    deger: '${MemoryStore.instance.memories.length}',
+                  ),
+                  GrupSatiri(
+                    baslik: 'Kapladığı yer',
+                    ikon: CupertinoIcons.archivebox_fill,
+                    ikonRengi: const Color(0xFF8E8E93),
+                    deger: _kullanilanYer == null
                         ? 'hesaplanıyor…'
-                        : Bicim.boyut(_kullanilanYer!)
+                        : Bicim.boyut(_kullanilanYer!),
+                  ),
+                  EylemSatiri(
+                    yazi: _paylasiliyor ? 'Hazırlanıyor…' : 'Tüm Yazıları Paylaş',
+                    ikon: CupertinoIcons.square_arrow_up,
+                    onTap: _paylasiliyor ? null : _tumYazilariPaylas,
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 14),
-            CerceveliButon(
-              yazi: _paylasiliyor ? 'Hazırlanıyor…' : 'Tüm Yazıları Paylaş',
-              ikon: Icons.ios_share_rounded,
-              onPressed: _paylasiliyor ? null : _tumYazilariPaylas,
-            ),
-            const SizedBox(height: 30),
+            const SizedBox(height: 32),
 
-            const BolumBasligi('İzinler', ikon: Icons.lock_open_rounded),
-            const SizedBox(height: 14),
-            CerceveliButon(
-              yazi: 'Telefon Ayarlarını Aç',
-              ikon: Icons.settings_rounded,
-              onPressed: () => Izinler.ayarlariAc(),
+            Grup(
+              baslik: 'İzinler',
+              dipnot: 'Mikrofon ve kamera izinlerini buradan açıp '
+                  'kapatabilirsiniz.',
+              satirlar: <Widget>[
+                GrupSatiri(
+                  baslik: 'Telefon Ayarlarını Aç',
+                  ikon: CupertinoIcons.gear_alt_fill,
+                  ikonRengi: const Color(0xFF8E8E93),
+                  onTap: () => Izinler.ayarlariAc(),
+                ),
+              ],
             ),
-            const SizedBox(height: 10),
-            const Text(
-              'Mikrofon ve kamera izinlerini buradan açıp kapatabilirsiniz.',
-              style: TextStyle(fontSize: 19, color: HatirlaColors.inkSoft),
-            ),
-            const SizedBox(height: 30),
+            const SizedBox(height: 32),
 
-            const BolumBasligi('Uygulama Sürümü',
-                ikon: Icons.system_update_rounded),
-            const SizedBox(height: 14),
             const _GuncellemeBolumu(),
-            const SizedBox(height: 34),
+            const SizedBox(height: 32),
 
             if (Yedekleyici.instance.acikMi) ...<Widget>[
-              const BolumBasligi('Aile Yedeği',
-                  ikon: Icons.lock_outline_rounded),
-              const SizedBox(height: 14),
               const _YedekBolumu(),
-              const SizedBox(height: 34),
+              const SizedBox(height: 32),
             ],
 
-            Center(
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Text(
                 // Yedekleme acikken "disari cikmaz" demek dogru degil.
                 // Bu ekran dogruyu soylemek zorunda: kayitlar gercekten
@@ -190,7 +196,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     : 'Sesiniz telefonunuzdan dışarı çıkmaz.',
                 textAlign: TextAlign.center,
                 style: const TextStyle(
-                    fontSize: 18, height: 1.5, color: HatirlaColors.inkSoft),
+                    fontSize: 19, height: 1.5, color: HatirlaColors.inkSoft),
               ),
             ),
           ],
@@ -212,130 +218,82 @@ class _ModelBolumu extends StatelessWidget {
         final WhisperModelManager mm = WhisperModelManager.instance;
         final bool hazir = mm.durum == IndirmeDurumu.hazir;
         final bool iniyor = mm.durum == IndirmeDurumu.iniyor;
+        final Color renk = hazir ? HatirlaColors.confirm : HatirlaColors.warning;
 
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: <Widget>[
-            Container(
-              padding: const EdgeInsets.all(18),
-              decoration: BoxDecoration(
-                color: hazir ? const Color(0xFFE6F2E8) : const Color(0xFFFFF4DB),
-                borderRadius: BorderRadius.circular(18),
-                border: Border.all(
-                  color: hazir
-                      ? HatirlaColors.confirm
-                      : const Color(0xFFD9A400),
-                  width: 2,
+        return Kart(
+          padding: const EdgeInsets.all(18),
+          child: AnimatedSize(
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOutCubic,
+            alignment: Alignment.topCenter,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    IkonRozeti(
+                      ikon: hazir
+                          ? CupertinoIcons.checkmark_alt
+                          : CupertinoIcons.cloud_download_fill,
+                      renk: renk,
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Text(
+                        hazir
+                            ? 'Paket telefonda. Konuşmalar internetsiz olarak '
+                                'yazıya çevriliyor.'
+                            : 'Paket indirilmedi. İndirilene kadar ses kayıtları '
+                                'yazıya çevrilmez.',
+                        style: const TextStyle(fontSize: 20, height: 1.4),
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Icon(
-                    hazir
-                        ? Icons.check_circle_rounded
-                        : Icons.cloud_download_rounded,
-                    size: 32,
-                    color: hazir
-                        ? HatirlaColors.confirm
-                        : const Color(0xFF8A6800),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      hazir
-                          ? 'Paket telefonda. Konuşmalar internetsiz olarak '
-                              'yazıya çevriliyor.'
-                          : 'Paket indirilmedi. İndirilene kadar ses kayıtları '
-                              'yazıya çevrilmez.',
-                      style: const TextStyle(fontSize: 20, height: 1.4),
+                if (iniyor) ...<Widget>[
+                  const SizedBox(height: 18),
+                  IlerlemeCubugu(deger: mm.ilerleme),
+                  const SizedBox(height: 10),
+                  Text(
+                    '%${((mm.ilerleme ?? 0) * 100).toStringAsFixed(0)}  ·  '
+                    '${Bicim.boyut(mm.inenBayt)} / ${Bicim.boyut(mm.toplamBayt)}',
+                    style: const TextStyle(
+                      fontSize: 20,
+                      height: 1.4,
+                      fontWeight: FontWeight.w600,
+                      fontFeatures: <FontFeature>[FontFeature.tabularFigures()],
                     ),
                   ),
+                  const SizedBox(height: 14),
+                  IkincilButon(
+                    yazi: 'İndirmeyi Durdur',
+                    ikon: CupertinoIcons.stop_fill,
+                    renk: HatirlaColors.record,
+                    onPressed: mm.iptalEt,
+                  ),
+                ] else if (!hazir) ...<Widget>[
+                  if (mm.hata != null) ...<Widget>[
+                    const SizedBox(height: 14),
+                    Text(
+                      mm.hata!,
+                      style: const TextStyle(
+                          fontSize: 20, height: 1.4, color: HatirlaColors.record),
+                    ),
+                  ],
+                  const SizedBox(height: 16),
+                  BuyukButon(
+                    yazi: 'Paketi İndir',
+                    altYazi: 'Yaklaşık ${WhisperModelManager.yaklasikMb} MB',
+                    ikon: CupertinoIcons.cloud_download_fill,
+                    onPressed: () => mm.download(),
+                  ),
                 ],
-              ),
-            ),
-            if (iniyor) ...<Widget>[
-              const SizedBox(height: 16),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(10),
-                child: LinearProgressIndicator(
-                  value: mm.ilerleme,
-                  minHeight: 18,
-                  backgroundColor: HatirlaColors.paperDark,
-                ),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                '%${((mm.ilerleme ?? 0) * 100).toStringAsFixed(0)}  •  '
-                '${Bicim.boyut(mm.inenBayt)} / ${Bicim.boyut(mm.toplamBayt)}',
-                style: const TextStyle(fontSize: 21, height: 1.4),
-              ),
-              const SizedBox(height: 12),
-              CerceveliButon(
-                yazi: 'İndirmeyi Durdur',
-                ikon: Icons.stop_rounded,
-                renk: HatirlaColors.record,
-                onPressed: mm.iptalEt,
-              ),
-            ] else if (!hazir) ...<Widget>[
-              if (mm.hata != null) ...<Widget>[
-                const SizedBox(height: 14),
-                Text(
-                  mm.hata!,
-                  style: const TextStyle(
-                      fontSize: 20, height: 1.4, color: HatirlaColors.record),
-                ),
               ],
-              const SizedBox(height: 14),
-              BuyukButon(
-                yazi: 'Paketi İndir',
-                altYazi: 'Yaklaşık ${WhisperModelManager.yaklasikMb} MB',
-                ikon: Icons.cloud_download_rounded,
-                onPressed: () => mm.download(),
-              ),
-            ],
-          ],
+            ),
+          ),
         );
       },
-    );
-  }
-}
-
-class _BilgiKutusu extends StatelessWidget {
-  const _BilgiKutusu({required this.satirlar});
-
-  final List<(String, String)> satirlar;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
-      decoration: BoxDecoration(
-        color: HatirlaColors.card,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: HatirlaColors.line, width: 2),
-      ),
-      child: Column(
-        children: <Widget>[
-          for (final (String ad, String deger) satir in satirlar)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 14),
-              child: Row(
-                children: <Widget>[
-                  Expanded(
-                    child: Text(satir.$1,
-                        style: const TextStyle(fontSize: 21)),
-                  ),
-                  Text(
-                    satir.$2,
-                    style: const TextStyle(
-                        fontSize: 21, fontWeight: FontWeight.w700),
-                  ),
-                ],
-              ),
-            ),
-        ],
-      ),
     );
   }
 }
@@ -379,89 +337,89 @@ class _GuncellemeBolumuState extends State<_GuncellemeBolumu> {
         final Guncelleyici g = Guncelleyici.instance;
         final bool iniyor = g.asama == GuncellemeAsamasi.indiriliyor;
         final bool hazir = g.asama == GuncellemeAsamasi.hazir;
+        final bool yeniVar =
+            g.bilgi != null && g.bilgi!.surumKodu > g.mevcutSurumKodu;
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
-            _BilgiKutusu(
-              satirlar: <(String, String)>[
-                (
-                  'Kurulu sürüm',
-                  g.mevcutSurumAdi.isEmpty
+            Grup(
+              baslik: 'Uygulama Sürümü',
+              dipnot: 'Güncellemeler kendiliğinden iner (yaklaşık 22 MB). '
+                  'Hazır olduğunda bir kez sorulur.',
+              satirlar: <Widget>[
+                GrupSatiri(
+                  baslik: 'Kurulu sürüm',
+                  deger: g.mevcutSurumAdi.isEmpty
                       ? '—'
-                      : '${g.mevcutSurumAdi} (${g.mevcutSurumKodu})'
+                      : '${g.mevcutSurumAdi} (${g.mevcutSurumKodu})',
                 ),
-                ('Son denetim', _denetimZamani(g.sonDenetim)),
-                if (g.bilgi != null && g.bilgi!.surumKodu > g.mevcutSurumKodu)
-                  ('Yeni sürüm', g.bilgi!.surumAdi),
-                if (g.bilgi != null && g.bilgi!.surumKodu > g.mevcutSurumKodu)
-                  ('İndirilecek', '${Bicim.boyut(g.bilgi!.boyut)}'
-                      ' (${g.bilgi!.abi})'),
+                GrupSatiri(
+                  baslik: 'Son denetim',
+                  deger: _denetimZamani(g.sonDenetim),
+                ),
+                if (yeniVar)
+                  GrupSatiri(baslik: 'Yeni sürüm', deger: g.bilgi!.surumAdi),
+                if (yeniVar)
+                  GrupSatiri(
+                    baslik: 'İndirilecek',
+                    deger: '${Bicim.boyut(g.bilgi!.boyut)} (${g.bilgi!.abi})',
+                  ),
+                if (iniyor)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: <Widget>[
+                        IlerlemeCubugu(deger: g.ilerleme),
+                        const SizedBox(height: 10),
+                        Text(
+                          'İniyor: ${Bicim.boyut(g.inenBayt)} / '
+                          '${Bicim.boyut(g.toplamBayt)}',
+                          style: const TextStyle(fontSize: 20, height: 1.4),
+                        ),
+                      ],
+                    ),
+                  ),
+                if (iniyor)
+                  EylemSatiri(
+                    yazi: 'İndirmeyi Durdur',
+                    ikon: CupertinoIcons.stop_fill,
+                    renk: HatirlaColors.record,
+                    onTap: Guncelleyici.instance.indirmeyiDurdur,
+                  )
+                else if (!hazir)
+                  EylemSatiri(
+                    yazi: _denetleniyor ? 'Bakılıyor…' : 'Güncelleme Var mı?',
+                    ikon: CupertinoIcons.arrow_clockwise,
+                    onTap: _denetleniyor ? null : _denetle,
+                  ),
               ],
             ),
-            if (iniyor) ...<Widget>[
-              const SizedBox(height: 16),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(10),
-                child: LinearProgressIndicator(
-                  value: g.ilerleme,
-                  minHeight: 18,
-                  backgroundColor: HatirlaColors.paperDark,
-                ),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                'İniyor: ${Bicim.boyut(g.inenBayt)} / '
-                '${Bicim.boyut(g.toplamBayt)}',
-                style: const TextStyle(fontSize: 20, height: 1.4),
-              ),
-              const SizedBox(height: 12),
-              CerceveliButon(
-                yazi: 'İndirmeyi Durdur',
-                ikon: Icons.stop_rounded,
-                renk: HatirlaColors.record,
-                onPressed: Guncelleyici.instance.indirmeyiDurdur,
-              ),
-            ] else if (hazir) ...<Widget>[
+            if (hazir) ...<Widget>[
               const SizedBox(height: 14),
               BuyukButon(
                 yazi: 'Şimdi Güncelle',
                 altYazi: 'Yeni sürüm indirildi, kurulmayı bekliyor',
-                ikon: Icons.download_done_rounded,
+                ikon: CupertinoIcons.arrow_down_circle_fill,
                 renk: HatirlaColors.confirm,
                 onPressed: () => Navigator.of(context).push(
                   MaterialPageRoute<void>(builder: (_) => const UpdateScreen()),
                 ),
               ),
-            ] else ...<Widget>[
-              const SizedBox(height: 14),
-              CerceveliButon(
-                yazi: _denetleniyor ? 'Bakılıyor…' : 'Güncelleme Var mı?',
-                ikon: Icons.refresh_rounded,
-                onPressed: _denetleniyor ? null : _denetle,
-              ),
             ],
             if (g.hata != null) ...<Widget>[
               const SizedBox(height: 14),
-              Container(
+              Kart(
+                renk: HatirlaColors.warningSoft,
+                golge: false,
                 padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFFF4DB),
-                  borderRadius: BorderRadius.circular(18),
-                  border: Border.all(color: const Color(0xFFD9A400), width: 2),
-                ),
                 child: Text(
                   g.hata!,
                   style: const TextStyle(fontSize: 19, height: 1.4),
                 ),
               ),
             ],
-            const SizedBox(height: 12),
-            const Text(
-              'Güncellemeler kendiliğinden iner (yaklaşık 22 MB). '
-              'Hazır olduğunda bir kez sorulur.',
-              style: TextStyle(fontSize: 19, color: HatirlaColors.inkSoft),
-            ),
           ],
         );
       },
@@ -524,7 +482,7 @@ class _YedekBolumu extends StatelessWidget {
               autofocus: true,
               textCapitalization: TextCapitalization.words,
               style: const TextStyle(fontSize: 21),
-              decoration: const InputDecoration(border: OutlineInputBorder()),
+              decoration: const InputDecoration(fillColor: HatirlaColors.paper),
               onSubmitted: (String v) => Navigator.of(c).pop(v),
             ),
           ],
@@ -551,37 +509,27 @@ class _YedekBolumu extends StatelessWidget {
       listenable: Yedekleyici.instance,
       builder: (BuildContext context, _) {
         final Yedekleyici y = Yedekleyici.instance;
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: <Widget>[
-            _BilgiKutusu(
-              satirlar: <(String, String)>[
-                ('Durum', _asamaMetni(y)),
-                ('Gönderilen', '${y.yuklenenSayisi}'),
-                ('Bekleyen', '${y.bekleyenSayisi}'),
-                ('Telefon', y.sahip.isEmpty ? '— (adsız)' : y.sahip),
-                ('Cihaz', y.cihaz.isEmpty ? '—' : y.cihaz),
-              ],
+        return Grup(
+          baslik: 'Aile Yedeği',
+          dipnot: y.hata,
+          satirlar: <Widget>[
+            GrupSatiri(baslik: 'Durum', deger: _asamaMetni(y)),
+            GrupSatiri(baslik: 'Gönderilen', deger: '${y.yuklenenSayisi}'),
+            GrupSatiri(baslik: 'Bekleyen', deger: '${y.bekleyenSayisi}'),
+            GrupSatiri(
+              baslik: 'Telefon',
+              deger: y.sahip.isEmpty ? '— (adsız)' : y.sahip,
             ),
-            const SizedBox(height: 14),
-            CerceveliButon(
+            GrupSatiri(baslik: 'Cihaz', deger: y.cihaz.isEmpty ? '—' : y.cihaz),
+            EylemSatiri(
               yazi: y.sahip.isEmpty ? 'Telefonu Adlandır' : 'Adı Değiştir',
-              ikon: Icons.badge_outlined,
-              onPressed: () => _adiSor(context, y.sahip),
+              ikon: CupertinoIcons.person_crop_circle,
+              onTap: () => _adiSor(context, y.sahip),
             ),
-            if (y.hata != null) ...<Widget>[
-              const SizedBox(height: 14),
-              Text(
-                y.hata!,
-                style: const TextStyle(
-                    fontSize: 17, color: HatirlaColors.inkSoft),
-              ),
-            ],
-            const SizedBox(height: 14),
-            CerceveliButon(
+            EylemSatiri(
               yazi: 'Şimdi Gönder',
-              ikon: Icons.cloud_upload_outlined,
-              onPressed: () => Yedekleyici.instance.tekrarDene(),
+              ikon: CupertinoIcons.cloud_upload,
+              onTap: () => Yedekleyici.instance.tekrarDene(),
             ),
           ],
         );
