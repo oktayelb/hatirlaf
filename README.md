@@ -68,6 +68,9 @@ lib/
 ├── screens/               kim, welcome, home, record, memory, question,
 │                          settings, help, update
 ├── assets/                oktay.jpg (soruyu soran yüz), birlikte.jpg
+├── assets/fonts/          HatirlaSans: Adwaita Sans'ın (Inter tabanlı,
+│                          OFL) wght 400/600/700, opsz 24 sabit kopyası,
+│                          fontTools ile Latin + Türkçe'ye kırpıldı
 ├── widgets/
 └── utils/format.dart
 ```
