@@ -735,10 +735,9 @@ void kisaMesaj(BuildContext context, String mesaj) {
 }
 
 class BolumBasligi extends StatelessWidget {
-  const BolumBasligi(this.yazi, {super.key, this.ikon});
+  const BolumBasligi(this.yazi, {super.key});
 
   final String yazi;
-  final IconData? ikon;
 
   @override
   Widget build(BuildContext context) {
@@ -919,58 +918,6 @@ class EylemSatiri extends StatelessWidget {
             ),
           ),
         ),
-      ),
-    );
-  }
-}
-
-/// Ikincil buton: cerceveli, ayni buyuklukte.
-class CerceveliButon extends StatelessWidget {
-  const CerceveliButon({
-    super.key,
-    required this.yazi,
-    required this.ikon,
-    required this.onPressed,
-    this.renk,
-  });
-
-  final String yazi;
-  final IconData ikon;
-  final VoidCallback? onPressed;
-  final Color? renk;
-
-  @override
-  Widget build(BuildContext context) {
-    final Color c = renk ?? HatirlaColors.primaryDark;
-    return OutlinedButton(
-      onPressed: onPressed == null
-          ? null
-          : () {
-              HapticFeedback.selectionClick();
-              onPressed!();
-            },
-      style: OutlinedButton.styleFrom(
-        foregroundColor: c,
-        side: BorderSide(color: c, width: 2.5),
-        minimumSize: const Size.fromHeight(76),
-        padding: const EdgeInsets.symmetric(horizontal: 18),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(HatirlaSizes.radius),
-        ),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: <Widget>[
-          Icon(ikon, size: 32),
-          const SizedBox(width: 14),
-          Flexible(
-            child: Text(
-              yazi,
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 23, fontWeight: FontWeight.w700),
-            ),
-          ),
-        ],
       ),
     );
   }
