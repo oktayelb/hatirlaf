@@ -1,6 +1,8 @@
 import 'dart:async';
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:uuid/uuid.dart';
 
 import '../data/akrabalar.dart';
@@ -82,7 +84,7 @@ class _RecordScreenState extends State<RecordScreen> {
         baslik: 'Kayıt başlatılamadı',
         mesaj: 'Telefonda yer kalmamış olabilir. Biraz yer açıp tekrar '
             'deneyin.',
-        ikon: Icons.sd_card_alert_rounded,
+        ikon: CupertinoIcons.exclamationmark_triangle_fill,
         renk: HatirlaColors.record,
       );
       return;
@@ -96,7 +98,7 @@ class _RecordScreenState extends State<RecordScreen> {
         baslik: 'Kayıt başlatılamadı',
         mesaj: 'Mikrofon başka bir uygulama tarafından kullanılıyor olabilir. '
             'Telefonda açık olan diğer uygulamaları kapatıp tekrar deneyin.',
-        ikon: Icons.mic_off_rounded,
+        ikon: CupertinoIcons.mic_slash_fill,
         renk: HatirlaColors.record,
       );
       return;
@@ -135,7 +137,7 @@ class _RecordScreenState extends State<RecordScreen> {
         mesaj: 'Ses kaydı yapabilmek için mikrofon izni gerekiyor.\n\n'
             'Ayarları açıp Mikrofon’u açalım mı?',
         evetYazi: 'Ayarları Aç',
-        evetIkon: Icons.settings_rounded,
+        evetIkon: CupertinoIcons.gear_alt_fill,
       );
       if (git) await Izinler.ayarlariAc();
     } else {
@@ -143,7 +145,7 @@ class _RecordScreenState extends State<RecordScreen> {
         context,
         baslik: 'Mikrofon gerekli',
         mesaj: 'Kayıt yapabilmek için mikrofon iznine “İzin Ver” demeniz gerek.',
-        ikon: Icons.mic_off_rounded,
+        ikon: CupertinoIcons.mic_slash_fill,
         renk: HatirlaColors.record,
       );
     }
@@ -174,7 +176,7 @@ class _RecordScreenState extends State<RecordScreen> {
         context,
         baslik: 'Kayıt alınamadı',
         mesaj: 'Ses kaydedilemedi. Lütfen tekrar deneyin.',
-        ikon: Icons.error_outline_rounded,
+        ikon: CupertinoIcons.exclamationmark_circle_fill,
         renk: HatirlaColors.record,
       );
       return;
@@ -212,7 +214,7 @@ class _RecordScreenState extends State<RecordScreen> {
       mesaj: 'Şu ana kadar anlattıklarınız silinecek ve geri getirilemeyecek.',
       evetYazi: 'Sil, Vazgeç',
       hayirYazi: 'Kayda Devam Et',
-      evetIkon: Icons.delete_outline_rounded,
+      evetIkon: CupertinoIcons.trash,
       tehlikeli: true,
     );
     if (!emin || !mounted) return;
@@ -242,65 +244,117 @@ class _RecordScreenState extends State<RecordScreen> {
             if (!didPop) _vazgec();
           },
           child: Scaffold(
-            appBar: AppBar(
-              title: Text(kayitVar ? 'Kaydediliyor' : 'Yeni Hatıra'),
-              leading: IconButton(
-                iconSize: 36,
-                tooltip: 'Geri',
-                icon: const Icon(Icons.arrow_back_rounded),
-                onPressed: () {
-                  if (kayitVar) {
-                    _vazgec();
-                  } else {
-                    Navigator.of(context).pop();
-                  }
-                },
-              ),
+            appBar: UstCubuk(
+              baslik: kayitVar ? 'Kaydediliyor' : 'Yeni Hatıra',
+              onGeri: () {
+                if (kayitVar) {
+                  _vazgec();
+                } else {
+                  Navigator.of(context).pop();
+                }
+              },
             ),
             body: SafeArea(
+              top: false,
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(
-                    HatirlaSizes.gutter, 0, HatirlaSizes.gutter, 20),
+                  HatirlaSizes.gutter,
+                  0,
+                  HatirlaSizes.gutter,
+                  16,
+                ),
                 child: Column(
                   children: <Widget>[
                     if (widget.soru != null) _SoruSeridi(soru: widget.soru!),
                     Expanded(
-                      // Kayit baslamadan once fotograf da giriyor;
-                      // kucuk ekranda tasmasin diye kaydirilabilir.
-                      child: Center(
-                        child: SingleChildScrollView(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
+                      // Kayit baslamadan once fotograf da giriyor; yer
+                      // yetmezse fotograf gizlenir, dugme kuculur.
+                      child: LayoutBuilder(
+                        builder: (BuildContext context, BoxConstraints alan) {
+                          const double fotografIcinGereken = 560;
+                          const double dugmeIcinGereken = 330;
+                          final bool fotografSigar =
+                              !kayitVar &&
+                              alan.maxHeight >= fotografIcinGereken;
+                          final bool dugmeSigar =
+                              !kayitVar ||
+                              alan.maxHeight >= dugmeIcinGereken;
+                          return Column(
                             children: <Widget>[
-                              if (!kayitVar) ...<Widget>[
-                                const _BirlikteFotografi(),
-                                const SizedBox(height: 20),
-                              ],
-                              _KayitDugmesi(
-                                durum: durum,
-                                seviye: _recorder.seviye,
-                                onBasla: _basla,
+                              AnimatedSize(
+                                duration: const Duration(milliseconds: 380),
+                                curve: Curves.easeInOutCubic,
+                                child: AnimatedSwitcher(
+                                  duration: const Duration(milliseconds: 250),
+                                  child: fotografSigar
+                                      ? const Padding(
+                                          key: ValueKey<bool>(true),
+                                          padding: EdgeInsets.only(
+                                            top: 12,
+                                            bottom: 8,
+                                          ),
+                                          child: _BirlikteFotografi(),
+                                        )
+                                      : const SizedBox(
+                                          key: ValueKey<bool>(false),
+                                          width: double.infinity,
+                                        ),
+                                ),
                               ),
-                              const SizedBox(height: 18),
-                              _Sayac(
-                                durum: durum,
-                                sure: _recorder.sure,
-                                // Soru varken yonerge yazisi ekrandan
-                                // dugmeyi tasiriyor; soru zaten ne
-                                // yapilacagini soyluyor.
-                                yonergeGoster: widget.soru == null,
+                              Expanded(
+                                child: Center(
+                                  child: FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    child: SizedBox(
+                                      width: alan.maxWidth,
+                                      child: Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: <Widget>[
+                                          if (dugmeSigar) ...<Widget>[
+                                            _KayitDugmesi(
+                                              durum: durum,
+                                              seviye: _recorder.seviye,
+                                              onBasla: _basla,
+                                            ),
+                                            const SizedBox(height: 14),
+                                          ],
+                                          AnimatedSwitcher(
+                                            duration: const Duration(
+                                              milliseconds: 300,
+                                            ),
+                                            child: _Sayac(
+                                              key: ValueKey<bool>(kayitVar),
+                                              durum: durum,
+                                              sure: _recorder.sure,
+                                              // Soru varken yonerge yazisi
+                                              // ekrandan dugmeyi tasiriyor;
+                                              // soru zaten ne yapilacagini
+                                              // soyluyor.
+                                              yonergeGoster:
+                                                  widget.soru == null,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
                               ),
                             ],
-                          ),
-                        ),
+                          );
+                        },
                       ),
                     ),
-                    _AltEylemler(
-                      durum: durum,
-                      kaydediliyor: _kaydediliyor,
-                      onDuraklat: _recorder.duraklat,
-                      onDevam: _recorder.devamEt,
-                      onBitir: _bitir,
+                    AnimatedSize(
+                      duration: const Duration(milliseconds: 380),
+                      curve: Curves.easeInOutCubic,
+                      child: _AltEylemler(
+                        durum: durum,
+                        kaydediliyor: _kaydediliyor,
+                        onDuraklat: _recorder.duraklat,
+                        onDevam: _recorder.devamEt,
+                        onBitir: _bitir,
+                      ),
                     ),
                   ],
                 ),
@@ -321,22 +375,22 @@ class _SoruSeridi extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
-      decoration: BoxDecoration(
-        color: HatirlaColors.primarySoft,
-        borderRadius: BorderRadius.circular(HatirlaSizes.radius),
-      ),
-      child: Text(
-        soru,
-        textAlign: TextAlign.center,
-        style: const TextStyle(
-          fontSize: 31,
-          height: 1.3,
-          fontWeight: FontWeight.w700,
-          color: HatirlaColors.primaryDark,
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Kart(
+        renk: HatirlaColors.primarySoft,
+        golge: false,
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+        child: Text(
+          soru,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            fontSize: 29,
+            height: 1.3,
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.5,
+            color: HatirlaColors.primaryDark,
+          ),
         ),
       ),
     );
@@ -353,48 +407,39 @@ class _BirlikteFotografi extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: HatirlaColors.card,
-        borderRadius: BorderRadius.circular(HatirlaSizes.radius),
-        border: Border.all(color: HatirlaColors.line, width: 2),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          ClipRRect(
-            borderRadius: BorderRadius.circular(HatirlaSizes.radius - 8),
-            child: Image.asset(
-              kBirlikteFotografi,
-              width: double.infinity,
-              height: 140,
-              fit: BoxFit.cover,
-              // Gorsel bir sekilde acilmazsa ekranda cerceveli bir
-              // bosluk kalmasin.
-              errorBuilder: (BuildContext context, Object e, StackTrace? s) =>
-                  const SizedBox.shrink(),
-            ),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        CerceveliFoto(
+          yukseklik: 140,
+          foto: Image.asset(
+            kBirlikteFotografi,
+            fit: BoxFit.cover,
+            // Gorsel bir sekilde acilmazsa ekranda cerceveli bir
+            // bosluk kalmasin.
+            errorBuilder: (BuildContext context, Object e, StackTrace? s) =>
+                const SizedBox.shrink(),
           ),
-          const SizedBox(height: 12),
-          const Text(
-            'Anlattıklarınızı bir gün torunlarınız dinleyecek.',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 26,
-              height: 1.3,
-              color: HatirlaColors.inkSoft,
-              fontWeight: FontWeight.w600,
-            ),
+        ),
+        const SizedBox(height: 14),
+        const Text(
+          'Anlattıklarınızı bir gün torunlarınız dinleyecek.',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 23,
+            height: 1.3,
+            fontWeight: FontWeight.w600,
+            letterSpacing: -0.2,
+            color: HatirlaColors.inkSoft,
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
 
 /// Dev kayit dugmesi ve ses seviyesiyle nefes alan halka.
-class _KayitDugmesi extends StatelessWidget {
+class _KayitDugmesi extends StatefulWidget {
   const _KayitDugmesi({
     required this.durum,
     required this.seviye,
@@ -406,60 +451,131 @@ class _KayitDugmesi extends StatelessWidget {
   final VoidCallback onBasla;
 
   @override
-  Widget build(BuildContext context) {
-    const double cap = 180;
-    final bool kaydediyor = durum == KayitDurumu.kaydediyor;
-    final bool duraklatildi = durum == KayitDurumu.duraklatildi;
+  State<_KayitDugmesi> createState() => _KayitDugmesiState();
+}
 
-    return SizedBox(
-      width: cap + 70,
-      height: cap + 70,
-      child: Stack(
-        alignment: Alignment.center,
-        children: <Widget>[
-          // "Seni duyuyorum" demenin en anlasilir yolu.
-          if (kaydediyor)
+class _KayitDugmesiState extends State<_KayitDugmesi>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _nefes = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1500),
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    _nefesiAyarla();
+  }
+
+  @override
+  void didUpdateWidget(_KayitDugmesi eski) {
+    super.didUpdateWidget(eski);
+    if (eski.durum != widget.durum) _nefesiAyarla();
+  }
+
+  void _nefesiAyarla() {
+    if (widget.durum == KayitDurumu.bos) {
+      _nefes.repeat(reverse: true);
+    } else {
+      _nefes.animateTo(0, duration: const Duration(milliseconds: 200));
+    }
+  }
+
+  @override
+  void dispose() {
+    _nefes.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    const double cap = 172;
+    final bool bos = widget.durum == KayitDurumu.bos;
+    final bool kaydediyor = widget.durum == KayitDurumu.kaydediyor;
+    final bool duraklatildi = widget.durum == KayitDurumu.duraklatildi;
+
+    return Semantics(
+      button: bos,
+      label: bos ? 'Kayda başla' : null,
+      onTap: bos ? widget.onBasla : null,
+      excludeSemantics: true,
+      child: SizedBox(
+        width: cap + 76,
+        height: cap + 76,
+        child: Stack(
+          alignment: Alignment.center,
+          children: <Widget>[
+            // "Seni duyuyorum" demenin en anlasilir yolu.
             AnimatedContainer(
               duration: const Duration(milliseconds: 140),
-              width: cap + 20 + seviye * 44,
-              height: cap + 20 + seviye * 44,
+              width: kaydediyor ? cap + 26 + widget.seviye * 50 : cap + 26,
+              height: kaydediyor ? cap + 26 + widget.seviye * 50 : cap + 26,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: HatirlaColors.record.withValues(alpha: 0.16),
+                color: HatirlaColors.record.withValues(
+                  alpha: kaydediyor ? 0.16 : 0,
+                ),
               ),
             ),
-          SizedBox(
-            width: cap,
-            height: cap,
-            child: Material(
-              color: duraklatildi
-                  ? HatirlaColors.inkSoft
-                  : HatirlaColors.record,
-              shape: const CircleBorder(),
-              child: InkWell(
-                customBorder: const CircleBorder(),
-                onTap: durum == KayitDurumu.bos ? onBasla : null,
-                child: Center(
+            Container(
+              width: cap + 24,
+              height: cap + 24,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: HatirlaColors.card,
+                border: Border.all(color: const Color(0xFFD1D1D6), width: 3),
+                boxShadow: kKartGolgesi,
+              ),
+            ),
+            ScaleTransition(
+              scale: Tween<double>(begin: 1, end: 1.04).animate(
+                CurvedAnimation(parent: _nefes, curve: Curves.easeInOut),
+              ),
+              child: Basilabilir(
+                onTap: bos ? widget.onBasla : null,
+                olcek: 0.93,
+                titresim: HapticFeedback.heavyImpact,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 300),
+                  curve: Curves.easeOut,
+                  width: cap,
+                  height: cap,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: duraklatildi
+                        ? HatirlaColors.inkSoft
+                        : HatirlaColors.record,
+                  ),
                   child: Column(
-                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: <Widget>[
-                      Icon(
-                        duraklatildi
-                            ? Icons.pause_rounded
-                            : Icons.mic_rounded,
-                        size: 92,
-                        color: Colors.white,
+                      AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 220),
+                        transitionBuilder:
+                            (Widget child, Animation<double> a) =>
+                                ScaleTransition(scale: a, child: child),
+                        child: Icon(
+                          duraklatildi
+                              ? CupertinoIcons.pause_fill
+                              : CupertinoIcons.mic_fill,
+                          key: ValueKey<bool>(duraklatildi),
+                          size: 76,
+                          color: Colors.white,
+                        ),
                       ),
-                      if (durum == KayitDurumu.bos)
+                      if (bos)
                         const Padding(
-                          padding: EdgeInsets.only(top: 4),
-                          child: Text(
-                            'DOKUNUN',
-                            style: TextStyle(
-                              fontSize: 24,
-                              letterSpacing: 2,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.white,
+                          padding: EdgeInsets.fromLTRB(18, 6, 18, 0),
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              'DOKUNUN',
+                              style: TextStyle(
+                                fontSize: 22,
+                                letterSpacing: 2,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white,
+                              ),
                             ),
                           ),
                         ),
@@ -468,8 +584,8 @@ class _KayitDugmesi extends StatelessWidget {
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -477,6 +593,7 @@ class _KayitDugmesi extends StatelessWidget {
 
 class _Sayac extends StatelessWidget {
   const _Sayac({
+    super.key,
     required this.durum,
     required this.sure,
     this.yonergeGoster = true,
@@ -491,46 +608,99 @@ class _Sayac extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (durum == KayitDurumu.bos) {
-      if (!yonergeGoster) return const SizedBox.shrink();
-      return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        child: const Text(
+      if (!yonergeGoster) return const SizedBox(width: double.infinity);
+      return const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 12),
+        child: Text(
           'Kırmızı düğmeye dokunun ve anlatın.',
           textAlign: TextAlign.center,
           style: TextStyle(
-            fontSize: 27,
+            fontSize: 25,
             height: 1.3,
             fontWeight: FontWeight.w600,
+            letterSpacing: -0.3,
             color: HatirlaColors.inkSoft,
           ),
         ),
       );
     }
+    final bool duraklatildi = durum == KayitDurumu.duraklatildi;
     return Column(
       children: <Widget>[
         Text(
           Bicim.sayac(sure),
           style: const TextStyle(
-            fontSize: 64,
+            fontSize: 66,
             fontWeight: FontWeight.w700,
+            letterSpacing: -1.5,
             fontFeatures: <FontFeature>[FontFeature.tabularFigures()],
             color: HatirlaColors.ink,
           ),
         ),
-        const SizedBox(height: 6),
-        Text(
-          durum == KayitDurumu.duraklatildi
-              ? 'Duraklatıldı'
-              : 'Sizi dinliyorum…',
-          style: TextStyle(
-            fontSize: 28,
-            color: durum == KayitDurumu.duraklatildi
-                ? HatirlaColors.inkSoft
-                : HatirlaColors.record,
-            fontWeight: FontWeight.w600,
-          ),
+        const SizedBox(height: 2),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: <Widget>[
+            if (!duraklatildi) ...<Widget>[
+              const _YanipSonenNokta(),
+              const SizedBox(width: 10),
+            ],
+            Flexible(
+              child: Text(
+                duraklatildi ? 'Duraklatıldı' : 'Sizi dinliyorum…',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 26,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: -0.3,
+                  color: duraklatildi
+                      ? HatirlaColors.inkSoft
+                      : HatirlaColors.record,
+                ),
+              ),
+            ),
+          ],
         ),
       ],
+    );
+  }
+}
+
+class _YanipSonenNokta extends StatefulWidget {
+  const _YanipSonenNokta();
+
+  @override
+  State<_YanipSonenNokta> createState() => _YanipSonenNoktaState();
+}
+
+class _YanipSonenNoktaState extends State<_YanipSonenNokta>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _yanip = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 900),
+  )..repeat(reverse: true);
+
+  @override
+  void dispose() {
+    _yanip.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: Tween<double>(
+        begin: 1,
+        end: 0.25,
+      ).animate(CurvedAnimation(parent: _yanip, curve: Curves.easeInOut)),
+      child: Container(
+        width: 16,
+        height: 16,
+        decoration: const BoxDecoration(
+          shape: BoxShape.circle,
+          color: HatirlaColors.record,
+        ),
+      ),
     );
   }
 }
@@ -552,28 +722,30 @@ class _AltEylemler extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (durum == KayitDurumu.bos) return const SizedBox.shrink();
+    if (durum == KayitDurumu.bos) {
+      return const SizedBox(width: double.infinity);
+    }
 
+    final bool duraklatildi = durum == KayitDurumu.duraklatildi;
     return Column(
       children: <Widget>[
         BuyukButon(
           yazi: kaydediliyor ? 'Kaydediliyor…' : 'Bitir ve Kaydet',
-          ikon: Icons.check_rounded,
+          ikon: CupertinoIcons.checkmark_alt,
           renk: HatirlaColors.confirm,
-          yukseklik: 92,
+          yukseklik: 90,
           onPressed: kaydediliyor ? null : () => onBitir(),
         ),
         const SizedBox(height: 12),
-        CerceveliButon(
-          yazi: durum == KayitDurumu.duraklatildi ? 'Devam Et' : 'Ara Ver',
-          ikon: durum == KayitDurumu.duraklatildi
-              ? Icons.play_arrow_rounded
-              : Icons.pause_rounded,
+        IkincilButon(
+          yazi: duraklatildi ? 'Devam Et' : 'Ara Ver',
+          ikon: duraklatildi
+              ? CupertinoIcons.play_fill
+              : CupertinoIcons.pause_fill,
+          renk: HatirlaColors.inkSoft,
           onPressed: kaydediliyor
               ? null
-              : () => durum == KayitDurumu.duraklatildi
-                  ? onDevam()
-                  : onDuraklat(),
+              : () => duraklatildi ? onDevam() : onDuraklat(),
         ),
       ],
     );
