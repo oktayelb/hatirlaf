@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -42,8 +43,8 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
     setState(() => _adim++);
     _pageController.animateToPage(
       _adim,
-      duration: const Duration(milliseconds: 280),
-      curve: Curves.easeOut,
+      duration: const Duration(milliseconds: 450),
+      curve: Curves.easeInOutCubic,
     );
   }
 
@@ -93,7 +94,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
             'Telefon ayarlarını açıp “İzinler” bölümünden Mikrofon’u '
             'açmamız gerek. Sizin için açayım mı?',
         evetYazi: 'Ayarları Aç',
-        evetIkon: Icons.settings_rounded,
+        evetIkon: CupertinoIcons.gear_alt_fill,
       );
       if (git) await Izinler.ayarlariAc();
     } else {
@@ -102,7 +103,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
         baslik: 'Mikrofon gerekli',
         mesaj: 'Mikrofon izni verilmeden ses kaydı yapılamıyor. '
             'İsterseniz şimdi geçebilir, sonra tekrar deneyebilirsiniz.',
-        ikon: Icons.mic_off_rounded,
+        ikon: CupertinoIcons.mic_slash_fill,
         renk: HatirlaColors.record,
       );
     }
@@ -136,7 +137,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
 
   Widget _hosGeldiniz() {
     return _AdimGovdesi(
-      ikon: Icons.favorite_rounded,
+      ikon: CupertinoIcons.heart_fill,
       ikonRengi: HatirlaColors.record,
       baslik: 'Hoş geldiniz',
       metin: 'Bu uygulama sizin hayat hikâyenizi saklamak için yapıldı.\n\n'
@@ -146,7 +147,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
           'kendi sesinizden dinleyebilir.',
       buton: BuyukButon(
         yazi: 'Başlayalım',
-        ikon: Icons.arrow_forward_rounded,
+        ikon: CupertinoIcons.arrow_right,
         onPressed: _ilerle,
       ),
     );
@@ -154,7 +155,9 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
 
   Widget _mikrofonAdimi() {
     return _AdimGovdesi(
-      ikon: _mikrofonVerildi ? Icons.check_circle_rounded : Icons.mic_rounded,
+      ikon: _mikrofonVerildi
+          ? CupertinoIcons.checkmark_alt
+          : CupertinoIcons.mic_fill,
       ikonRengi:
           _mikrofonVerildi ? HatirlaColors.confirm : HatirlaColors.primary,
       baslik: 'Sesinizi duyabilmemiz için',
@@ -163,13 +166,14 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
           'dışarı çıkmaz, sadece bu uygulamada saklanır.',
       buton: BuyukButon(
         yazi: _izinSoruluyor ? 'Bekleyin…' : 'Mikrofonu Aç',
-        ikon: Icons.mic_rounded,
+        ikon: CupertinoIcons.mic_fill,
         renk: HatirlaColors.confirm,
         onPressed: _izinSoruluyor ? null : _mikrofonIste,
       ),
-      atla: TextButton(
+      atla: DuzButon(
+        yazi: 'Şimdi değil',
+        renk: HatirlaColors.inkSoft,
         onPressed: _ilerle,
-        child: const Text('Şimdi değil'),
       ),
     );
   }
@@ -199,8 +203,8 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
 
         return _AdimGovdesi(
           ikon: hazir
-              ? Icons.check_circle_rounded
-              : Icons.cloud_download_rounded,
+              ? CupertinoIcons.checkmark_alt
+              : CupertinoIcons.cloud_download_fill,
           ikonRengi: hazir ? HatirlaColors.confirm : HatirlaColors.primary,
           baslik: hazir ? 'Yazıya çevirme hazır' : 'Yazıya çevirme paketi',
           metin: metin,
@@ -218,8 +222,8 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                 ? 'Devam'
                 : (iniyor ? 'İndiriliyor…' : 'Paketi İndir'),
             ikon: hazir
-                ? Icons.arrow_forward_rounded
-                : Icons.cloud_download_rounded,
+                ? CupertinoIcons.arrow_right
+                : CupertinoIcons.cloud_download_fill,
             renk: hazir ? HatirlaColors.confirm : HatirlaColors.primary,
             onPressed: iniyor
                 ? null
@@ -234,15 +238,17 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                   },
           ),
           atla: iniyor
-              ? TextButton(
+              ? DuzButon(
+                  yazi: 'İndirmeyi durdur',
+                  renk: HatirlaColors.record,
                   onPressed: () => WhisperModelManager.instance.iptalEt(),
-                  child: const Text('İndirmeyi durdur'),
                 )
               : (hazir
                   ? null
-                  : TextButton(
+                  : DuzButon(
+                      yazi: 'Sonra indireyim',
+                      renk: HatirlaColors.inkSoft,
                       onPressed: _ilerle,
-                      child: const Text('Sonra indireyim'),
                     )),
         );
       },
@@ -251,7 +257,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
 
   Widget _hazir() {
     return _AdimGovdesi(
-      ikon: Icons.auto_stories_rounded,
+      ikon: CupertinoIcons.book_fill,
       ikonRengi: HatirlaColors.primary,
       baslik: 'Her şey hazır',
       metin: 'Artık anlatmaya başlayabilirsiniz.\n\n'
@@ -259,7 +265,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
           'sorular soracak. Siz sadece cevaplayın.',
       buton: BuyukButon(
         yazi: 'İlk Hatırayı Anlat',
-        ikon: Icons.mic_rounded,
+        ikon: CupertinoIcons.mic_fill,
         renk: HatirlaColors.confirm,
         onPressed: _bitir,
       ),
@@ -277,19 +283,20 @@ class _AdimGostergesi extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
+      padding: const EdgeInsets.fromLTRB(24, 16, 24, 4),
       child: Row(
         children: <Widget>[
           for (int i = 0; i < toplam; i++) ...<Widget>[
             Expanded(
               child: AnimatedContainer(
-                duration: const Duration(milliseconds: 250),
-                height: 10,
+                duration: const Duration(milliseconds: 400),
+                curve: Curves.easeInOutCubic,
+                height: 6,
                 decoration: BoxDecoration(
                   color: i <= adim
                       ? HatirlaColors.primary
-                      : HatirlaColors.line,
-                  borderRadius: BorderRadius.circular(6),
+                      : HatirlaColors.paperDark,
+                  borderRadius: BorderRadius.circular(3),
                 ),
               ),
             ),
@@ -308,13 +315,13 @@ class _AdimGovdesi extends StatelessWidget {
     required this.baslik,
     required this.metin,
     required this.buton,
-    this.ikonRengi,
+    this.ikonRengi = HatirlaColors.primary,
     this.ekstra,
     this.atla,
   });
 
   final IconData ikon;
-  final Color? ikonRengi;
+  final Color ikonRengi;
   final String baslik;
   final String metin;
   final Widget buton;
@@ -324,7 +331,7 @@ class _AdimGovdesi extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+      padding: const EdgeInsets.fromLTRB(24, 8, 24, 20),
       child: Column(
         children: <Widget>[
           Expanded(
@@ -332,26 +339,29 @@ class _AdimGovdesi extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: <Widget>[
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 36),
                   Center(
-                    child: Container(
-                      height: 132,
-                      width: 132,
-                      alignment: Alignment.center,
-                      decoration: const BoxDecoration(
-                        color: HatirlaColors.primarySoft,
-                        shape: BoxShape.circle,
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 300),
+                      transitionBuilder: (Widget child, Animation<double> a) =>
+                          ScaleTransition(
+                        scale: Tween<double>(begin: 0.8, end: 1).animate(a),
+                        child: FadeTransition(opacity: a, child: child),
                       ),
-                      child: Icon(ikon, size: 68, color: ikonRengi),
+                      child: BuyukSimge(
+                        key: ValueKey<IconData>(ikon),
+                        ikon: ikon,
+                        renk: ikonRengi,
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 28),
+                  const SizedBox(height: 32),
                   Text(
                     baslik,
                     textAlign: TextAlign.center,
                     style: Theme.of(context).textTheme.headlineLarge,
                   ),
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 16),
                   Text(
                     metin,
                     textAlign: TextAlign.center,
@@ -371,7 +381,7 @@ class _AdimGovdesi extends StatelessWidget {
           ),
           buton,
           if (atla != null) ...<Widget>[
-            const SizedBox(height: 8),
+            const SizedBox(height: 4),
             atla!,
           ],
         ],
@@ -395,23 +405,17 @@ class _IndirmeCubugu extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: <Widget>[
-        ClipRRect(
-          borderRadius: BorderRadius.circular(12),
-          child: LinearProgressIndicator(
-            value: ilerleme,
-            minHeight: 22,
-            backgroundColor: HatirlaColors.paperDark,
-          ),
-        ),
+        IlerlemeCubugu(deger: ilerleme, yukseklik: 14),
         const SizedBox(height: 14),
         Text(
           ilerleme == null
               ? '${Bicim.boyut(inen)} indirildi'
-              : '%${(ilerleme! * 100).toStringAsFixed(0)}  •  '
+              : '%${(ilerleme! * 100).toStringAsFixed(0)}  ·  '
                   '${Bicim.boyut(inen)} / ${Bicim.boyut(toplam)}',
           style: const TextStyle(
-            fontSize: 24,
+            fontSize: 23,
             fontWeight: FontWeight.w700,
+            fontFeatures: <FontFeature>[FontFeature.tabularFigures()],
             color: HatirlaColors.primaryDark,
           ),
         ),
@@ -427,23 +431,20 @@ class _HataKutusu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return Kart(
+      renk: HatirlaColors.recordSoft,
+      golge: false,
       padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFBE9E7),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: HatirlaColors.record, width: 2),
-      ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          const Icon(Icons.error_outline_rounded,
-              color: HatirlaColors.record, size: 32),
+          const Icon(CupertinoIcons.exclamationmark_circle_fill,
+              color: HatirlaColors.record, size: 30),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
               mesaj,
-              style: const TextStyle(fontSize: 21, height: 1.4),
+              style: const TextStyle(fontSize: 20, height: 1.4),
             ),
           ),
         ],

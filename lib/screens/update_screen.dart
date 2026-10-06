@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import '../services/updater.dart';
@@ -86,7 +87,14 @@ class _UpdateScreenState extends State<UpdateScreen>
                 padding: const EdgeInsets.all(HatirlaSizes.gutter),
                 child: Column(
                   children: <Widget>[
-                    Expanded(child: SingleChildScrollView(child: _govde(g))),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        child: AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 300),
+                          child: _govde(g),
+                        ),
+                      ),
+                    ),
                     const SizedBox(height: 16),
                     _butonlar(g),
                   ],
@@ -110,9 +118,10 @@ class _UpdateScreenState extends State<UpdateScreen>
     // Imza uyusmazliginda kurma butonu gosterilmez: bir daha denemek
     // ayni duvara carpar.
     if (g.imzaUyusmazligi) {
-      return CerceveliButon(
+      return IkincilButon(
         yazi: 'Kapat',
-        ikon: Icons.arrow_back_rounded,
+        ikon: CupertinoIcons.xmark,
+        renk: HatirlaColors.inkSoft,
         onPressed: _kapat,
       );
     }
@@ -127,13 +136,14 @@ class _UpdateScreenState extends State<UpdateScreen>
           BuyukButon(
             yazi: 'İzin Ver',
             altYazi: 'Telefon ayarları açılacak',
-            ikon: Icons.lock_open_rounded,
+            ikon: CupertinoIcons.lock_open_fill,
             onPressed: () => Guncelleyici.instance.kurulumIzniIste(),
           ),
           const SizedBox(height: 12),
-          CerceveliButon(
+          IkincilButon(
             yazi: 'Kapat',
-            ikon: Icons.arrow_back_rounded,
+            ikon: CupertinoIcons.xmark,
+            renk: HatirlaColors.inkSoft,
             onPressed: _kapat,
           ),
         ],
@@ -146,13 +156,14 @@ class _UpdateScreenState extends State<UpdateScreen>
         children: <Widget>[
           BuyukButon(
             yazi: bekleniyor ? 'Deneniyor…' : 'Tekrar Dene',
-            ikon: Icons.refresh_rounded,
+            ikon: CupertinoIcons.arrow_clockwise,
             onPressed: bekleniyor ? null : _tekrarDene,
           ),
           const SizedBox(height: 12),
-          CerceveliButon(
+          IkincilButon(
             yazi: 'Kapat',
-            ikon: Icons.arrow_back_rounded,
+            ikon: CupertinoIcons.xmark,
+            renk: HatirlaColors.inkSoft,
             onPressed: bekleniyor ? null : _kapat,
           ),
         ],
@@ -163,10 +174,53 @@ class _UpdateScreenState extends State<UpdateScreen>
     return BuyukButon(
       yazi: bekleniyor ? 'Kuruluyor…' : 'Güncelle',
       altYazi: bekleniyor ? null : 'Birkaç saniye sürer',
-      ikon: Icons.download_done_rounded,
+      ikon: CupertinoIcons.arrow_down_circle_fill,
       renk: HatirlaColors.confirm,
       yukseklik: 96,
       onPressed: bekleniyor ? null : _guncelle,
+    );
+  }
+}
+
+class _Govde extends StatelessWidget {
+  const _Govde({
+    required this.ikon,
+    required this.renk,
+    required this.baslik,
+    required this.metin,
+    this.ekler = const <Widget>[],
+  });
+
+  final IconData ikon;
+  final Color renk;
+  final String baslik;
+  final String metin;
+  final List<Widget> ekler;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        const SizedBox(height: 36),
+        Center(child: BuyukSimge(ikon: ikon, renk: renk)),
+        const SizedBox(height: 30),
+        Text(
+          baslik,
+          textAlign: TextAlign.center,
+          style: Theme.of(context).textTheme.headlineMedium,
+        ),
+        const SizedBox(height: 14),
+        Text(
+          metin,
+          textAlign: TextAlign.center,
+          style: Theme.of(context)
+              .textTheme
+              .bodyLarge
+              ?.copyWith(color: HatirlaColors.inkSoft),
+        ),
+        ...ekler,
+      ],
     );
   }
 }
@@ -180,40 +234,21 @@ class _Hazir extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final String? notlar = g.bilgi?.notlar.trim();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: <Widget>[
-        const SizedBox(height: 24),
-        const Icon(Icons.auto_awesome_rounded,
-            size: 96, color: HatirlaColors.primary),
-        const SizedBox(height: 24),
-        Text(
-          'Uygulamanın yeni hâli hazır',
-          textAlign: TextAlign.center,
-          style: Theme.of(context).textTheme.headlineMedium,
-        ),
-        const SizedBox(height: 18),
-        Text(
-          'İndirildi, kurulmayı bekliyor.\n'
+    return _Govde(
+      ikon: CupertinoIcons.sparkles,
+      renk: HatirlaColors.primary,
+      baslik: 'Uygulamanın yeni hâli hazır',
+      metin: 'İndirildi, kurulmayı bekliyor.\n'
           'Hatıralarınıza hiçbir şey olmaz.',
-          textAlign: TextAlign.center,
-          style: Theme.of(context)
-              .textTheme
-              .bodyLarge
-              ?.copyWith(color: HatirlaColors.inkSoft),
-        ),
-
+      ekler: <Widget>[
         // "Vazgeç" denmisse sebebini soyleyelim.
         if (g.iptalEdildi) ...<Widget>[
           const SizedBox(height: 22),
-          Container(
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-              color: const Color(0xFFFFF4DB),
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: const Color(0xFFD9A400), width: 2),
-            ),
-            child: const Text(
+          const Kart(
+            renk: HatirlaColors.warningSoft,
+            golge: false,
+            padding: EdgeInsets.all(18),
+            child: Text(
               'Kurulum tamamlanmadı. Devam edebilmek için '
               '“Güncelle”ye dokunup açılan pencerede onay verin.',
               textAlign: TextAlign.center,
@@ -221,23 +256,16 @@ class _Hazir extends StatelessWidget {
             ),
           ),
         ],
-
         if (notlar != null && notlar.isNotEmpty) ...<Widget>[
           const SizedBox(height: 26),
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: HatirlaColors.primarySoft,
-              borderRadius: BorderRadius.circular(HatirlaSizes.radius),
-              border: Border.all(color: HatirlaColors.primary, width: 2),
-            ),
+          Kart(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
                 Text(
                   'Neler değişti',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: HatirlaColors.primaryDark,
+                        color: HatirlaColors.primary,
                       ),
                 ),
                 const SizedBox(height: 10),
@@ -254,7 +282,7 @@ class _Hazir extends StatelessWidget {
           'Şimdiki sürüm ${g.mevcutSurumAdi} → yeni sürüm '
           '${g.bilgi?.surumAdi ?? ''}',
           textAlign: TextAlign.center,
-          style: const TextStyle(fontSize: 18, color: HatirlaColors.inkSoft),
+          style: const TextStyle(fontSize: 19, color: HatirlaColors.inkSoft),
         ),
       ],
     );
@@ -268,28 +296,14 @@ class _IzinAnlatimi extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: <Widget>[
-        const SizedBox(height: 24),
-        const Icon(Icons.lock_outline_rounded,
-            size: 96, color: HatirlaColors.primary),
-        const SizedBox(height: 24),
-        Text(
-          'Telefonun izni gerekiyor',
-          textAlign: TextAlign.center,
-          style: Theme.of(context).textTheme.headlineMedium,
-        ),
-        const SizedBox(height: 18),
-        Text(
-          'Yeni sürümü kurabilmek için telefonun bir kez izin vermesi '
+    return const _Govde(
+      ikon: CupertinoIcons.lock_fill,
+      renk: HatirlaColors.primary,
+      baslik: 'Telefonun izni gerekiyor',
+      metin: 'Yeni sürümü kurabilmek için telefonun bir kez izin vermesi '
           'gerekiyor.\n\n'
           '“İzin Ver”e dokunun, açılan ekrandaki düğmeyi açın ve geri '
           'dönün. Bunu yalnızca bir kere yapacaksınız.',
-          textAlign: TextAlign.center,
-          style: Theme.of(context).textTheme.bodyLarge,
-        ),
-      ],
     );
   }
 }
@@ -301,27 +315,13 @@ class _Aksadi extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: <Widget>[
-        const SizedBox(height: 24),
-        const Icon(Icons.info_outline_rounded,
-            size: 96, color: HatirlaColors.inkSoft),
-        const SizedBox(height: 24),
-        Text(
-          'Şimdi olmadı',
-          textAlign: TextAlign.center,
-          style: Theme.of(context).textTheme.headlineMedium,
-        ),
-        const SizedBox(height: 18),
-        Text(
-          'Güncelleme kurulamadı. Hatıralarınıza bir şey olmadı; '
+    return const _Govde(
+      ikon: CupertinoIcons.info,
+      renk: Color(0xFF8E8E93),
+      baslik: 'Şimdi olmadı',
+      metin: 'Güncelleme kurulamadı. Hatıralarınıza bir şey olmadı; '
           'uygulamayı eskisi gibi kullanmaya devam edebilirsiniz.\n\n'
           'Birazdan kendiliğinden tekrar denenecek.',
-          textAlign: TextAlign.center,
-          style: Theme.of(context).textTheme.bodyLarge,
-        ),
-      ],
     );
   }
 }
@@ -333,27 +333,13 @@ class _AileyeDanis extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: <Widget>[
-        const SizedBox(height: 24),
-        const Icon(Icons.support_agent_rounded,
-            size: 96, color: HatirlaColors.primary),
-        const SizedBox(height: 24),
-        Text(
-          'Bu güncelleme kurulamıyor',
-          textAlign: TextAlign.center,
-          style: Theme.of(context).textTheme.headlineMedium,
-        ),
-        const SizedBox(height: 18),
-        Text(
-          'Uygulamayı size kuran kişinin yardım etmesi gerekiyor.\n\n'
+    return const _Govde(
+      ikon: CupertinoIcons.person_2_fill,
+      renk: HatirlaColors.primary,
+      baslik: 'Bu güncelleme kurulamıyor',
+      metin: 'Uygulamayı size kuran kişinin yardım etmesi gerekiyor.\n\n'
           'Hatıralarınız yerli yerinde duruyor ve uygulama eskisi gibi '
           'çalışmaya devam ediyor. Acele edilecek bir şey yok.',
-          textAlign: TextAlign.center,
-          style: Theme.of(context).textTheme.bodyLarge,
-        ),
-      ],
     );
   }
 }
